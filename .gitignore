@@ -11,9 +11,12 @@ memory/*.db
 memory/*.db-shm
 memory/*.db-wal
 
-# Agent scratch + ingested raw data (audit lives in the ledger, not here)
-workspace/
-inbox/
+# Agent scratch + ingested raw data (audit lives in the ledger, not here).
+# Track the folder READMEs so the layout survives a clone; ignore everything else.
+workspace/*
+!workspace/README.md
+inbox/*
+!inbox/README.md
 runs/
 *.log
 
