@@ -57,6 +57,18 @@ def escalate(reason: str) -> None:
 
 # ── model calls ────────────────────────────────────────────────────────────────
 def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path) -> tuple[str, dict]:
+    # SECURITY (docs/INCIDENTS.md 2026-07-18): an unrestricted worker previously wrote
+    # its own rows straight into ledger.db/ledgerbook.db and self-graded its own task.
+    # Tried `-t web` to strip file/terminal/code tools -- it does NOT map to a real
+    # restriction (tool inventory came back as terminal/python/write_file etc. minus
+    # the actual browser_* tools that real web research needs), so it just broke
+    # search without fixing containment. Real web research in this agent runs via
+    # browser_* tools in the default toolset, confirmed working in the passing run.
+    # Defense now has two independent layers instead: (1) the prompt below never
+    # mentions any internal path/schema, so there's nothing for the model to act on
+    # even with tools present; (2) db_integrity_guard() below verifies no write
+    # happened and reverts it if one did. Prevention-by-ignorance + verification,
+    # not a trust-the-flag claim.
     cmd = ["hermes", "-z", prompt, "--provider", model_cfg["provider"],
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
@@ -78,6 +90,62 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300) -> str:
         return json.loads(r.read())["message"]["content"]
 
 
+def _db_counts() -> dict:
+    import sqlite3
+    counts = {}
+    for name, path in (("ledger", ledger.LEDGER_DB),
+                       ("ledgerbook", ROOT / "memory" / "ledgerbook.db")):
+        with sqlite3.connect(path) as c:
+            for table in ("tasks", "entities", "facts", "decisions", "experiences", "failures"):
+                counts[f"{name}.{table}"] = c.execute(
+                    f"SELECT count(*) FROM {table}").fetchone()[0]
+    return counts
+
+
+def db_integrity_snapshot() -> dict:
+    """Call immediately BEFORE a worker subprocess runs."""
+    return _db_counts()
+
+
+def db_integrity_check(before: dict, context: str) -> None:
+    """Call immediately AFTER a worker subprocess returns, BEFORE the orchestrator's own
+    ledger.finish_task() write. Any row the worker itself added (not the orchestrator --
+    the orchestrator hasn't written yet at this point) is unauthorized by construction.
+    Quarantines the extra rows (dump + delete) rather than trusting them. See
+    docs/INCIDENTS.md 2026-07-18."""
+    import json as _json
+    import sqlite3
+    after = _db_counts()
+    diffs = {k: (before[k], after[k]) for k in after if after[k] != before[k]}
+    if not diffs:
+        return
+    log(f"INTEGRITY VIOLATION during {context}: unauthorized DB writes detected {diffs}")
+    dump = {"context": context, "diffs": diffs, "quarantined_rows": {}}
+    for key in diffs:
+        dbname, table = key.split(".", 1)
+        path = ledger.LEDGER_DB if dbname == "ledger" else ROOT / "memory" / "ledgerbook.db"
+        with sqlite3.connect(path) as c:
+            c.row_factory = sqlite3.Row
+            n_new = after[key] - before[key]
+            if n_new <= 0:
+                continue  # a decrease is not a worker-write; leave it, just log
+            rows = c.execute(f"SELECT * FROM {table} ORDER BY id DESC LIMIT ?"
+                             if table != "tasks" else
+                             f"SELECT * FROM {table} ORDER BY task_id DESC LIMIT ?",
+                             (n_new,)).fetchall()
+            id_col = "task_id" if table == "tasks" else "id"
+            dump["quarantined_rows"][key] = [dict(r) for r in rows]
+            ids = [r[id_col] for r in rows]
+            c.executemany(f"DELETE FROM {table} WHERE {id_col}=?", [(i,) for i in ids])
+    RUNS.mkdir(exist_ok=True)
+    qpath = RUNS / f"quarantine_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
+    qpath.write_text(_json.dumps(dump, indent=2, default=str), encoding="utf-8")
+    log(f"quarantined unauthorized rows -> {qpath.name}; reverted DB to pre-call state")
+    escalate(f"worker wrote directly to a database during {context} -- quarantined, "
+            f"see {qpath.name}. Toolset restriction is NOT reliable in this Hermes "
+            f"version; this guard is the real containment.")
+
+
 def is_quota_error(text: str) -> bool:
     t = text.lower()
     return any(s in t for s in ("429", "too many requests", "rate limit",
@@ -85,8 +153,17 @@ def is_quota_error(text: str) -> bool:
 
 
 def worker_failed(out: str, usage: dict) -> bool:
-    if usage.get("failed") or usage.get("completed") is False:
+    # NOTE 2026-07-18: usage.json's completed=false does NOT reliably mean the task
+    # failed -- observed it False on a fully-formed, substantial, well-sourced brief
+    # (3119 output tokens, 90 real browser calls) that would otherwise have been
+    # silently discarded. Its exact semantics are unverified, so it is NOT trusted
+    # alone. usage.get("failed") IS trusted (an explicit signal), plus real output-text
+    # evidence (either a short/empty reply, or an actual error string) -- never a
+    # metadata flag whose meaning we haven't confirmed.
+    if usage.get("failed"):
         return True
+    if not out or len(out.strip()) < 50:
+        return True  # empty/near-empty is a real failure regardless of any flag
     low = out.lower()
     return any(s in low for s in ("api call failed", "connection error",
                                   "connection refused", "traceback (most recent"))
@@ -157,6 +234,29 @@ def pass_criteria_for(mission: dict) -> str:
     return m.group(1).strip() if m else "deliverable exists; every fact sourced+dated"
 
 
+def is_first_run_for_mission(mission_id: str) -> bool:
+    """True if this mission has never completed a task in an earlier week. A mission's
+    week-1 run structurally cannot satisfy a 'changes since last week' criterion -- there
+    is no prior week. Confirmed 2026-07-18: an unguided worker correctly self-identified
+    this ('no prior brief to diff against, treat as baseline') while a guided one, told
+    nothing, got marked FAIL for not producing a diff that cannot exist yet."""
+    import sqlite3
+    wk = week_key()
+    with sqlite3.connect(ledger.LEDGER_DB) as c:
+        row = c.execute(
+            "SELECT 1 FROM tasks WHERE mission_id=? AND status='done' AND spec NOT LIKE ? LIMIT 1",
+            (mission_id, f"[{wk}]%")).fetchone()
+    return row is None
+
+
+def mission_objective(mission: dict) -> str:
+    """One-line objective ONLY — never hand the worker the full mission file. The file
+    describes OUR storage paths/schema (ledgerbook.db, ledger.db); a worker with real
+    tools will act on those as instructions if given the chance (see docs/INCIDENTS.md)."""
+    m = re.search(r"## Objective\s*\n(.*?)(?=\n## )", mission["body"], re.S)
+    return m.group(1).strip() if m else mission["frontmatter"].get("mission_id", "")
+
+
 # ── execution ──────────────────────────────────────────────────────────────────
 def run_task(tid: int, mission: dict, roles: dict) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
@@ -170,16 +270,30 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     out_dir = ROOT / "workspace" / mission_workspace(mission["id"])
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    objective = mission_objective(mission)
+    baseline = is_first_run_for_mission(mission["id"])
+    baseline_note = (
+        "\n\nBASELINE RUN: this is the first tracked run for this mission — there is no prior "
+        "week to compare against. Do not attempt a week-over-week diff. Instead, mark every "
+        "finding as the initial baseline (e.g. 'NEW — first tracked observation') so next "
+        "week's run has something real to compare against."
+        if baseline else "")
     prompt = (
-        f"You are the research/BI analyst (IDENTITY.md). Mission context:\n{mission['body']}\n\n"
-        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}\n\n"
-        f"Use your web search tool for every fact. RULES: every fact needs source URL + "
-        f"retrieval date ({datetime.now().date()}) + confidence 1-3. No fact without a live "
-        f"source. Competitor seed URLs are unverified — verify before citing. Write your "
-        f"deliverable as clean markdown. Reply with ONLY the deliverable content."
+        f"You are a research analyst. Objective of this research area: {objective}\n\n"
+        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}\n\n"
+        f"Use web search for every fact. RULES: every fact needs a source URL + retrieval date "
+        f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
+        f"are unverified — verify each is real before citing it. Write the deliverable as clean "
+        f"markdown.\n\n"
+        f"IMPORTANT: this is a research-only task. Use ONLY web/browser tools to look things up. "
+        f"Do NOT use any file, terminal, code-execution, or memory tool for ANY reason — do not "
+        f"create, write, or edit any file, and do not run any command. A separate system persists "
+        f"your output; your job is only to research and reply with the deliverable markdown as "
+        f"your final message text, nothing else."
     )
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = RUNS / f"task{tid}_worker.usage.json"
+    snapshot = db_integrity_snapshot()
     try:
         out, usage = hermes_worker(prompt, worker_cfg, usage_path)
     except subprocess.TimeoutExpired:
@@ -188,6 +302,12 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         log(f"task {tid}: infra_failed (timeout)")
         return "infra_failed"
 
+    db_integrity_check(snapshot, context=f"task {tid} worker call")
+    # Persist the FULL raw output regardless of what happens next -- a misclassified
+    # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
+    # nearly lost with only a 200-char snippet surviving in critic_notes.
+    (RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
+
     if is_quota_error(out):
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
                            critic_notes="quota/usage limit — parked (§1.6)")
@@ -195,7 +315,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         return "quota_wait"
     if worker_failed(out, usage):
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes=f"worker API failure: {out[:200]}")
+                           critic_notes=f"worker API failure (full text in "
+                                       f"runs/task{tid}_worker_raw.txt): {out[:200]}")
         log(f"task {tid}: infra_failed ({out[:80]})")
         return "infra_failed"
     if len(out) < 200:
@@ -215,8 +336,22 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     try:
         verdict_text = ollama_chat(
             critic_cfg["model"],
-            "You are a strict critic. Reply PASS or FAIL on line 1, then ONE sentence why.\n\n"
-            f"PASS CRITERIA:\n{row['pass_criteria']}\n\nDELIVERABLE:\n{out[:8000]}")
+            "You are a strict critic judging a research analyst's TEXT deliverable.\n"
+            "The criteria below are the mission's full spec, written for the system as a "
+            "whole -- some lines describe things a SEPARATE orchestrator process handles "
+            "automatically after your review (exact file paths/naming, saving facts to a "
+            "database, logging your verdict). Do NOT fail the deliverable for missing those "
+            "-- they are not the analyst's job and are not present in the text by design. "
+            "Judge ONLY the CONTENT: does it cover the required topics, is every fact backed "
+            "by a real source URL + date, is it well-sourced and substantive."
+            + ("\n\nThis is the mission's BASELINE (first-ever) run -- there is no prior week "
+               "to diff against. Do NOT fail it for lacking a week-over-week diff or NEW-vs-"
+               "last-week flags; correct behavior for a baseline run is marking everything as "
+               "an initial observation, which is what you should look for instead."
+               if baseline else "") +
+            "\n\nReply PASS or FAIL on line 1, then ONE sentence why.\n\n"
+            f"MISSION SPEC (for context only, see instructions above):\n{row['pass_criteria']}\n\n"
+            f"DELIVERABLE:\n{out[:8000]}")
         verdict = "pass" if verdict_text.strip().upper().startswith("PASS") else "fail"
     except Exception as e:
         verdict, verdict_text = "fail", f"critic call failed: {e}"
@@ -261,12 +396,14 @@ def run_canaries(roles: dict) -> None:
     for name, prompt, grade in CANARIES:
         tid = ledger.queue_task("canaries", f"[{week_key()}] {name}", "deterministic grade")
         ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
+        snapshot = db_integrity_snapshot()
         try:
             out, usage = hermes_worker(prompt, worker_cfg, RUNS / f"canary_{name}.usage.json")
         except subprocess.TimeoutExpired:
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes="canary timeout")
             log(f"{name}: infra_failed (timeout)"); continue
+        db_integrity_check(snapshot, context=f"canary {name}")
         if is_quota_error(out):
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
                                critic_notes="quota — canary parked")
