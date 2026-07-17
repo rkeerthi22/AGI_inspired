@@ -69,7 +69,8 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     with _conn() as c:
         rows = c.execute(
             "SELECT * FROM tasks WHERE created_at >= ? AND status IN "
-            "('done','failed')", (start.isoformat(timespec="seconds"),)
+            "('done','failed') AND mission_id != 'canaries'",  # canaries tracked separately
+            (start.isoformat(timespec="seconds"),)
         ).fetchall()
     n = len(rows)
     if n == 0:
