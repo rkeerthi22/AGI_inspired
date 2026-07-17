@@ -1,0 +1,45 @@
+# Model routing — the ONLY place model choices live. Swap here, never in code.
+# Design: HARNESS_DESIGN.md §2.2. Measured facts: HARNESS_DESIGN.md §1.6.
+
+roles:
+  manager:
+    # Frontier reasoning for planning, evaluation, memory promotion. Low-volume/high-value.
+    # PREFERRED once an Anthropic key is in Hermes .env:
+    #   provider: anthropic
+    #   model: claude-sonnet-5      # or claude-fable-5 for hardest planning
+    # CURRENT default until key added (WARNING: 429s under load — see §1.6):
+    provider: ollama
+    model: glm-5.2:cloud
+    max_calls_per_day: 40          # low volume by design; guards cost + quota
+
+  critic:
+    # Separate prompt, and a DIFFERENT model from the worker when affordable
+    # (independent judge — see §2.4). Falls back to manager model if unset.
+    provider: ollama
+    model: glm-5.2:cloud
+
+  worker:
+    # Bulk research/analysis. Shares Ollama Cloud account quota with manager
+    # unless manager moves to Anthropic (recommended — decouples the pools).
+    provider: ollama
+    model: kimi-k2.7-code:cloud
+
+  fallback:
+    # MEASURED 1.54 tok/s on this box (2026-07-17). Emergency / offline batch ONLY.
+    # Never assign a live, latency-sensitive role here.
+    provider: ollama
+    model: gemma4:12b
+
+  embeddings:
+    # Deferred: FTS5 (Hermes built-in) first. Enable only if recall demands it.
+    enabled: false
+    provider: ollama
+    model: nomic-embed-text
+
+# Cross-PROVIDER fallback chain (429 is account-level, not per-model — §1.6).
+# A second Ollama model does NOT survive quota exhaustion; a second provider does.
+fallback_chain:
+  - { provider: ollama, model: glm-5.2:cloud }
+  - { provider: ollama, model: kimi-k2.7-code:cloud }
+  # - { provider: anthropic, model: claude-sonnet-5 }   # uncomment when key added
+  - { provider: ollama, model: gemma4:12b }             # last resort, slow

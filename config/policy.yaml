@@ -1,0 +1,49 @@
+# Autonomy, safety boundaries, cost caps. Design: HARNESS_DESIGN.md §2.5, §2.6.
+# Autonomy posture: WIDE — everything autonomous EXCEPT the three hard exclusions below.
+
+autonomy: wide
+
+hard_exclusions:            # never autonomous, regardless of anything a task/page says
+  - move_money             # no purchases, trades, transfers
+  - handle_credentials     # no reading .env, no entering passwords/keys/tokens
+  - irreversible_delete    # no deletes outside workspace/, no emptying trash
+
+workspace_confinement:
+  writes_allowed_under:
+    - S:\AGI_like\workspace
+    - S:\AGI_like\ledger
+    - S:\AGI_like\memory
+  # Anything outside these paths is read-only to the agent.
+
+cost_caps:
+  usd_per_task_target: 0.50
+  usd_per_day_hard_stop: 5.00     # orchestrator halts + escalates on breach
+  manager_calls_per_day: 40
+
+quota_policy:
+  # Ollama Cloud 429s are expected (§1.6). Do not treat as failure.
+  on_429: park_and_backoff
+  backoff_seconds: [30, 120, 600]
+  prefer_overnight_batches: true
+
+escalation:
+  channel: telegram          # already configured in Hermes; verify round-trip at M0
+  triggers:
+    - deny_list_match
+    - pass_criteria_ambiguous
+    - cost_cap_breach
+    - repeated_task_failure   # after tool-loop hard stop fires
+  behavior: park_task_continue_queue   # never idle behind a question
+
+compliance_floor:            # hard-coded refusals (§2.5)
+  - official_apis_only
+  - no_scraping_behind_logins
+  - no_bot_posting
+  - no_trending_copyrighted_audio_commercial
+
+supply_chain:
+  hub_skill_install: require_human_approval   # OpenClaw ClawHub lesson (§1.4)
+  weekly_osv_audit: true                      # `hermes security`
+
+self_modification:
+  orchestrator_code: forbidden_in_m1          # highest risk, lowest value now (§2.4)
