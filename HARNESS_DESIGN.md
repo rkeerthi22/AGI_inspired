@@ -88,6 +88,17 @@ Every term is measurable and every measurement has a home (the task ledger, §3)
 | glm-5.2:cloud | **HTTP 429 Too Many Requests** | Pro-plan quota was already exhausted by ordinary daytime use, with zero agent load. This is not a tail risk — it is the steady state to design for |
 | kimi-k2.7-code:cloud | **HTTP 429** — account-level, not per-model | Fallback-to-sibling-model does NOT survive quota exhaustion; the fallback chain must cross **providers**, not models |
 
+**UPDATE 2026-07-17 (live onboarding smoke run):** the 429s are a **weekly** cap, now
+**exhausted** — the endpoint returns `"you (abishekvr09) have reached your weekly usage limit,
+upgrade for higher limits"` for BOTH glm-5.2 and kimi-k2.7. So the manager+worker brain is
+fully offline until the weekly reset or a Max upgrade — not a per-minute throttle. This makes
+the Anthropic-key-for-manager recommendation load-bearing, not optional, if M1 must run this
+week. Two bugs the smoke run also surfaced and fixed: (a) the local Ollama server must be
+RUNNING (killing it → connection-refused, which the orchestrator wrongly logged as a completed
+task); (b) the orchestrator now classifies quota_wait / infra_failed distinctly from a real
+task attempt, so outages never pollute the fitness metric (verified: re-run parks with
+tasks_attempted=0).
+
 **Consequences applied to this design:**
 1. The orchestrator treats 429 as a normal state: tasks park in `quota_wait`, retry with backoff, resume next window. Overnight batches (cron) exploit idle quota — another reason the laptop stays awake.
 2. The daily cost/quota budget in §2.6 gains a quota-burn tracker: manager plans batch sizes against remaining window, not against wishes.
