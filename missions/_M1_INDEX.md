@@ -2,16 +2,21 @@
 
 The employee proves itself on ONE job (research/BI analyst) across the operator's ventures.
 Priority is a single ordered list (lower = sooner); the manager works missions in this order.
+**Batch engine live 2026-07-18** — slots operator-delegated, filled per plan; 8-week window
+starts with the first cron week (W29).
 
-| Prio | Mission | Cadence | Weekly tasks | Status gate (what OPERATOR must fill) |
-|-----|---------|---------|--------------|----------------------------------------|
-| 0 | [000-onboarding](000-onboarding.md) | one-shot | — | niche for the smoke test; then retire |
-| 1 | [001-shopify-competitor-intel](001-shopify-competitor-intel.md) | weekly (Mon 04:00) | ~4 | store niche, 3–5 competitor URLs, SHOPIFY_ADMIN_TOKEN |
-| 2 | [002-content-niche-research](002-content-niche-research.md) | weekly (Wed 04:00) | ~3 | channels in scope, YOUTUBE_API_KEY |
-| 3 | [003-adforge-local-market](003-adforge-local-market.md) | on-demand | bonus | per-client: name, location, category |
+| Prio | Mission | Cadence (schtasks) | Weekly tasks | Status |
+|-----|---------|--------------------|--------------|--------|
+| 0 | [000-onboarding](000-onboarding.md) | — | — | **done** (passed 2026-07-18, niche=ai-productivity) |
+| 1 | [001-shopify-competitor-intel](001-shopify-competitor-intel.md) | AGI_M1_shopify · Mon 04:00 | ~4 | **active** — niche: ai-productivity digital products |
+| 2 | [002-content-niche-research](002-content-niche-research.md) | AGI_M1_content · Wed 04:00 | ~3 | **active** — Story Engine + AI-Productivity channel; degraded evidence until YOUTUBE_API_KEY |
+| 3 | [003-adforge-local-market](003-adforge-local-market.md) | on-demand | bonus | draft (no active client) |
+| — | [_CANARIES](_CANARIES.md) | AGI_M1_canaries · Sun 03:30 | 5 (excluded from fitness) | active |
+| — | scorecard (orchestrator/scorecard.py) | AGI_M1_scorecard · Sun 04:00 | — | active (Telegram delivery still gated) |
 
-**Weekly task budget:** 001 (~4) + 002 (~3) + a synthesis task each ≈ **≥10 tasks/week**, which
-is the M1 acceptance floor (HARNESS_DESIGN.md §7). 003 adds on-demand throughput on top.
+**Weekly task budget:** 001 (~4) + 002 (~3) + syntheses ≈ **≥10 tasks/week** productive floor
+(HARNESS_DESIGN.md §7); canaries run separately and never count toward fitness.
+**Kill switch:** `schtasks /delete /tn "AGI_M1_*" /f` (automation only; ledger state survives).
 
 ## Run schedule (8 weeks)
 - **Weeks 1–2 — baseline.** Missions run with self-improvement OFF. Measure the floor:

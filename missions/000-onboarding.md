@@ -1,7 +1,7 @@
 ---
 mission_id: 000-onboarding
 priority: 0
-status: active
+status: done   # PASSED 2026-07-18 (autonomy run, ledger task 1): niche=ai-productivity selected via 5-persona sim, blueprint built, critic pass, F=0.7
 created: 2026-07-17
 cadence: on-demand
 ---

@@ -1,7 +1,7 @@
 ---
 mission_id: 001-shopify-competitor-intel
 priority: 1
-status: draft          # → active once OPERATOR fills the competitor list + niche below
+status: active         # slots filled 2026-07-18 (operator delegated); niche = employee-selected ai-productivity (ledgerbook decision id=2)
 created: 2026-07-17
 cadence: "cron: 0 4 * * 1"   # Mondays 04:00 — overnight to exploit idle Ollama quota (§1.6)
 ---
@@ -35,15 +35,23 @@ a checkable brief, not a recommendation engine.
 - Budget: default cost caps (`config/policy.yaml`); target ≤ $0.50/competitor-task.
 
 ## Task seeds  (one task per competitor → ~4 tasks/week)
-1. <competitor 1>: price scan + new-product check + promo check + review-sentiment.
-2. <competitor 2>: same.
-3. <competitor 3>: same.
-4. Synthesis: build the "Changes since last week" diff from this week's vs last week's facts.
+1. PromptBase (prompt marketplace): price scan + new-product check + promo check + review-sentiment.
+2. AIPRM (prompt-library SaaS): plan pricing + feature changes + promo check + review-sentiment.
+3. Top Notion-template seller in AI/productivity (identify the current leader, then same scan).
+4. Synthesis: build the "Changes since last week" diff from this week's vs last week's facts;
+   include Gumroad's AI-prompt category top sellers as a market-pulse addendum.
 
 ## Notes for the analyst
-- <OPERATOR: store niche/category, e.g. "eco kitchenware">
-- <OPERATOR: 3–5 competitor names + homepage/collection URLs>
-- <OPERATOR: own store URL + confirm Shopify Admin API token is in .env as SHOPIFY_ADMIN_TOKEN>
-- On first run, create `entity` rows (type=competitor) for each tracked competitor and
+- **Niche:** AI-productivity digital products (prompt packs, Notion AI systems, cheat sheets/SOPs)
+  — selected autonomously by the manager 2026-07-18, ledgerbook decision id=2. The operator's own
+  store does not exist yet (blueprint week-1 task 1), so this mission tracks the COMPETITIVE
+  LANDSCAPE the store will launch into.
+- **Competitor seeds are UNVERIFIED (from model memory, 2026-07-18):** PromptBase, AIPRM, the
+  Notion-template market, Gumroad AI-prompt category. FIRST RUN must verify each exists at its
+  real URL via web search, correct/replace dead seeds, and write verified homepage URLs as
+  entity facts before any price scan. Never cite a seed URL without live verification.
+- Shopify Admin API token NOT required for this mission's M1 scope (public web only). It becomes
+  relevant only when the operator's own store is live and own-store analytics enter the brief.
+- On first run, create `entity` rows (type=competitor) for each verified competitor and
   (type=product) as products are found. Relate products → competitor. See [[HARNESS_DESIGN]] §2.3.
 - This is the flagship M1 mission (clearest commercial value + most objectively checkable).
