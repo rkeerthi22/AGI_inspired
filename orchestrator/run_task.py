@@ -42,7 +42,19 @@ def hermes_oneshot(prompt: str, provider: str, model: str, usage_path: Path) -> 
 
 def is_quota_error(text: str) -> bool:
     t = text.lower()
-    return "429" in t or "too many requests" in t or "rate limit" in t
+    return any(s in t for s in ("429", "too many requests", "rate limit",
+                                "usage limit", "weekly usage"))
+
+
+def worker_failed(out: str, usage: dict) -> bool:
+    """Infrastructure failure (server down, API error) — distinct from a task the
+    agent attempted but got wrong. The usage.json 'failed' flag is authoritative;
+    the text patterns catch failures that still returned exit 0."""
+    if usage.get("failed") or usage.get("completed") is False:
+        return True
+    low = out.lower()
+    return any(s in low for s in ("api call failed", "connection error",
+                                  "connection refused", "traceback (most recent"))
 
 
 def main() -> int:
@@ -80,26 +92,41 @@ def main() -> int:
                            critic_notes="dry-run: no model called")
         return 0
 
+    deliverable = ROOT / "workspace" / "onboarding" / "hello_report.md"
+    deliverable.parent.mkdir(parents=True, exist_ok=True)
+
     ledger.start_task(tid, f"{worker['provider']}/{worker['model']}")
     try:
         out, usage = hermes_oneshot(worker_prompt, worker["provider"], worker["model"],
                                     RUNS / f"task{tid}_worker.usage.json")
     except subprocess.TimeoutExpired:
-        ledger.finish_task(tid, artifacts=[], status="failed",
+        ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes="worker timeout (900s)")
-        print("[fail] worker timed out"); return 1
+        print("[infra_failed] worker timed out"); return 1
 
+    # Classify BEFORE trusting output. Quota + infra failures are NOT task attempts;
+    # they must not reach the critic or count toward the fitness denominator (§3.2).
     if is_quota_error(out):
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                           critic_notes="429 — parked for retry (§1.6)")
-        print("[quota_wait] 429 — task parked, retry in an open window"); return 2
+                           critic_notes="quota/usage limit — parked for retry (§1.6)")
+        print("[quota_wait] usage limit — parked, retry when quota resets"); return 2
+    if worker_failed(out, usage):
+        ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                           critic_notes=f"worker API failure: {out[:200]}")
+        print(f"[infra_failed] worker API call failed: {out[:120]}"); return 3
+
+    cost = float(usage.get("estimated_cost_usd") or 0.0)
+    if not deliverable.exists():
+        # Worker returned cleanly but produced nothing → a real task failure.
+        ledger.finish_task(tid, artifacts=[], cost_usd=cost, critic_verdict="fail",
+                           critic_notes="worker produced no deliverable", status="failed")
+        print("[failed] worker produced no deliverable"); return 4
 
     critic_prompt = critic_prompt_tmpl.format(criteria=criteria, output=out)
     verdict_text, _ = hermes_oneshot(critic_prompt, critic["provider"], critic["model"],
                                      RUNS / f"task{tid}_critic.usage.json")
     verdict = "pass" if verdict_text.upper().startswith("PASS") else "fail"
-    cost = float(usage.get("estimated_cost", 0.0) or 0.0)
-    ledger.finish_task(tid, artifacts=["workspace/onboarding/hello_report.md"],
+    ledger.finish_task(tid, artifacts=[str(deliverable.relative_to(ROOT))],
                        cost_usd=cost, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status="done")
     print(f"[done] task {tid} verdict={verdict} cost=${cost:.4f}")
