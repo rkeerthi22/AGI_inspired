@@ -25,11 +25,30 @@ first real scorecard delivered and confirmed received. Scorecards/escalations no
 Telegram automatically every Sunday with no further action needed.
 
 ## Run schedule (8 weeks)
-- **Weeks 1–2 — baseline.** Missions run with self-improvement OFF. Measure the floor:
-  completion rate, accuracy on spot-checks, intervention rate, cost/task. No skill promotion yet.
-- **Weeks 3–8 — full loop.** Gated skill promotion ON (HARNESS_DESIGN.md §2.4). Weekly scorecard
-  (Sunday, via Telegram). 5 fixed canary tasks re-run weekly; a promoted skill that breaks a
-  canary auto-rolls back.
+- **W29–W30 (through Sun 2026-07-26) — baseline.** Missions run; self-improvement mechanism is
+  BUILT but promotion stays OFF by policy. Measure the floor: completion rate, accuracy on
+  spot-checks, intervention rate, cost/task.
+- **W31 onward (from Mon 2026-07-27) — full loop.** Gated skill promotion ON (HARNESS_DESIGN.md
+  §2.4, `orchestrator/promote.py`). Weekly scorecard (Sunday, via Telegram) now also runs a
+  promotion review pass — expect an occasional Telegram line like "1 candidate skill awaiting
+  your approval." 5 fixed canary tasks re-run weekly; a promoted skill whose canary green-count
+  drops below its approval baseline auto-rolls-back (only judged on complete, non-parked data).
+
+**Promotion workflow (starts mattering W31):**
+```
+python orchestrator/promote.py list              # see pending candidates + active skills
+python orchestrator/promote.py approve <file>     # apply — appends to that mission's prompts
+python orchestrator/promote.py reject  <file>     # discard, kept in _rejected/ for audit
+python orchestrator/promote.py rollback <mission>/<file>   # undo any active skill, any time
+```
+Skills live at `skills_analyst/<mission_id>/*.md` — every promotion/rollback is a git commit.
+
+**W30 unattended-cycle watchlist** (first fully-automated week — verify after each cron fires,
+don't just assume): Sun 03:30/04:00 parked canaries resume without duplicating + scorecard
+delivers to Telegram; Mon 04:00 stale-parked W29 rows flip to `stale`, #3/#4 retries carry the
+critic's prior feedback in-prompt, synthesis produces the first real week-over-week diff; Wed
+04:00 mission 002 runs its set. Zero `runs/quarantine_*.json` files at any point (containment
+guard) is the one non-negotiable signal — anything else is a normal operating variance.
 
 ## M1 acceptance (all must hold — HARNESS_DESIGN.md §7)
 - ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks ·

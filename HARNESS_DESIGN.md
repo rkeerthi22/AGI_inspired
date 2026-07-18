@@ -69,6 +69,16 @@ Every term is measurable and every measurement has a home (the task ledger, §3)
 
 **Chosen: Hermes skills + curator as the mechanism, with a promotion gate we add** (§2.4). The failure mode of every self-improvement loop is confidently wrong lessons compounding; the gate makes lessons enter as hypotheses with attached tests and get promoted only after passing on a real task. One rule the OpenClaw incident record makes non-negotiable: **hub/marketplace skill installs always require human approval** — ~12% of OpenClaw's ClawHub registry (341 of 2,857 skills) was confirmed malicious in 2026.
 
+**AS-BUILT DEVIATION (2026-07-18):** the actual promotion target is **repo-versioned markdown
+notes** (`skills_analyst/<mission_id>/*.md`, injected into worker prompts), NOT `hermes skills`
+install. Reasoning that changed the decision: rollback needs to be trivial and auditable (git
+rm + commit beats `hermes curator rollback` for a system this young); zero supply-chain surface
+(the hub-install risk this section itself flags simply doesn't apply if nothing is installed);
+model-agnostic (a note is provider-independent text, not a Hermes-specific artifact); every
+promotion is a visible diff. Hermes curator's custody properties (auto-backup, archive, pin) are
+real strengths but weren't needed once git does the same job for free. See `orchestrator/promote.py`
+and §2.4 below for the built mechanism.
+
 ### 1.5 Evaluation (≥3 alternatives)
 
 | Benchmark | What it measures | What we take |
@@ -126,19 +136,28 @@ tasks_attempted=0).
 │ WORKER:     │        │ WORKER:     │          │ CRITIC      │
 │ researcher  │        │ analyst /   │          │ (separate   │
 │ (hermes -z, │        │ ops         │          │ prompt +    │
-│  web+files) │        │ (hermes -z) │          │ model)      │
+│  web ONLY — │        │ (hermes -z) │          │ model, no   │
+│  no file/db │        │             │          │  tools)     │
+│  by design, │        │             │          │             │
+│  see below) │        │             │          │             │
 └──────┬──────┘        └──────┬──────┘          └──────┬──────┘
        │ artifacts + usage.json │                      │ pass/fail vs criteria
 ┌──────▼────────────────────────▼───────────────────────▼──────┐
-│ TASK LEDGER (SQLite, append-only)  ←— single source of truth │
+│ TASK LEDGER (SQLite, append-only)  ←— single source of truth  │
 │ + LEDGERBOOK memory (typed facts w/ validity windows)         │
 │ + workspace S:\AGI_like\workspace (all writes land here)      │
+│ ORCHESTRATOR is the ONLY writer to ledger/ledgerbook — a      │
+│ db_integrity_check() snapshots row counts around every worker │
+│ call and quarantines+reverts anything else (see docs/         │
+│ INCIDENTS.md — an unrestricted worker once wrote its own      │
+│ rows and self-graded its own task; this is the real fix)      │
 └──────────────────────────┬───────────────────────────────────┘
-                           │ weekly consolidation (manager + hermes curator)
+                           │ Sundays: promote.py review (rides scorecard cron)
                 ┌──────────▼──────────┐
-                │ SKILL LIBRARY       │  lessons → hypothesis → tested → promoted
-                │ (hermes skills +    │  curator: backup/archive/rollback
-                │  promotion gate)    │  hub installs: HUMAN APPROVAL ONLY
+                │ SKILL LIBRARY       │  lessons → drafted candidate → OPERATOR
+                │ (skills_analyst/    │  approves/rejects → injected into worker
+                │  <mission>/*.md,    │  prompts. Rollback = git rm+commit.
+                │  git-versioned)     │  Canary-drop → auto-rollback.
                 └─────────────────────┘
 ```
 
@@ -160,15 +179,33 @@ The orchestrator passes models as parameters and never hardcodes provider APIs �
 
 Not a neural world model (see §5 simulation verdict). A **domain entity store** inside the Ledgerbook: entities (competitor, product, channel, supplier, keyword, trend), typed relations, and *facts about them with provenance (URL/source + retrieval date), confidence (source-count-based, 3 levels), and validity windows*. Cause/effect is recorded as `experience` entries ("action X in context Y → outcome Z"), which is what the manager consults when planning — cheap, honest causal knowledge from own history rather than pretended physics. Uncertainty is explicit: facts below confidence threshold are flagged in reports, never silently asserted.
 
-### 2.4 Safe learning mechanism (gap 4)
+### 2.4 Safe learning mechanism (gap 4) — BUILT 2026-07-18 (`orchestrator/promote.py`)
 
-1. After each completed task, worker appends `lesson candidates` to the ledger.
-2. Weekly, manager converts recurring candidates into a **hypothesis skill** (draft in `skills/.candidates/`, not loaded into prompts).
-3. Hypothesis gets attached test: next matching task runs WITH the draft; critic compares outcome vs the task's pass criteria and vs historical baseline.
-4. Pass → promoted into `hermes skills` (curator now custodies it: auto-backup, archive, rollback). Fail → struck through with reason, kept as negative knowledge.
-5. Human sees promotions in the weekly scorecard; can veto; **hub installs and anything executing new binaries require pre-approval** (OpenClaw ClawHub lesson).
+Original design (above) targeted `hermes skills`; see the AS-BUILT note in §1.4 for why the
+actual mechanism moved to repo-versioned notes. What's actually built and round-trip-verified:
 
-Versioning = git on `S:\AGI_like` + curator snapshots. Rollback = `hermes curator rollback` or git revert. Self-modification of the orchestrator itself is out of scope for M1 (explicitly deferred — highest-risk, lowest-value at this stage).
+1. On every critic FAIL, the orchestrator calls `ledger.add_lesson()` — `lesson_candidates`
+   accumulates real evidence automatically, no separate worker step.
+2. Sundays (`promote.py review`, riding the existing scorecard cron — no new schedule): a
+   manager call drafts **at most one candidate note per mission** from unpromoted lessons,
+   written to `skills_analyst/_candidates/`. An evidence bar (≥2 corroborating lessons) skips
+   the model call entirely below it — deliberately conservative, not eager to generalize from one.
+3. **Human gate, not an automated pass/fail test:** the operator runs `promote.py list` and
+   `approve <file>` / `reject <file>`. This IS the "gated" in gated promotion for M1 — no
+   auto-promotion in weeks 1–8; that's a decision to revisit with real data, not before.
+4. Approve → note moves into `skills_analyst/<mission_id>/`, committed to git with the
+   CURRENT week's canary green-count recorded as that skill's baseline. Every approved note is
+   appended (capped ~2k chars) to that mission's worker prompts (`run_task()`).
+5. **Automatic protection, not just human veto:** after every canary run with COMPLETE data
+   (never judged while any canary is quota-parked — a park is not a regression), if the week's
+   green count has dropped below a skill's approval baseline, the newest such skill is
+   auto-rolled-back (`git rm` + commit, lesson rows returned to the pool) and the operator is
+   escalated via Telegram. Manual `promote.py rollback <path>` also always available.
+
+Versioning = git on `S:\AGI_like` directly (every promotion/rollback is its own commit — no
+separate curator snapshot layer needed). Rollback = git revert, verified byte-identical after a
+live round-trip test. Self-modification of the orchestrator itself is out of scope for M1
+(explicitly deferred — highest-risk, lowest-value at this stage).
 
 ### 2.5 Identity & goal management (gap 5)
 
@@ -191,7 +228,7 @@ WIDE autonomy makes the *container* the safety mechanism, not per-action prompts
 | Kill switch | `hermes gateway` stop + cron pause = full halt; documented in README |
 | Loop runaway | Hermes tool-loop guardrails currently warn-only → M0 sets `hard_stop_enabled: true` (config change) |
 
-**Consolidation decision:** OpenClaw is retired at M0. Rationale: stale install (2026-05-24), duplicate memory/gateway/skills create two sources of truth, and OpenClaw's 2026 record (CVE-2026-25253 CVSS 8.8 one-click RCE, command injection, SSRF, path traversal, prompt-injection-driven RCE) is a liability under WIDE autonomy. `hermes claw migrate --dry-run` first; WhatsApp memories/settings imported; npm package uninstalled after verified migration. Escalation channel becomes Telegram (already configured in Hermes).
+**Consolidation decision:** OpenClaw is retired at M0. Rationale: stale install (2026-05-24), duplicate memory/gateway/skills create two sources of truth, and OpenClaw's 2026 record (CVE-2026-25253 CVSS 8.8 one-click RCE, command injection, SSRF, path traversal, prompt-injection-driven RCE) is a liability under WIDE autonomy. **AS-DECIDED (see `docs/MIGRATION.md` for the full record):** `hermes claw migrate --dry-run` showed OpenClaw's data was a near-empty husk — its `USER.md` was a blank template that would have *clobbered* Hermes's real profile — so the data import was deliberately SKIPPED, not run. OpenClaw was left dormant (package still installed, zero running processes/services/tasks, per operator choice) rather than uninstalled; `npm uninstall -g openclaw` remains available whenever wanted. Escalation channel is Telegram — configured, and delivery confirmed LIVE 2026-07-18 (`TELEGRAM_HOME_CHANNEL` set; see `docs/INCIDENTS.md` for why that took real digging).
 
 ### 2.7 Data ingestion (gap 7)
 
@@ -273,13 +310,13 @@ Reasoning: simulation pays when **acting is expensive or irreversible relative t
 
 ## 7. Roadmap
 
-### M0 — Consolidation & scaffolding (1 evening, prerequisite)
+### M0 — Consolidation & scaffolding — **PASSED 2026-07-17/18**
 `hermes claw migrate --dry-run` → migrate → retire OpenClaw · enable tool-loop hard stop · git init S:\AGI_like + CLAUDE.md · create ledger/missions/workspace/inbox scaffolding · verify Telegram escalation round-trip · record §1.6 benchmark numbers · C: housekeeping.
-**Acceptance:** one end-to-end hand-run task flows mission → worker → critic → ledger → Telegram scorecard line. Single instance proven before any batching (per standing rule).
+**Acceptance:** one end-to-end hand-run task flows mission → worker → critic → ledger → Telegram scorecard line. Single instance proven before any batching (per standing rule). — MET: onboarding autonomy run (ledger task 1) passed 2026-07-17; Telegram delivery confirmed live 2026-07-18.
 
-### M1 — Research analyst (weeks 1–8)
-Weeks 1–2 baseline (no self-improvement active; measure floor). Weeks 3–8: full loop with gated skill promotion.
-**Acceptance:** ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks · interventions −30% vs baseline · cost ≤$0.50/task · scorecard auto-delivered 8/8 Sundays · zero deny-list breaches · canaries green 4 consecutive weeks.
+### M1 — Research analyst (weeks 1–8) — **IN PROGRESS, currently W29 (baseline week 1)**
+Weeks 1–2 baseline (no self-improvement active; measure floor). Weeks 3–8: full loop with gated skill promotion. Concretely: W29–W30 = baseline (no promotion); **W31 (Mon 2026-07-27) = promotion goes live** — the mechanism is already built and round-trip-verified ahead of that date (§2.4).
+**Acceptance:** ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks · interventions −30% vs baseline · cost ≤$0.50/task · scorecard auto-delivered 8/8 Sundays · zero deny-list breaches · canaries green 4 consecutive weeks. — status as of end of W29: batch engine + 4 crons live, memory-update stage writing real facts, spot-check workflow in use (1 recorded), scorecard delivered W29 via Telegram; acceptance is measured over the full 8 weeks, not yet evaluable.
 
 ### M2 — Content-ops employee (after M1 passes, not before)
 Same harness, new mission pack + skills (topic research → prompt packs → assembly QC around the manual Krea step). Reuses ledger, memory, critic unchanged — this is the test that the harness generalizes.
@@ -287,8 +324,22 @@ Same harness, new mission pack + skills (topic research → prompt packs → ass
 ### M3 — Optional expansions (each gated on demonstrated need)
 Decision-simulation for ad spend (§5 trigger) · embeddings/Zep upgrade (§4 trigger) · off-laptop backend (Hermes SSH/Modal) · dashboard.
 
-### Open items still required from user (blocking M0/M1, not this document)
-1. Three example first-month tasks for the analyst. 2. Data-source tokens (Shopify Admin API at minimum). 3. Confirm Telegram as escalation channel. 4. Confirm overnight cron consent. 5. §1.6 benchmark results sign-off if numbers force a routing change.
+### Open items still required from user — UPDATED 2026-07-18 (most of the original list resolved)
+Resolved: Telegram confirmed + LIVE · overnight cron consent given (crons running) · §1.6
+benchmarks measured and acted on (gemma4 demoted, Ollama-only routing accepted) · example tasks
+superseded by the actual mission seeds (001/002 built directly rather than waiting on examples)
+· Shopify Admin API token turned out NOT required for M1 scope (001 re-scoped to the employee's
+own selected niche, competitive-landscape research only — see `missions/001-*.md` notes).
+
+Actually still open:
+1. **`YOUTUBE_API_KEY`** — mission 002 runs in degraded mode (web-search evidence, capped
+   confidence) without it; add to Hermes `.env` whenever, the mission upgrades itself on the
+   next run, no code change needed.
+2. **Mission 003 (adforge) needs a real, paying client** before its operator slots get filled —
+   standing instruction, not a one-time gap: do not fabricate a client to unblock this.
+3. Anthropic key for the manager/critic remains optional-but-recommended (§1.6) — operator has
+   explicitly chosen to stay Ollama-only for now, accepting quota-parked stretches as normal
+   operation; not blocking, revisit only if quota pain becomes limiting.
 
 ---
 
