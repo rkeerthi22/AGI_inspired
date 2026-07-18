@@ -72,11 +72,25 @@ def telegram_line(week: str, fit: dict, green: int, ran: int) -> str:
             f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{ran or CANARY_TOTAL}")
 
 
-def deliver_telegram(line: str) -> None:
-    # GATED: sending a message is never autonomous (policy.yaml escalation). The operator
-    # must approve the Telegram round-trip first; until then this refuses closed.
-    raise NotImplementedError(
-        "Telegram delivery gated — approve the escalation send-test before enabling.")
+def send_telegram(text: str) -> bool:
+    """Push via `hermes send --to telegram` (operator-approved 2026-07-18). Fail-soft:
+    returns False when undeliverable — currently the case until the operator messages
+    their bot once so a home channel exists (Telegram platform rule: bots cannot
+    initiate first contact). The markdown file remains the source of truth either way."""
+    import subprocess
+    try:
+        p = subprocess.run(["hermes", "send", "--to", "telegram", "--quiet", text],
+                           capture_output=True, text=True, encoding="utf-8",
+                           errors="replace", timeout=60)
+        return p.returncode == 0
+    except Exception:
+        return False
+
+
+def deliver_telegram(line: str) -> bool:
+    ok = send_telegram(line)
+    print(f"[deliver] telegram: {'sent' if ok else 'undeliverable (no home channel yet) — file only'}")
+    return ok
 
 
 def build(deliver: bool = False) -> tuple[str, str]:

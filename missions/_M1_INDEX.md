@@ -17,6 +17,11 @@ starts with the first cron week (W29).
 **Weekly task budget:** 001 (~4) + 002 (~3) + syntheses ≈ **≥10 tasks/week** productive floor
 (HARNESS_DESIGN.md §7); canaries run separately and never count toward fitness.
 **Kill switch:** `schtasks /delete /tn "AGI_M1_*" /f` (automation only; ledger state survives).
+**Operator weekly duty (3–5 min):** `python orchestrator/spotcheck.py list` → open 3–5 artifacts,
+verify a fact or two against its cited source, then `spotcheck.py pass|fail <id> [note]` — this
+feeds the accuracy term of fitness; without it accuracy stays n/a all through baseline.
+**Telegram delivery:** wired fail-soft; INERT until you message your Hermes bot once from your
+own Telegram (bots can't initiate first contact), then scorecards/escalations arrive automatically.
 
 ## Run schedule (8 weeks)
 - **Weeks 1–2 — baseline.** Missions run with self-improvement OFF. Measure the floor:
