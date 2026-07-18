@@ -12,7 +12,7 @@ starts with the first cron week (W29).
 | 2 | [002-content-niche-research](002-content-niche-research.md) | AGI_M1_content · Wed 04:00 | ~3 | **active** — Story Engine + AI-Productivity channel; degraded evidence until YOUTUBE_API_KEY |
 | 3 | [003-adforge-local-market](003-adforge-local-market.md) | on-demand | bonus | draft (no active client) |
 | — | [_CANARIES](_CANARIES.md) | AGI_M1_canaries · Sun 03:30 | 5 (excluded from fitness) | active |
-| — | scorecard (orchestrator/scorecard.py) | AGI_M1_scorecard · Sun 04:00 | — | active (Telegram delivery still gated) |
+| — | scorecard (orchestrator/scorecard.py) | AGI_M1_scorecard · Sun 04:00 | — | active — Telegram delivery LIVE (confirmed 2026-07-18) |
 
 **Weekly task budget:** 001 (~4) + 002 (~3) + syntheses ≈ **≥10 tasks/week** productive floor
 (HARNESS_DESIGN.md §7); canaries run separately and never count toward fitness.
@@ -20,8 +20,9 @@ starts with the first cron week (W29).
 **Operator weekly duty (3–5 min):** `python orchestrator/spotcheck.py list` → open 3–5 artifacts,
 verify a fact or two against its cited source, then `spotcheck.py pass|fail <id> [note]` — this
 feeds the accuracy term of fitness; without it accuracy stays n/a all through baseline.
-**Telegram delivery:** wired fail-soft; INERT until you message your Hermes bot once from your
-own Telegram (bots can't initiate first contact), then scorecards/escalations arrive automatically.
+**Telegram delivery:** LIVE since 2026-07-18 — home channel configured (`TELEGRAM_HOME_CHANNEL`),
+first real scorecard delivered and confirmed received. Scorecards/escalations now arrive on
+Telegram automatically every Sunday with no further action needed.
 
 ## Run schedule (8 weeks)
 - **Weeks 1–2 — baseline.** Missions run with self-improvement OFF. Measure the floor:
