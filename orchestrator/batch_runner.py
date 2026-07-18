@@ -473,9 +473,18 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         if baseline else "")
     if seed_is_synthesis(row["spec"]):
         return run_synthesis(tid, row, mission, roles, out_dir, wk, baseline, baseline_note)
+    # Promoted technique notes (§2.4): operator-approved, repo-versioned, capped ~2k.
+    try:
+        import promote
+        skill_notes = promote.active_skills_for(mission["id"])
+    except Exception:
+        skill_notes = ""
+    skills_block = (f"\n\nAPPROVED ANALYST TECHNIQUES (from your past reviewed work — "
+                    f"apply where relevant):\n{skill_notes}" if skill_notes else "")
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
-        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}{prior_feedback}\n\n"
+        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}{prior_feedback}"
+        f"{skills_block}\n\n"
         f"Use web search for every fact. RULES: every fact needs a source URL + retrieval date "
         f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
         f"are unverified — verify each is real before citing it. Write the deliverable as clean "
@@ -624,6 +633,22 @@ def run_canaries(roles: dict) -> None:
     elif week_pending:
         log(f"{week_pending} canary(ies) still quota-parked — not a regression, retry later")
 
+    # Promoted-skill protection (§2.4): if this week's green count fell below the baseline
+    # recorded when a skill was approved, auto-rollback the newest such skill. Only judged
+    # on COMPLETE data — never while canaries sit quota-parked (a park is not a regression).
+    if week_pending == 0:
+        try:
+            import promote
+            culprit = promote.newest_skill_below_baseline(week_green)
+            if culprit:
+                promote.cmd_rollback(culprit,
+                                     reason=f"canary auto-rollback: week green {week_green} "
+                                            f"fell below the skill's approval baseline")
+                escalate(f"AUTO-ROLLBACK: skill {culprit} removed — canaries dropped to "
+                        f"{week_green}/{len(CANARIES)} while it was active")
+        except Exception as e:
+            log(f"skill-protection check failed ({e}) — manual review advised")
+
 
 # ── main ───────────────────────────────────────────────────────────────────────
 def main() -> int:
@@ -650,6 +675,13 @@ def main() -> int:
         import scorecard
         md, line = scorecard.build(deliver=args.deliver)
         log("scorecard written"); print(md); print("SUMMARY:", line)
+        # Sunday cadence: promotion review rides the scorecard task (no extra schtask).
+        # Fail-soft: a quota-blocked review must never break scorecard delivery.
+        try:
+            import promote
+            promote.cmd_review(notify=args.deliver, dry=False)
+        except Exception as e:
+            log(f"promotion review skipped ({e}) — retries next Sunday")
         return 0
 
     if not preflight():
