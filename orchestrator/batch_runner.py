@@ -456,6 +456,15 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
 
     objective = mission_objective(mission)
     baseline = is_first_run_for_mission(mission["id"])
+    # Retry-with-feedback: a re-queued row that previously failed review carries the
+    # critic's objections — feed them to the worker so the loop actually learns
+    # (Evaluate → next attempt, §2.1). Without this the feedback evaporates.
+    prior_feedback = ""
+    if row.get("critic_verdict") == "fail" and (row.get("critic_notes") or "").strip():
+        prior_feedback = (
+            "\n\nPREVIOUS ATTEMPT FAILED REVIEW. The reviewer's exact objections:\n"
+            f"{row['critic_notes'][:600]}\n"
+            "Address each objection specifically in this attempt.")
     baseline_note = (
         "\n\nBASELINE RUN: this is the first tracked run for this mission — there is no prior "
         "week to compare against. Do not attempt a week-over-week diff. Instead, mark every "
@@ -466,7 +475,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         return run_synthesis(tid, row, mission, roles, out_dir, wk, baseline, baseline_note)
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
-        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}\n\n"
+        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}{prior_feedback}\n\n"
         f"Use web search for every fact. RULES: every fact needs a source URL + retrieval date "
         f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
         f"are unverified — verify each is real before citing it. Write the deliverable as clean "
@@ -524,6 +533,11 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status="done")
+
+    # Lesson capture (baseline weeks: harvest only, promotion stays OFF per §7):
+    # critic objections become lesson_candidates so week-3 skill promotion has evidence.
+    if verdict == "fail":
+        ledger.add_lesson(tid, f"[{mission['id']}] {verdict_text[:300]}", kind="failed")
 
     # Memory-update stage: only PASSED research deliverables become facts.
     facts_n = extract_facts(tid, out, roles["manager"]["model"]) if verdict == "pass" else 0
