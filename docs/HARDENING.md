@@ -191,6 +191,39 @@ against it at W31.
 **Phase 2 — W31 promotion under hardened conditions.** H7 first, then enable the gate. The
 self-improvement loop must not be the thing that discovers these flaws.
 
+**Phase 2.5 — Runtime abstraction (the "better than Hermes" step).** Operator intent, stated
+2026-07-19: this harness should surpass Hermes rather than remain a script on top of it. Taken
+literally that is a category error — we *invoke* `hermes -z` — but there is a real and
+achievable version, and the measurement says it is cheap:
+
+**Coupling surface is 3 call sites in 1,828 lines** — `batch_runner.hermes_worker()`,
+`run_task.hermes_oneshot()` (legacy hand-run), `scorecard.send_telegram()`. Everything that
+makes this system distinctive — ledger, fitness, critic, canaries, promotion gate, containment,
+typed memory — is ours and stdlib-only.
+
+*Where we should not compete:* Hermes is a capability substrate (53 plugins, multi-platform
+gateway, MCP, browser automation, computer-use, TTS/STT, profiles, kanban). Reimplementing that
+is years of work for no gain. Keep renting it.
+
+*Where the gap is real:* Hermes has **no fitness function, no pre-written pass criteria, no
+independent critic, no canary regression set, no append-only audit ledger, and no evidence-gated
+promotion with rollback.** Its curator prunes skills; it never measures whether the agent got
+better. That is the unoccupied ground, and it is exactly the "digital employee vs. capable
+chatbot" distinction the project was founded on.
+
+*The step:* extract a `Runtime` protocol — `run_tool_task(prompt, model) -> (text, usage)` and
+`send_message(text)` — with `HermesRuntime` as the first implementation and a direct-API
+implementation as the second. Consequences: the harness becomes runtime-agnostic exactly as it
+is already model-agnostic; Hermes defects stop being *our* defects (five were found this session
+alone: `-t web` not restricting tools, a 33-version-stale config schema silently killing message
+dispatch, `send --to telegram` not inferring its own discovered channel, an unreliable
+`usage.json:completed` flag, UI chatter in captured stdout); and the accountability layer
+becomes portable to any substrate, which is the only durable definition of "better."
+
+*Honesty constraint:* this step is **not** a claim of superior engineering. The harness currently
+carries two P0 data-loss bugs (F1, F2). Phases 0–2 must land first — a system with unproven
+crash recovery does not get to call itself better than a mature runtime.
+
 **Phase 3 — M2 (content-ops employee).** Only after M1's 8 weeks. The harness generalises, but
 M2 breaks three current assumptions that need design work, not just a new mission pack:
 1. **Artifacts stop being text.** Deliverables become video/audio/image assets; the critic
