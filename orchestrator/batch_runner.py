@@ -153,6 +153,12 @@ def db_integrity_check(before: dict, context: str) -> None:
             f"version; this guard is the real containment.")
 
 
+def _strip_tool_chatter(text: str) -> str:
+    """Remove Hermes tool-invocation UI lines that bleed into stdout.
+    e.g. '[tool] ( ͡° ͜ʖ ͡°) brainstorming...' — cosmetic noise, not deliverable content."""
+    return re.sub(r'^\[tool\].*$', '', text, flags=re.MULTILINE).strip()
+
+
 def is_quota_error(text: str) -> bool:
     t = text.lower()
     return any(s in t for s in ("429", "too many requests", "rate limit",
@@ -321,10 +327,24 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
             c.execute("INSERT OR IGNORE INTO entities (type, name) VALUES (?,?)",
                       (etype, entity))
             c.execute("INSERT INTO facts (entity, statement, provenance_url, provenance_date,"
-                      " confidence, status) VALUES (?,?,?,?,?,'candidate')",
-                      (entity, stmt, url, date, conf))
+                      " confidence, status, source_task_id) VALUES (?,?,?,?,?,'candidate',?)",
+                      (entity, stmt, url, date, conf, tid))
             written += 1
     return written
+
+
+def retract_facts(task_id: int) -> int:
+    """Close validity windows on all facts produced by a given task. Called when
+    a spot-check FAILS a task the critic had passed — the facts already extracted
+    are tainted and must not persist as current truths. Uses supersede-not-delete
+    semantics per HARNESS_DESIGN §1.2."""
+    import sqlite3
+    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db") as c:
+        cur = c.execute(
+            "UPDATE facts SET valid_until=datetime('now'), status='retracted' "
+            "WHERE source_task_id=? AND valid_until IS NULL",
+            (task_id,))
+        return cur.rowcount
 
 
 def _recent_fact_lines(days: int = 14, cap: int = 120) -> str:
@@ -409,6 +429,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         log(f"task {tid}: infra_failed ({e})"); return "infra_failed"
 
     (RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
+    out = _strip_tool_chatter(out)
     if len(out.strip()) < 200:
         ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",
                            critic_notes=f"output too short ({len(out)} chars)")
@@ -511,6 +532,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
     # nearly lost with only a 200-char snippet surviving in critic_notes.
     (RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
+    out = _strip_tool_chatter(out)
 
     if is_quota_error(out):
         ledger.finish_task(tid, artifacts=[], status="quota_wait",

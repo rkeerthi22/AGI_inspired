@@ -53,7 +53,8 @@ CREATE TABLE IF NOT EXISTS facts (
     superseded_by  INTEGER REFERENCES facts(id), -- supersede, don't overwrite
     status         TEXT NOT NULL DEFAULT 'candidate', -- candidate | permanent | expired
     ttl_expires    TEXT,                         -- candidates auto-expire (14d default)
-    created_at     TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at     TEXT NOT NULL DEFAULT (datetime('now')),
+    source_task_id INTEGER                       -- task that produced this fact (for retraction)
 );
 CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity);
 CREATE INDEX IF NOT EXISTS idx_facts_status ON facts(status);

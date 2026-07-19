@@ -53,6 +53,14 @@ def cmd_verdict(verdict: str, task_id: int, note: str) -> None:
                   "WHERE task_id=?",
                   (verdict, f" | HUMAN({verdict}): {note}" if note else "", task_id))
     print(f"task #{task_id}: human_verdict={verdict}")
+    # Retract facts extracted from a task the operator failed — they are tainted
+    # and must not persist as current truths (see second-opinion review G1).
+    if verdict == "fail":
+        sys.path.insert(0, str(Path(__file__).resolve().parent))
+        from batch_runner import retract_facts
+        n = retract_facts(task_id)
+        if n:
+            print(f"  retracted {n} fact(s) from ledgerbook.db (validity windows closed)")
     sys.path.insert(0, str(Path(__file__).resolve().parent))
     import ledger
     fit = ledger.weekly_fitness()
