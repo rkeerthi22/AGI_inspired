@@ -3,13 +3,15 @@
 *.key
 secrets/
 
-# Live binaries — backed up separately (nightly), not version-controlled
+# Live binaries — backed up separately (nightly, orchestrator/backup.py + AGI_M1_backup
+# schtask; see docs/HARDENING.md H9/F16), not version-controlled
 ledger/*.db
 ledger/*.db-shm
 ledger/*.db-wal
 memory/*.db
 memory/*.db-shm
 memory/*.db-wal
+backups/
 
 # Agent scratch + ingested raw data (audit lives in the ledger, not here).
 # Track the folder READMEs so the layout survives a clone; ignore everything else.

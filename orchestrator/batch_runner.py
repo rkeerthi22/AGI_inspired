@@ -185,6 +185,66 @@ def db_integrity_check(before: dict, context: str) -> None:
             f"version; this guard is the real containment.")
 
 
+# H9 / F14 (docs/HARDENING.md): the worker holds write_file/edit_file/terminal/python/patch
+# (the -t web flag does NOT reliably strip them -- docs/INCIDENTS.md) and runs as the
+# operator's own account. No filesystem confinement exists -- a worker could overwrite
+# orchestrator/batch_runner.py itself (e.g. delete this very guard) or the schtasks/.env.
+# True sandboxing needs either a container (Docker was removed from this machine,
+# 2026-07-08, per standing machine facts) or a separate low-privilege OS user (an invasive
+# system change requiring explicit operator consent, not something to do unilaterally).
+# What IS buildable right now, using only what already exists: every file worth protecting
+# (orchestrator/, config/, missions/, ledger/schema.sql, the top-level docs) is git-tracked.
+# `git status --porcelain` on that set becomes the integrity check -- exactly the same
+# "compare a snapshot, quarantine the diff" pattern as db_integrity_check(), reusing git's
+# own tracking instead of reinventing a hash-based file watcher. `git checkout --` cleanly
+# reverts tracked tampering; new untracked files inside the protected set are removed.
+# This is detection + auto-revert, NOT prevention -- a worker COULD still read secrets or
+# do damage before the next check fires. It closes the specific F14 nightmare scenario
+# (the harness silently loses its own integrity mid-run) without requiring an invasive
+# system change the operator hasn't approved.
+PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
+                   "CLAUDE.md", "HARNESS_DESIGN.md", "docs", "skills_analyst"]
+
+
+def fs_integrity_snapshot() -> set:
+    """Call immediately BEFORE a worker subprocess runs."""
+    out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", *PROTECTED_PATHS],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return set(out.stdout.splitlines())
+
+
+def fs_integrity_check(before: set, context: str) -> None:
+    """Call immediately AFTER a worker subprocess returns. Any NEW dirty/untracked entry
+    under a protected path since the snapshot is unauthorized by construction -- the worker
+    is never told these paths exist (same containment principle as the DB guard) and the
+    orchestrator itself doesn't touch its own source during a task. Auto-reverts via git."""
+    after = fs_integrity_snapshot()
+    new_entries = after - before
+    if not new_entries:
+        return
+    log(f"FILESYSTEM INTEGRITY VIOLATION during {context}: {sorted(new_entries)}")
+    # Revert tracked-file modifications.
+    subprocess.run(["git", "-C", str(ROOT), "checkout", "--", *PROTECTED_PATHS],
+                   capture_output=True, text=True)
+    # Remove newly-appeared untracked files ('??' prefix) inside the protected set --
+    # checkout doesn't touch untracked files.
+    removed = []
+    for entry in new_entries:
+        if entry.startswith("?? "):
+            rel = entry[3:].strip().strip('"')
+            target = ROOT / rel
+            try:
+                if target.is_file():
+                    target.unlink()
+                    removed.append(rel)
+            except Exception as e:
+                log(f"  could not remove untracked tampered file {rel}: {e}")
+    log(f"reverted tracked changes via git checkout; removed {len(removed)} untracked "
+       f"file(s): {removed}")
+    escalate(f"worker modified protected harness files during {context} -- auto-reverted "
+            f"via git. F14 containment fired: {sorted(new_entries)[:5]}")
+
+
 def _strip_tool_chatter(text: str) -> str:
     """Remove Hermes tool-invocation UI lines that bleed into stdout.
     e.g. '[tool] ( ͡° ͜ʖ ͡°) brainstorming...' — cosmetic noise, not deliverable content."""
@@ -593,6 +653,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = RUNS / f"task{tid}_worker.usage.json"
     snapshot = db_integrity_snapshot()
+    fs_snapshot = fs_integrity_snapshot()
     try:
         out, usage = hermes_worker(prompt, worker_cfg, usage_path)
     except subprocess.TimeoutExpired:
@@ -602,6 +663,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         return "infra_failed"
 
     db_integrity_check(snapshot, context=f"task {tid} worker call")
+    fs_integrity_check(fs_snapshot, context=f"task {tid} worker call")
     # Persist the FULL raw output regardless of what happens next -- a misclassified
     # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
     # nearly lost with only a 200-char snippet surviving in critic_notes.
@@ -694,6 +756,7 @@ def run_canaries(roles: dict) -> None:
         tid = dup[0] if dup else ledger.queue_task("canaries", spec, "deterministic grade")
         ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
         snapshot = db_integrity_snapshot()
+        fs_snapshot = fs_integrity_snapshot()
         try:
             out, usage = hermes_worker(prompt, worker_cfg, RUNS / f"canary_{name}.usage.json")
         except subprocess.TimeoutExpired:
@@ -701,6 +764,7 @@ def run_canaries(roles: dict) -> None:
                                critic_notes="canary timeout")
             log(f"{name}: infra_failed (timeout)"); continue
         db_integrity_check(snapshot, context=f"canary {name}")
+        fs_integrity_check(fs_snapshot, context=f"canary {name}")
         if is_quota_error(out):
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
                                critic_notes="quota — canary parked")

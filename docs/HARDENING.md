@@ -269,20 +269,37 @@ REAL system about a staged test. Full writeup: docs/INCIDENTS.md 2026-07-19. Eve
 module constant is a landmine for the next test unless this is fixed centrally.
 
 ### H9 — Real filesystem confinement + real durability (fixes F14, F13, F16)
-- **Confinement (F14):** the worker subprocess must not run with `write_file`/`terminal`/
-  `python`/`patch`. Since Hermes toolset flags proved unreliable, run the worker under a
-  constrained profile (`hermes profile create` with those toolsets disabled) OR sandbox the
-  subprocess (separate low-priv user / container) — verified by a probe that a worker instructed
-  to write outside `workspace/` fails. Until then, F14 is the strongest argument against leaving
-  crons unattended.
-- **Policy as code (F13):** load `policy.yaml` at startup; enforce the cost/token cap, the
-  deny-list, and `writes_allowed_under` as actual runtime checks. A declared control that no code
-  reads is worse than no control — it manufactures false confidence.
-- **Durability (F16):** add an `AGI_M1_backup` scheduled task — nightly `sqlite3 .backup` of both
-  DBs to a timestamped file (survives WAL/mid-write, unlike a file copy) + a rotated offsite copy
-  (git remote for code/docs; DB snapshots to a second drive or a private remote). Verify by
-  restoring into a scratch dir and diffing row counts. This is a prerequisite for calling the
-  ledger a source of truth at all.
+
+**Durability (F16) · IMPLEMENTED + PROVEN 2026-07-24.** `orchestrator/backup.py`: nightly
+`sqlite3.Connection.backup()` (not a file copy — safe against a concurrent WAL writer, unlike
+copying the file directly) of both live DBs to timestamped files under `backups/` (gitignored,
+14-backup rotation). `AGI_M1_backup` scheduled task, daily 02:00 — enabled now (unlike the other
+four, still disabled pending confinement below): it never touches the worker/lock path, is
+read-only against the live sources, and is itself the fix for "no second copy exists anywhere."
+Proven: a real backup taken, table counts verified equal to the live source; then **actually
+restored** into a scratch directory and diffed — both DBs matched exactly. A backup that was
+never restore-tested is a hope, not a guarantee; this one is tested. Offsite/second-drive
+replication (surviving a full local-disk failure, not just corruption/accidental deletion) is
+still an operator decision — no remote is configured, and creating one wasn't done unilaterally.
+
+**Confinement (F14) · IMPLEMENTED (detection + auto-revert) 2026-07-24 — not true sandboxing.**
+True prevention needs a container (Docker was removed from this machine 2026-07-08, per standing
+machine facts — not reinstalled unilaterally) or a separate low-privilege OS user (an invasive
+system change requiring explicit operator consent this pass did not have). `hermes profile`
+switching was investigated earlier in this project and found to be sticky/global state, unsafe
+per-invocation. What's built instead reuses the one mechanism already proven for the databases:
+every file worth protecting (`orchestrator/`, `config/`, `missions/`, `ledger/schema.sql`, the
+top-level docs, `skills_analyst/`) is git-tracked, so `git status --porcelain` on that set IS the
+integrity check — same snapshot/diff/quarantine shape as `db_integrity_check()`, reusing git's
+own tracking instead of a hand-rolled file watcher. A detected change is auto-reverted via
+`git checkout --` (tracked files) or deletion (newly-appeared untracked files), then escalated.
+This is honest about its limits: a worker COULD still read a secret or do damage in the window
+before the next check fires — it is detection-and-undo, not a sandbox that prevents the read/write
+from happening at all. It closes the specific F14 nightmare (the harness silently and permanently
+loses its own integrity mid-run) without an invasive unilateral system change.
+
+**Policy as code (F13) — NOT YET DONE.** `policy.yaml`'s deny-list/cost-cap/writes_allowed_under
+are still not read by any executable path. Deferred past this Phase 0 pass; tracked for Phase 1.
 
 ---
 
