@@ -107,6 +107,46 @@ Import-time binding makes the ledger path effectively unpatchable, defeating tes
 inviting exactly the accident this audit hit. Any future test that "redirects" the DB silently
 writes to production.
 
+### F14 — The workspace "container" does not exist in code · **P0 · PROVEN**
+§2.6 stakes the entire WIDE-autonomy safety model on one claim: *"WIDE autonomy makes the
+container the safety mechanism, not per-action prompts,"* and *"orchestrator refuses paths
+outside workspace."* **No such enforcement exists.** `grep` for any path guard
+(`is_relative_to`/`resolve`/`writes_allowed_under`/`refuse.*path`) finds nothing in the live
+path. The worker holds `write_file`/`edit_file`/`terminal`/`python`/`patch` (the `-t web` flag
+does not strip them — see F-history / INCIDENTS.md) and runs under the operator's own account.
+`db_integrity_check()` guards the two databases; **nothing guards the filesystem.** Consequences:
+a prompt-injected or simply errant worker can overwrite `orchestrator/batch_runner.py` itself
+(e.g. delete the integrity guard before the next run), rewrite the `AGI_M1_*` scheduled tasks,
+or read/modify `.env`. The prior rogue-worker incident (INCIDENTS.md) only stayed contained
+because it happened to write *inside* `workspace/`; one directory up and nothing would have
+caught it. This is strictly worse than F1 — F1 loses ledger rows; F14 loses the harness's own
+integrity and the account's file safety.
+
+### F13 — `policy.yaml` is enforced by ZERO code · **P1 · PROVEN**
+The autonomy exclusions, `usd_per_day_hard_stop`, deny-list, and `writes_allowed_under` are all
+declared in `policy.yaml`; no executable path loads the file (`run_task.py`'s only reference is
+a docstring; `batch_runner.py`'s two matches are a comment and a hardcoded
+`MAX_WORKER_CALLS_PER_RUN = 12`). Every stated policy control is currently a document, not a
+control — the deny-list included.
+
+### F15 — `promote.py` commits are not isolated · **P2 · PROVEN**
+`cmd_approve`/`cmd_rollback` do `_git("add", <specific paths>)` then `_git("commit", -m …)` with
+no pathspec — committing the entire staged index. An approval issued while other work is staged
+sweeps it into a "Promote skill" commit, corrupting the audit trail's one-change-per-commit
+property. Fix: `git commit -- <paths>` (explicit pathspec) or commit from a clean index check.
+
+### F16 — The "source of truth" has no second copy · **P0 · PROVEN**
+`CLAUDE.md` promises *"Nightly `hermes backup` + `git push` = recovery."* Every clause is false
+today: **no git remote** is configured (`git remote -v` empty — nowhere to push); **`ledger.db`
+and `ledgerbook.db` are both gitignored** (`git check-ignore` confirms — git holds zero task/
+fact/decision/scorecard state); **no backup scheduled task** exists (only the four `AGI_M1_*`,
+which back nothing up); **no `hermes backup` has ever run** (no backups dir on disk). The ledger,
+the typed memory, and the full fitness history therefore exist in exactly one ungitignored local
+file with no remote, no snapshot, and no schedule to make one. A single disk failure is total,
+unrecoverable loss — and it silently invalidates the founding invariant "if it's not in the
+ledger, it didn't happen," because the ledger is the single least-durable artifact in the system.
+Pairs with F2: the design assumes a crash/power-loss/disk-failure world and defends against none.
+
 ---
 
 ## Hardened blueprint
@@ -171,14 +211,36 @@ false positives structurally impossible, instead of relying on "no one else is r
 Remove default-arg DB binding; resolve paths through a single accessor so tests can redirect
 safely. Add a `--db-root` flag used by all probes.
 
+### H9 — Real filesystem confinement + real durability (fixes F14, F13, F16)
+- **Confinement (F14):** the worker subprocess must not run with `write_file`/`terminal`/
+  `python`/`patch`. Since Hermes toolset flags proved unreliable, run the worker under a
+  constrained profile (`hermes profile create` with those toolsets disabled) OR sandbox the
+  subprocess (separate low-priv user / container) — verified by a probe that a worker instructed
+  to write outside `workspace/` fails. Until then, F14 is the strongest argument against leaving
+  crons unattended.
+- **Policy as code (F13):** load `policy.yaml` at startup; enforce the cost/token cap, the
+  deny-list, and `writes_allowed_under` as actual runtime checks. A declared control that no code
+  reads is worse than no control — it manufactures false confidence.
+- **Durability (F16):** add an `AGI_M1_backup` scheduled task — nightly `sqlite3 .backup` of both
+  DBs to a timestamped file (survives WAL/mid-write, unlike a file copy) + a rotated offsite copy
+  (git remote for code/docs; DB snapshots to a second drive or a private remote). Verify by
+  restoring into a scratch dir and diffing row counts. This is a prerequisite for calling the
+  ledger a source of truth at all.
+
 ---
 
 ## Roadmap to M2
 
-**Phase 0 — P0 hardening (before the next unattended cycle).** H1, H2, H3. These are
-correctness/data-loss fixes; the Sunday/Monday crons are live and F1+F2 can fire this week.
-*Exit:* concurrency probe shows the legitimate row surviving; a killed mid-run task is
-recovered on next start; full round-trip re-verified.
+**Phase 0 — P0 hardening (before the next unattended cycle).** Now five P0s, not two:
+H1 (concurrency lock), H2 (provenance-based integrity), H3 (crash recovery), plus H9's
+**durability** (nightly `sqlite3 .backup` task — the ledger currently has no second copy, F16)
+and H9's **confinement** (constrained worker profile — the worker can currently overwrite the
+orchestrator's own code, F14). All are correctness/data-loss/security fixes and every one can
+fire on this week's live crons. *Exit:* concurrency probe shows the legitimate row surviving; a
+killed mid-run task is recovered on next start; a restored backup diffs clean; a worker told to
+write outside `workspace/` is denied; full round-trip re-verified. **Until Phase 0 lands, the
+honest operational posture is: do not leave the crons running unattended** — F14 (self-code
+overwrite) and F16 (single-copy ledger) mean an unattended failure can be unrecoverable.
 
 **Phase 1 — Trust the numbers (during W30 baseline).** H4 (citation validator + parse + blind
 re-judge), H5 (fair scheduling, `abandoned` accounting), H6 (token budget). Rationale: M1's
