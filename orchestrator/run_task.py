@@ -126,10 +126,16 @@ def main() -> int:
     verdict_text, _ = hermes_oneshot(critic_prompt, critic["provider"], critic["model"],
                                      RUNS / f"task{tid}_critic.usage.json")
     verdict = "pass" if verdict_text.upper().startswith("PASS") else "fail"
+    # F18 (docs/HARDENING.md): status must reflect verdict, not just "a call
+    # returned" -- batch_runner.py had the same bug (proven live: task_id 20/21/22
+    # all critic_verdict='fail' with status='done', making weekly_fitness() report
+    # 100% completion on a week whose true pass rate was 0%). Fixed at the source
+    # here too since this legacy hand-run path writes to the same ledger.
+    status = "done" if verdict == "pass" else "failed"
     ledger.finish_task(tid, artifacts=[str(deliverable.relative_to(ROOT))],
                        cost_usd=cost, critic_verdict=verdict,
-                       critic_notes=verdict_text[:500], status="done")
-    print(f"[done] task {tid} verdict={verdict} cost=${cost:.4f}")
+                       critic_notes=verdict_text[:500], status=status)
+    print(f"[{status}] task {tid} verdict={verdict} cost=${cost:.4f}")
     print("[fitness]", json.dumps(ledger.weekly_fitness(), indent=2))
     return 0
 

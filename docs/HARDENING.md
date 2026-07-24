@@ -167,6 +167,26 @@ seconds')`, never mixing in a Python-computed value. **Not yet fixed elsewhere**
 tight time comparison (anything under ~a few hours) must use the same SQL-only pattern; treat
 `datetime.now()` compared against a DB-stored UTC timestamp as unsafe by default in this codebase.
 
+### F18 — Task status ignored critic verdict; a REJECTED deliverable read as complete · **P0 · PROVEN, found 2026-07-24 fixing fitness reporting**
+`run_task()`/`run_synthesis()` set `status="done"` unconditionally once the critic returned ANY
+verdict — pass or fail — storing the actual judgment only in the separate `critic_verdict`
+column, which `weekly_fitness()` (and `is_first_run_for_mission()`, and `queue_mission_tasks()`'s
+dedup) never read. Live proof, this exact ledger, 2026-07-24: task_id 20/21/22 all carry
+`critic_verdict='fail'` with `status='done'`. Combined with F7 (the denominator bug, above), the
+scorecard was reporting **100% completion on a week whose true pass rate was 0/10** — not a
+hypothetical, the exact live number at the moment this was found. This compounds directly into
+W31's gated skill promotion (starting Mon 2026-07-27, three days after this was found): a skill
+whose canary/fitness evidence is "100% completion" when the underlying content was rejected by
+every single review would have been approved on fabricated evidence. **Fixed at the source**
+(not patched around in the fitness formula): `status = "done" if verdict == "pass" else "failed"`
+in `run_task`, `run_synthesis` (`batch_runner.py`), and the legacy hand-run path (`run_task.py`,
+same bug, same fix, for consistency since it writes the same ledger). The three live mislabeled
+rows were backfilled (status `done`→`failed`, `critic_notes` appended noting the correction —
+update, not delete, per schema.sql's append-only-in-spirit convention) after proving the fix on a
+DB copy first: `weekly_fitness()` against the copy returned exactly `completion_rate: 0.0`,
+`tasks_scheduled: 10`, `dropped: 1`, `pending: 6` — matching hand-calculation. Live `ledger.db`
+now reports the same, real number. See docs/INCIDENTS.md for the full writeup.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,
@@ -226,32 +246,81 @@ an honest note, not another silent retry; `interrupted` confirmed in the dedup-r
 the real `ledger.start_task()` production path sets a lease exactly ~1500s ahead of SQLite's own
 clock. Real repo untouched throughout (0 test rows leaked).
 
-### H4 — Make the critic check truth, not shape (fixes F3, F4, F5)
-- **Mechanical citation validator (pre-critic, no LLM):** extract every cited URL, issue a
-  bounded-concurrency `HEAD`/ranged `GET`, and record status + whether the claim's key literals
-  (price/number/name) appear in the fetched text. Feed that *evidence table* to the critic and
-  hard-fail any deliverable with dead/unverifiable citations above a threshold. This converts
-  form-checking into truth-checking **without** giving the critic tools.
-- **Tolerant verdict parse:** require a `VERDICT: PASS|FAIL` line; regex-extract it; treat an
-  unparseable verdict as `needs_review`, never as a silent fail.
-- **Blind re-judge on retries:** the critic sees the original criteria and the new deliverable,
-  **not** its own prior notes — removing the self-anchoring loop.
-- **Distinct critic model** whenever a second provider exists (config already supports it).
+### H4 — Make the critic check truth, not shape (fixes F3, F4) · **IMPLEMENTED + PROVEN 2026-07-24**
+`orchestrator/citecheck.py`: SSRF-guarded (private/loopback/link-local IPs resolved and blocked
+before any connect — the URL comes from worker output, effectively untrusted input),
+bounded-concurrency (`ThreadPoolExecutor`, 4 workers) fetch+verify of every cited URL in a
+deliverable, capped at 15 citations. For each: reachability + whether the claim's key literal
+(a price/number extracted from the surrounding line, URL text excluded) appears in the first
+20KB of the fetched page. Only this structured evidence table reaches the critic prompt — never
+raw fetched page content (F10 already flags fetched-content-into-a-future-prompt as an injection
+path; this keeps that surface closed). `run_critic()` in `batch_runner.py` now: mechanically
+hard-fails (no LLM call) when ≥3 citations were checked and >34% are dead; otherwise feeds the
+evidence table to the LLM critic as *additional* context, not a replacement for its judgment.
+Tolerant `VERDICT: PASS|FAIL` parse (regex) replaces the old `.startswith("PASS")` check (fixes
+F4); an unparseable reply or a critic call failure now returns `needs_review` — never a silent
+fail — which `run_task`/`run_synthesis` escalate (`pass_criteria_ambiguous`, matching policy.yaml's
+own declared trigger) and correctly exclude from `status='done'` (see F18 below).
 
-### H5 — Fair scheduling + honest scarcity accounting (fixes F6, F7)
-- **No `break` on park:** continue to the next task, tracking consecutive parks; stop only after
-  N consecutive (quota genuinely exhausted) — a park is per-attempt, not proof of global death.
-- **Rotate the start index** per run (`offset = run_count % len(tasks)`) so no seed can be
-  permanently shadowed.
-- **`abandoned` is a first-class outcome:** stale/never-attempted work appears on the scorecard
-  as its own line and *depresses* a new `attempt_coverage` term. Fitness must fall when the
-  system fails to do work — today it rises.
+Proven live: a real probe (`citecheck.verify()`) against four citations — a genuine live URL
+(shopify.com/about, reachable, literal found), a nonexistent domain (correctly reported "dns
+resolution failed", NOT confused with an SSRF block), and two private-address targets
+(`127.0.0.1`, the AWS metadata IP `169.254.169.254`, both correctly blocked before any connect
+attempt) — produced `dead_frac=0.75`, correctly triggering the mechanical hard-fail path. Two
+real bugs were found and fixed during this same probe: (1) the SSRF-block error message was
+originally applied to plain DNS failures too, mislabeling ordinary dead links as blocked attack
+attempts; (2) `_key_literal` was extracting digits from *inside* the cited URL itself (e.g. `123`
+from `abc123xyz.com`) rather than from the surrounding claim text — fixed by stripping URLs from
+the line before literal-hunting.
 
-### H6 — Real budget enforcement (fixes F8, F9)
-- Enforce a **token** budget (the unit actually reported): `tokens_per_day_hard_stop`, checked
-  before each worker call, halt + escalate on breach. Keep the USD cap for paid providers and
-  **wire it to real enforcement** before any paid key is added.
-- Implement `fallback_chain` traversal on 429/5xx so failover crosses providers as designed.
+**Not done: F5 (critic self-anchoring) is only partially addressed.** H4's other prescribed fix —
+"a distinct critic model whenever a second provider exists" — is NOT applied: manager and critic
+remain the SAME model (`glm-5.2:cloud`) because the model hierarchy stays Ollama-only until the
+operator adds a second provider (locked decision, CLAUDE.md model hierarchy section) — this isn't
+a new gap, it's an explicit surfacing of a precondition the original F5 fix assumed and doesn't
+yet hold. What DOES reduce the exposure: `run_critic()` was already blind to its own prior notes
+before this change (prior critic feedback is injected into the WORKER's retry prompt only, in
+`run_task`, never into the critic's own prompt) — confirmed by code inspection, not a new fix.
+citecheck's mechanical hard-fail is a genuinely independent signal regardless, since it calls no
+LLM at all.
+
+### H5 — Fair scheduling + honest scarcity accounting (fixes F6, F7) · **F7 IMPLEMENTED + PROVEN 2026-07-24; F6 STILL NOT DONE**
+**F7 (scarcity vanishing from the metric) is fixed** — see F18 below for the fuller writeup,
+since the two bugs compounded on the same live data. `ledger.weekly_fitness()`'s denominator now
+counts EVERY non-canary task scheduled in the window (`tasks_scheduled`), not just the subset
+that reached `done`/`failed` — `stale` and still-`queued`/`quota_wait`/`interrupted`/`running`
+rows can no longer silently vanish from the score. `dropped`/`pending` counts are new, always-
+shown fields (`scorecard.py`'s markdown + Telegram line both surface them as a first-class line,
+per H5's original "abandoned is a first-class outcome" intent) — achieved WITHOUT adding a new
+weighted fitness term, since `W` is locked for 8 weeks (§3.2) and a denominator fix doesn't touch
+it. `avg_cost_usd`/`intervention_rate` stay computed over resolved (`done`/`failed`/`infra_failed`)
+rows only, deliberately — folding never-run rows into THOSE denominators would have diluted them
+in the opposite direction (more unattempted work → fake-lower average cost).
+
+**F6 (head-of-line blocking) is NOT fixed.** `run_task`/`run_canaries` still `break` on the first
+`quota_wait` this pass, and there is still no rotating start offset — a seed that reliably parks
+first can still permanently shadow the seeds behind it in the ordered list. Out of scope for this
+pass (the user's ask was policy enforcement + critic truth-checking + fitness honesty, not
+scheduling fairness); tracked for a future pass.
+
+### H6 — Real budget enforcement (fixes F8, F9) · **F8 (token half) IMPLEMENTED + PROVEN 2026-07-24; USD/F9 STILL NOT DONE**
+`policy.yaml` gained `cost_caps.tokens_per_day_hard_stop` (3,000,000 — ~2.7x the measured 7-day
+daily average at the time this was set); `orchestrator/policy.py`'s `token_budget_breached()`
+checks it via `SELECT SUM(tokens_in)+SUM(tokens_out) ... WHERE created_at >= datetime('now',
+'start of day')` — computed entirely in SQLite's own clock (F17 lesson: never mix Python-local
+date math with the DB's UTC domain). Checked before every worker-consuming call
+(`run_task`/`run_synthesis`/`run_canaries`'s `hermes_worker`/`ollama_chat` calls); a breach parks
+the task as `quota_wait` (reusing all existing dedup/resume machinery for free) and escalates
+with `trigger="cost_cap_breach"`. A separate `manager_calls_per_day` counter
+(`policy.record_manager_call()`/`manager_call_budget_breached()`, persisted in
+`runs/policy_state.json`, protected by the same run-lock that already serializes every
+`batch_runner.py` invocation — no new locking needed) gates the critic and fact-extraction calls,
+returning `needs_review` rather than silently skipping when exhausted.
+
+**Not done: the USD cap and F9 (cross-provider `fallback_chain` traversal).** `usd_per_day_hard_stop`
+stays unenforced — correctly, since `cost_usd` is always `0.0` on Ollama and there is nothing real
+to check yet; wiring it is deferred until a paid provider key exists, per the original finding.
+`fallback_chain` traversal on 429/5xx is unimplemented — out of scope for this pass.
 
 ### H7 — Constrain the skill-promotion surface (fixes F10)
 - Candidate notes must match a **strict template** (technique statements only); strip URLs and
@@ -306,8 +375,28 @@ overwriting the harness's own code) → detected, `git checkout` restored it **b
 docs/INCIDENTS.md 2026-07-24 for the real side effect that caused (two more false Telegram
 alarms, same class as the 07-19 incident, this time a conscious tradeoff not a missed patch).
 
-**Policy as code (F13) — NOT YET DONE.** `policy.yaml`'s deny-list/cost-cap/writes_allowed_under
-are still not read by any executable path. Deferred past this Phase 0 pass; tracked for Phase 1.
+**Policy as code (F13) — IMPLEMENTED + PROVEN 2026-07-24.** New `orchestrator/policy.py` is the
+single loader for `policy.yaml`; `batch_runner.py` now calls into it at every point the doc
+declared a control. `escalate()` gained a `trigger=` param validated against policy.yaml's own
+`escalation.triggers` list (`policy.validate_trigger`) — an unknown trigger name raises, keeping
+the declared list authoritative rather than free-text decoration. All four triggers are now real,
+firing code paths: `deny_list_match` (regex scan of worker output for language claiming a
+`hard_exclusions` action — move_money/handle_credentials/irreversible_delete — deliberately
+conservative, catches self-reported claims not a determined attacker), `pass_criteria_ambiguous`
+(critic `needs_review`, from H4), `cost_cap_breach` (token budget, H6), `repeated_task_failure`
+(new: a mission accumulating ≥3 content-FAILED tasks in the current week escalates once, at the
+threshold crossing). `compliance_floor` + `hard_exclusions` are now injected as an explicit
+"HARD RULES" block into the worker prompt (previously never mentioned at all).
+`policy.validate_paths()` cross-checks the fs-guard's `PROTECTED_PATHS` (H9, above) against
+`workspace_confinement.writes_allowed_under`, run once at every `_run()` startup — and it
+immediately caught a REAL, previously undocumented drift: policy.yaml declared the whole
+`ledger/` directory writable, which silently included `ledger/schema.sql` — a file the fs-guard
+deliberately protects and that should never be runtime-writable. Fixed by narrowing the
+declaration to `ledger/ledger.db` specifically. `supply_chain.hub_skill_install` and
+`weekly_osv_audit` are explicitly OUT of scope: this codebase has no Hermes hub-skill-install path
+to gate (`promote.py` only handles the repo's own `skills_analyst/`), so there is nothing real to
+wire yet. `self_modification.orchestrator_code: forbidden_in_m1` is enforced by the existing
+fs-guard (H9), not duplicated here.
 
 ---
 
@@ -324,13 +413,22 @@ write outside `workspace/` is denied; full round-trip re-verified. **Until Phase
 honest operational posture is: do not leave the crons running unattended** — F14 (self-code
 overwrite) and F16 (single-copy ledger) mean an unattended failure can be unrecoverable.
 
-**Phase 1 — Trust the numbers (during W30 baseline).** H4 (citation validator + parse + blind
-re-judge), H5 (fair scheduling, `abandoned` accounting), H6 (token budget). Rationale: M1's
-entire claim is "measurable improvement." F3/F7 mean the current numbers can look perfect while
-being wrong — the metric must be trustworthy *before* the promotion gate starts optimising
-against it at W31.
-*Exit:* a deliberately fabricated-citation deliverable is auto-failed; scorecard shows an
-`abandoned` count; token cap halts a run in test.
+**Phase 1 — Trust the numbers (during W30 baseline).** H4 (citation validator + parse), H5's F7
+half (honest completion denominator), H6's token-budget half, H13/F13 (policy.yaml enforcement),
+and the newly-found F18 (status/verdict mismatch) — **IMPLEMENTED + PROVEN 2026-07-24**, three
+days before W31's gated promotion starts. Rationale: M1's entire claim is "measurable
+improvement." F3/F7/F18 meant the current numbers could look perfect while being wrong — the
+metric had to be trustworthy *before* the promotion gate starts optimising against it at W31.
+*Exit, all proven live against this repo's real ledger, not a synthetic case:* a deliberately
+fabricated-citation deliverable (4 URLs, 3 dead/SSRF-blocked) mechanically auto-fails
+(`dead_frac=0.75` > threshold); the scorecard now shows `dropped`/`pending` counts as first-class
+lines; `weekly_fitness()` corrected the live completion rate from a reported 100% to the true 0%
+on the exact week this was found, and that correction is reflected in the live ledger, not just a
+test fixture.
+**Still open (deliberately out of scope this pass — not silently dropped):** F6 (head-of-line
+blocking / no rotating start offset), F9 (`fallback_chain` cross-provider traversal), the USD
+half of F8 (no paid provider exists yet to make it real), F15 (`promote.py` commit pathspec
+isolation).
 
 **Phase 2 — W31 promotion under hardened conditions.** H7 first, then enable the gate. The
 self-improvement loop must not be the thing that discovers these flaws.
@@ -382,6 +480,8 @@ M2 breaks three current assumptions that need design work, not just a new missio
 ---
 
 ## Note on scope
-This document is an audit + blueprint. Nothing in H1–H8 has been implemented yet; the findings
-above are what the current code *does today*. Implementation is sequenced by the roadmap, P0
-first.
+This document started as an audit + blueprint; sections are updated in place as work lands, each
+marked IMPLEMENTED + PROVEN with the date and what was actually verified (never claimed from
+code-reading alone — see CLAUDE.md's verification ladder). As of 2026-07-24: Phase 0 (H1, H2, H3,
+H9) and most of Phase 1 (H4, F7/F18, the token half of H6, H13/F13) are done. Still open: F6, F9,
+the USD half of F8, F15, and Phase 2 onward (W31 gated promotion, runtime abstraction, M2).

@@ -24,7 +24,9 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import citecheck  # noqa: E402
 import ledger  # noqa: E402
+import policy  # noqa: E402
 
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "runs"
@@ -48,11 +50,16 @@ def load_roles() -> dict:
     return yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))["roles"]
 
 
-def escalate(reason: str) -> None:
+def escalate(reason: str, trigger: str | None = None) -> None:
+    # trigger, when given, must be one of policy.yaml's own escalation.triggers
+    # (F13, docs/HARDENING.md) -- validated so the declared list stays authoritative
+    # rather than becoming stale decoration the moment a caller typos it.
+    policy.validate_trigger(trigger)
+    tagged = f"[{trigger}] {reason}" if trigger else reason
     ESCALATIONS.parent.mkdir(parents=True, exist_ok=True)
     with open(ESCALATIONS, "a", encoding="utf-8") as f:
-        f.write(f"- {datetime.now().isoformat(timespec='seconds')} — {reason}\n")
-    log(f"ESCALATION -> {ESCALATIONS.name}: {reason}")
+        f.write(f"- {datetime.now().isoformat(timespec='seconds')} — {tagged}\n")
+    log(f"ESCALATION -> {ESCALATIONS.name}: {tagged}")
     # Best-effort push: inert until the operator sets a Telegram home channel
     # (they must message the bot once — platform rule). File above is the source of truth.
     try:
@@ -396,6 +403,10 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
         "ONLY include facts explicitly present in the brief WITH a cited source URL. "
         "No inference, no summarizing multiple facts into one. Output ONLY the JSON array.\n\n"
         f"BRIEF:\n{deliverable[:12000]}")
+    if policy.manager_call_budget_breached():
+        log(f"task {tid}: manager-call budget exhausted for today — memory update skipped")
+        return 0
+    policy.record_manager_call()
     try:
         raw = ollama_chat(manager_model, prompt)
     except Exception as e:
@@ -456,7 +467,38 @@ def seed_is_synthesis(spec: str) -> bool:
 
 
 def run_critic(row: dict, out: str, roles: dict, baseline: bool) -> tuple[str, str]:
-    """Tool-free critic judging deliverable CONTENT only. Returns (verdict, text)."""
+    """Tool-free critic judging deliverable CONTENT, now backed by a mechanical,
+    non-LLM truth signal (H4, docs/HARDENING.md — fixes F3, F4). Returns
+    (verdict, text) where verdict is 'pass' | 'fail' | 'needs_review' — the third
+    value means "could not be judged, do not treat as pass or a confirmed fail,
+    escalate for a human" (never a silent auto-fail, H4's stated fix for F4's
+    brittle-parse bug that used to invert good verdicts unnoticed).
+
+    NOTE on F5 (critic self-anchoring): H4's other prescribed fix, "a distinct
+    critic model whenever a second provider exists," is not applied here --
+    manager and critic are still the SAME model (glm-5.2:cloud) because the
+    model hierarchy stays Ollama-only until the operator adds a second provider
+    (locked decision, CLAUDE.md). This function is already blind to its own
+    prior notes (row['pass_criteria'] never carries a past verdict — prior
+    feedback is injected into the WORKER's prompt only, in run_task), so the
+    remaining F5 exposure is real but narrower than the original finding
+    implied. citecheck's mechanical hard-fail below is a genuinely independent
+    signal regardless: it never calls any LLM at all."""
+    try:
+        evidence = citecheck.verify(out)
+    except Exception as e:
+        log(f"citation check failed ({e}) -- proceeding without mechanical evidence")
+        evidence = []
+    summary = citecheck.summarize(evidence)
+    if citecheck.is_hard_fail(summary):
+        dead = [e["url"] for e in evidence if not e["reachable"]][:5]
+        return "fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
+                        f"URLs unreachable (dead_frac={summary['dead_frac']}): {dead}")
+
+    if policy.manager_call_budget_breached():
+        return "needs_review", "manager-role call budget exhausted for today (policy.yaml " \
+                               "cost_caps.manager_calls_per_day) -- critic skipped, not judged"
+    policy.record_manager_call()
     try:
         verdict_text = ollama_chat(
             roles["critic"]["model"],
@@ -473,17 +515,29 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool) -> tuple[str, s
                "last-week flags; correct behavior for a baseline run is marking everything as "
                "an initial observation, which is what you should look for instead."
                if baseline else "") +
-            "\n\nReply PASS or FAIL on line 1, then ONE sentence why.\n\n"
+            "\n\nA mechanical citation check already ran against the URLs in this "
+            "deliverable (fetched live, independent of you) -- weigh it, but it does not "
+            "replace your own judgment of substance and coverage:\n"
+            f"{citecheck.evidence_block(evidence)}\n"
+            "\n\nReply with a line reading exactly 'VERDICT: PASS' or 'VERDICT: FAIL', "
+            "then ONE sentence why.\n\n"
             f"MISSION SPEC (for context only, see instructions above):\n{row['pass_criteria']}\n\n"
             # 24k cap: at 8k the critic factually mis-judged a real deliverable, marking
             # its later sections "absent" when they sat past the truncation (2026-07-18,
             # task 5 — Notion section at ~9.5k was called missing). Models here have 262k
             # context; the cap only guards against pathological outputs.
             f"DELIVERABLE:\n{out[:24000]}")
-        return ("pass" if verdict_text.strip().upper().startswith("PASS") else "fail",
-                verdict_text)
     except Exception as e:
-        return "fail", f"critic call failed: {e}"
+        return "needs_review", f"critic call failed: {e}"
+
+    # Tolerant parse (H4, fixes F4): the old `.startswith("PASS")` check silently
+    # inverted any reply with markdown bold, a "VERDICT:" prefix, or a leading
+    # think-block into a false FAIL, indistinguishable from a real one in the
+    # ledger. An unparseable reply is now 'needs_review', never a silent fail.
+    m = re.search(r"VERDICT:\s*(PASS|FAIL)", verdict_text, re.I)
+    if not m:
+        return "needs_review", verdict_text[:500] + " [UNPARSEABLE VERDICT]"
+    return m.group(1).lower(), verdict_text
 
 
 def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path,
@@ -504,6 +558,12 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         "that plainly as a data gap instead of fabricating it.\n\n"
         f"## THIS WEEK'S BRIEFS\n{brief_block}\n\n## FACT LEDGER\n{facts_block}\n\n"
         "Reply with ONLY the deliverable markdown.")
+    if policy.token_budget_breached():
+        ledger.finish_task(tid, artifacts=[], status="quota_wait",
+                           critic_notes="policy.yaml tokens_per_day_hard_stop reached — parked")
+        escalate(f"task {tid}: daily token budget exhausted, parked (synthesis)",
+                trigger="cost_cap_breach")
+        log(f"task {tid}: quota_wait (token budget)"); return "quota_wait"
     ledger.start_task(tid, f"{roles['worker']['provider']}/{roles['worker']['model']} (tool-free synthesis)")
     import urllib.error
     try:
@@ -534,12 +594,23 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                           f" · {roles['worker']['model']} (synthesis, tool-free)_\n",
                     encoding="utf-8")
     verdict, verdict_text = run_critic(row, out, roles, baseline)
+    if verdict == "needs_review":
+        escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
+                trigger="pass_criteria_ambiguous")
+    # F18 (docs/HARDENING.md): status must reflect the verdict, not just "a call
+    # returned." Previously EVERY resolved synthesis landed status='done' regardless
+    # of verdict -- weekly_fitness() and is_first_run_for_mission() both read status
+    # only, so a critic-REJECTED deliverable was silently indistinguishable from a
+    # pass anywhere except the separate critic_verdict column nobody was filtering on.
+    status = "done" if verdict == "pass" else "failed"
     # No fact extraction for synthesis — it derives from facts already in the ledger;
     # re-extracting would duplicate them.
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], critic_verdict=verdict,
-                       critic_notes=verdict_text[:500], status="done")
-    log(f"task {tid}: done verdict={verdict} (synthesis, {dest.name})")
-    return "done"
+                       critic_notes=verdict_text[:500], status=status)
+    if verdict == "fail":
+        ledger.add_lesson(tid, f"[{mission['id']}] {verdict_text[:300]}", kind="failed")
+    log(f"task {tid}: {status} verdict={verdict} (synthesis, {dest.name})")
+    return status
 
 
 def expire_stale_parked() -> None:
@@ -636,6 +707,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         skill_notes = ""
     skills_block = (f"\n\nAPPROVED ANALYST TECHNIQUES (from your past reviewed work — "
                     f"apply where relevant):\n{skill_notes}" if skill_notes else "")
+    compliance_block = policy.compliance_prompt_block()
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
         f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}{prior_feedback}"
@@ -649,7 +721,17 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         f"create, write, or edit any file, and do not run any command. A separate system persists "
         f"your output; your job is only to research and reply with the deliverable markdown as "
         f"your final message text, nothing else."
+        + (f"\n\n{compliance_block}" if compliance_block else "")
     )
+    # F8/F13 (docs/HARDENING.md): Ollama reports no $, so token count is the real
+    # daily consumption signal -- check BEFORE spending the call, not after.
+    if policy.token_budget_breached():
+        ledger.finish_task(tid, artifacts=[], status="quota_wait",
+                           critic_notes="policy.yaml tokens_per_day_hard_stop reached "
+                                        "-- parked, retry once the day rolls over")
+        escalate(f"task {tid}: daily token budget exhausted, parked", trigger="cost_cap_breach")
+        log(f"task {tid}: quota_wait (token budget)")
+        return "quota_wait"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = RUNS / f"task{tid}_worker.usage.json"
     snapshot = db_integrity_snapshot()
@@ -687,6 +769,20 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         log(f"task {tid}: failed (short output)")
         return "failed"
 
+    # F13 deny-list (docs/HARDENING.md): heuristic scan of the worker's OWN report
+    # for language claiming a hard-excluded action. The worker is never told these
+    # tools/actions are off-limits by omission alone -- this makes the deny-list an
+    # executed, escalated check rather than an unread document.
+    deny_hits = policy.deny_list_scan(out)
+    if deny_hits:
+        ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",
+                           critic_notes=f"deny-list match: {deny_hits} -- see policy.yaml "
+                                        f"hard_exclusions; output not persisted as a deliverable")
+        escalate(f"task {tid}: worker output matched deny-list pattern(s) {deny_hits}",
+                trigger="deny_list_match")
+        log(f"task {tid}: failed (deny-list match {deny_hits})")
+        return "failed"
+
     # write deliverable
     slug = re.sub(r"[^a-z0-9]+", "-", row["spec"].lower())[:60].strip("-")
     dest = out_dir / f"{wk}_{slug}.md"
@@ -694,23 +790,52 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
                           f" · {worker_cfg['model']}_\n", encoding="utf-8")
 
     verdict, verdict_text = run_critic(row, out, roles, baseline)
+    if verdict == "needs_review":
+        escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
+                trigger="pass_criteria_ambiguous")
+    # F18 (docs/HARDENING.md): status must reflect the verdict. Previously EVERY
+    # resolved task landed status='done' regardless of critic_verdict -- proven live
+    # 2026-07-24: task_id 20/21/22 all carry critic_verdict='fail' with status='done',
+    # so weekly_fitness() (which reads only status) reported 100% completion on a week
+    # where the TRUE pass rate was 0/10. needs_review is also not 'done' -- an
+    # unjudged deliverable must not silently count as complete either.
+    status = "done" if verdict == "pass" else "failed"
 
     tok_in = int(usage.get("input_tokens") or 0)
     tok_out = int(usage.get("output_tokens") or 0)
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
-                       critic_notes=verdict_text[:500], status="done")
+                       critic_notes=verdict_text[:500], status=status)
 
     # Lesson capture (baseline weeks: harvest only, promotion stays OFF per §7):
     # critic objections become lesson_candidates so week-3 skill promotion has evidence.
     if verdict == "fail":
         ledger.add_lesson(tid, f"[{mission['id']}] {verdict_text[:300]}", kind="failed")
+        _check_repeated_failure(mission["id"])
 
     # Memory-update stage: only PASSED research deliverables become facts.
     facts_n = extract_facts(tid, out, roles["manager"]["model"]) if verdict == "pass" else 0
-    log(f"task {tid}: done verdict={verdict} facts+{facts_n} "
+    log(f"task {tid}: {status} verdict={verdict} facts+{facts_n} "
         f"({dest.name}, in={tok_in} out={tok_out})")
-    return "done"
+    return status
+
+
+REPEATED_FAILURE_THRESHOLD = 3
+
+
+def _check_repeated_failure(mission_id: str) -> None:
+    """policy.yaml's repeated_task_failure trigger (escalation.triggers): a mission
+    accumulating this many content-FAILED tasks in the current week is a real signal
+    the operator should see, independent of any single task's outcome."""
+    import sqlite3
+    wk = week_key()
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
+        n = c.execute(
+            "SELECT count(*) FROM tasks WHERE mission_id=? AND status='failed' "
+            "AND critic_verdict='fail' AND spec LIKE ?", (mission_id, f"[{wk}]%")).fetchone()[0]
+    if n == REPEATED_FAILURE_THRESHOLD:  # fire once, at the exact threshold crossing
+        escalate(f"mission {mission_id}: {n} content-failed tasks this week ({wk})",
+                trigger="repeated_task_failure")
 
 
 def mission_workspace(mission_id: str) -> str:
@@ -754,6 +879,13 @@ def run_canaries(roles: dict) -> None:
         if dup and dup[1] not in ("quota_wait", "queued", "interrupted"):  # H3
             log(f"{name}: already {dup[1]} this week — skipping"); continue
         tid = dup[0] if dup else ledger.queue_task("canaries", spec, "deterministic grade")
+        # F8/F13: canaries draw from the same daily token budget as mission work.
+        if policy.token_budget_breached():
+            ledger.finish_task(tid, artifacts=[], status="quota_wait",
+                               critic_notes="policy.yaml tokens_per_day_hard_stop reached")
+            escalate(f"canary {name}: daily token budget exhausted, parked",
+                    trigger="cost_cap_breach")
+            log(f"{name}: quota_wait (token budget)"); continue
         ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
         snapshot = db_integrity_snapshot()
         fs_snapshot = fs_integrity_snapshot()
@@ -861,6 +993,14 @@ def _run(args) -> int:
 
     if not preflight():
         return 3
+    # F13 (docs/HARDENING.md): one-time-per-run consistency check between the
+    # fs-guard's PROTECTED_PATHS (H9) and policy.yaml's declared writable roots --
+    # catches the two lists silently drifting apart. Warns + escalates, doesn't
+    # block the run (a stale doc shouldn't halt real work; it should get fixed).
+    path_problems = policy.validate_paths(PROTECTED_PATHS)
+    if path_problems:
+        log(f"policy/fs-guard path inconsistency: {path_problems}")
+        escalate(f"policy.yaml/fs-guard path lists are inconsistent: {path_problems}")
     roles = load_roles()
     expire_stale_parked()
     reconcile_interrupted_tasks()

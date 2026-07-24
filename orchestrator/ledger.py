@@ -94,33 +94,73 @@ def add_lesson(task_id: int, lesson: str, kind: str = "worked") -> None:
         )
 
 
+TERMINAL_STATUSES = ("done", "failed", "infra_failed")  # a worker call was resolved
+PENDING_STATUSES = ("queued", "quota_wait", "running", "interrupted",
+                    "blocked")  # not yet resolved (blocked: run_task.py --dry-run only)
+
+
 def weekly_fitness(week_start: str | None = None) -> dict:
-    """Compute F over tasks in the 7 days from week_start (default: last 7 days)."""
+    """Compute F over ALL non-canary tasks SCHEDULED in the 7 days from week_start
+    (default: last 7 days) -- not just the ones that happened to reach a terminal
+    state before this call ran.
+
+    F7/F18 (docs/HARDENING.md): the original query filtered to
+    `status IN ('done','failed')` for BOTH the numerator and the denominator, which
+    had two compounding effects, both proven live 2026-07-24 against this exact
+    ledger: (1) `stale` rows (quota-starved work superseded by week rollover,
+    expire_stale_parked()) and still-`queued`/`quota_wait` rows never entered the
+    denominator at all, so unattempted work silently vanished from the score
+    instead of depressing it (F7); (2) separately, `run_task`/`run_synthesis` used
+    to set status='done' for EVERY resolved task regardless of critic_verdict, so
+    a critic-REJECTED deliverable counted as a completion too (F18) -- live
+    evidence: task_id 20/21/22 all carry critic_verdict='fail' with status='done'.
+    Combined, this ledger's actual last-7-days state (10 scheduled, 3 nominally
+    'done' but all 3 critic-failed, rest queued/parked/stale) reported fitness as
+    if completion were 100%; the true rate is 0/10. F18 is fixed at the source
+    (batch_runner.py now sets status='failed' on any non-pass verdict), so
+    completion_rate = done/n_total here is correct as long as that invariant
+    holds; this function does not re-derive it from critic_verdict, by design --
+    status is meant to be the single resolved-outcome field everything else reads.
+
+    completion_rate's denominator is now EVERYTHING scheduled this window
+    (terminal + pending + stale), so a week that ends with most seeds never
+    reached cannot report near-100%. avg_cost_usd/intervention_rate stay computed
+    over TERMINAL rows only (done/failed/infra_failed) -- folding never-run
+    pending/stale rows (cost_usd=0, interventions=0 by construction) into THOSE
+    denominators would dilute them in the opposite direction, making the system
+    look cheaper/better-behaved the more work it fails to attempt. Weights (W)
+    are untouched -- FIXED for 8 weeks (§3.2); this is a denominator/status-
+    source fix, not a new scoring term."""
     start = (datetime.fromisoformat(week_start) if week_start
              else datetime.now() - timedelta(days=7))
     with _conn() as c:
         rows = c.execute(
-            "SELECT * FROM tasks WHERE created_at >= ? AND status IN "
-            "('done','failed') AND mission_id != 'canaries'",  # canaries tracked separately
+            "SELECT * FROM tasks WHERE created_at >= ? AND mission_id != 'canaries'",
             (start.isoformat(timespec="seconds"),)
         ).fetchall()
-    n = len(rows)
-    if n == 0:
+    n_total = len(rows)
+    if n_total == 0:
         return {"tasks_attempted": 0, "fitness": None, "note": "no tasks in window"}
+    terminal = [r for r in rows if r["status"] in TERMINAL_STATUSES]
+    n_terminal = len(terminal)
+    dropped = sum(1 for r in rows if r["status"] == "stale")
+    pending = sum(1 for r in rows if r["status"] in PENDING_STATUSES)
     completed = sum(1 for r in rows if r["status"] == "done")
-    spot = [r for r in rows if r["human_verdict"] in ("pass", "fail")]
+    spot = [r for r in terminal if r["human_verdict"] in ("pass", "fail")]
     accuracy = (sum(1 for r in spot if r["human_verdict"] == "pass") / len(spot)
                 if spot else None)
-    interventions = sum(r["interventions"] for r in rows)
-    avg_cost = sum(r["cost_usd"] for r in rows) / n
-    completion_rate = completed / n
-    intervention_norm = min(1.0, interventions / n)
+    interventions = sum(r["interventions"] for r in terminal)
+    avg_cost = sum(r["cost_usd"] for r in terminal) / n_terminal if n_terminal else 0.0
+    completion_rate = completed / n_total
+    intervention_norm = min(1.0, interventions / n_terminal) if n_terminal else 0.0
     cost_eff = min(1.0, COST_TARGET / avg_cost) if avg_cost > 0 else 1.0
     acc = accuracy if accuracy is not None else 0.0
     fitness = (W["completion"] * completion_rate + W["accuracy"] * acc +
                W["intervention"] * (1 - intervention_norm) + W["cost"] * cost_eff)
     return {
-        "tasks_attempted": n, "completion_rate": round(completion_rate, 3),
+        "tasks_scheduled": n_total, "tasks_attempted": n_terminal,
+        "completion_rate": round(completion_rate, 3),
+        "dropped": dropped, "pending": pending,
         "accuracy": round(accuracy, 3) if accuracy is not None else None,
         "intervention_rate": round(intervention_norm, 3),
         "avg_cost_usd": round(avg_cost, 4), "fitness": round(fitness, 3),

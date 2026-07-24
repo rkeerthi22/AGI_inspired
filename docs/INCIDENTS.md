@@ -1,5 +1,39 @@
 # Incidents
 
+## 2026-07-24 — F18: critic-REJECTED tasks read as 100% complete in the live scorecard
+
+**What happened:** While implementing the fitness-reporting fix the operator asked for ("fix
+fitness reporting so it cannot claim 100% completion while dropping work"), a routine live-data
+check before writing any code (`SELECT status, critic_verdict FROM tasks WHERE critic_verdict IS
+NOT NULL`) surfaced task_id 20, 21, 22 — all three carrying `critic_verdict='fail'` alongside
+`status='done'`. `run_task()`/`run_synthesis()` had always set `status="done"` once the critic
+returned ANY verdict, storing pass/fail only in the separate `critic_verdict` column that
+`weekly_fitness()` never reads. Recomputing the live 7-day window by hand: 10 tasks scheduled, 3
+nominally "done" — all 3 actually critic-rejected — the rest queued/parked/stale. The scorecard
+was reporting **100% completion** on a week whose true pass rate was **0/10**, at the exact
+moment W31's gated skill promotion (starting Mon 2026-07-27, three days later) was about to start
+trusting this number to decide whether to keep or roll back a promoted skill.
+
+**Root cause:** `status` and `critic_verdict` were two independent fields with no code enforcing
+they agree; `finish_task(..., status="done")` was hardcoded at the call site regardless of the
+verdict variable sitting right next to it in the same function.
+
+**Fix applied:** `status = "done" if verdict == "pass" else "failed"` in `run_task()` and
+`run_synthesis()` (`orchestrator/batch_runner.py`), and the same fix in the legacy hand-run path
+(`orchestrator/run_task.py`) since it writes the same ledger and had the identical bug. Proven on
+a DB copy first (`weekly_fitness()` returned `completion_rate: 0.0`, matching hand-calculation)
+before backfilling the three live rows (`status` `done`→`failed`, `critic_notes` appended noting
+the correction — an update, not a delete, per schema.sql's append-only-in-spirit convention).
+Live `weekly_fitness()` now reports the true `completion_rate: 0.0` for the window.
+
+**Lesson:** two fields that are supposed to agree (a resolution status and a judgment verdict)
+will eventually disagree unless one is *derived* from the other at the single write site, not
+set independently by two nearby lines that happen to usually match intent. A metric's formula
+can be completely correct and still lie if it trusts a field that was never actually kept honest
+by the code writing it — "N claims need N probes" applies to schema invariants, not just
+computed results: I verified the fitness FORMULA was fixed, and separately verified (by querying,
+not assuming) that the STATUS column it reads was actually trustworthy, and found it wasn't.
+
 ## 2026-07-24 — H9's fs-guard tamper test sent two more real false-alarm escalations
 
 **What happened:** Testing the new filesystem integrity guard (H9, docs/HARDENING.md F14)

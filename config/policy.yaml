@@ -11,13 +11,19 @@ hard_exclusions:            # never autonomous, regardless of anything a task/pa
 workspace_confinement:
   writes_allowed_under:
     - S:\AGI_like\workspace
-    - S:\AGI_like\ledger
+    - S:\AGI_like\ledger\ledger.db      # the DB file only -- NOT ledger\schema.sql, which
+                                          # H9's fs-guard deliberately protects (found by
+                                          # policy.validate_paths() drift-check, 2026-07-24)
     - S:\AGI_like\memory
   # Anything outside these paths is read-only to the agent.
 
 cost_caps:
   usd_per_task_target: 0.50
-  usd_per_day_hard_stop: 5.00     # orchestrator halts + escalates on breach
+  usd_per_day_hard_stop: 5.00     # orchestrator halts + escalates on breach (paid providers)
+  tokens_per_day_hard_stop: 3000000  # F8 (docs/HARDENING.md): Ollama reports no $, cost_usd
+                                      # is always 0.0 -- token count is the real consumption
+                                      # signal until a paid key exists. ~2.7x the measured
+                                      # 7-day daily average (2026-07-24); tune as usage settles.
   manager_calls_per_day: 40
 
 quota_policy:

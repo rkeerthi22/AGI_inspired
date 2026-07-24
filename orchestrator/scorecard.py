@@ -62,11 +62,18 @@ def crash_recovery_counts(since: datetime) -> tuple[int, int]:
 def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, gave_up: int = 0) -> str:
     crash_line = (f"- Crash recovery: {recovered} task(s) recovered, {gave_up} gave up "
                   f"after repeated interruption\n" if (recovered or gave_up) else "")
+    # H5/F7 (docs/HARDENING.md): dropped/pending are first-class, always-shown lines,
+    # not folded quietly out of the denominator -- a week that drops most of its
+    # scheduled work must show that plainly here, not just in a lower F.
+    scope_line = (f"- Tasks scheduled: {fit.get('tasks_scheduled', fit.get('tasks_attempted', 0))} "
+                 f"(attempted {fit.get('tasks_attempted', 0)}, dropped {fit.get('dropped', 0)}, "
+                 f"still pending {fit.get('pending', 0)})\n")
     return (
         f"# Scorecard {week}\n\n"
         f"- **Fitness F:** {_fmt(fit.get('fitness'))}\n"
-        f"- Tasks attempted: {fit.get('tasks_attempted', 0)}\n"
-        f"- Completion: {_fmt(fit.get('completion_rate'), pct=True)}\n"
+        f"{scope_line}"
+        f"- Completion: {_fmt(fit.get('completion_rate'), pct=True)} (of tasks SCHEDULED, "
+        f"not just resolved)\n"
         f"- Accuracy (spot-checked {fit.get('spot_checked', 0)}): "
         f"{_fmt(fit.get('accuracy'), pct=True)}\n"
         f"- Intervention rate: {_fmt(fit.get('intervention_rate'), pct=True)}\n"
@@ -74,8 +81,9 @@ def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, ga
         f"- Canaries green: {green}/{ran or CANARY_TOTAL}\n"
         f"{crash_line}"
         f"- Note: {fit.get('note', '')}\n\n"
-        f"_Generated {datetime.now().isoformat(timespec='seconds')}. "
-        f"Excludes quota_wait / infra_failed (not task attempts)._\n"
+        f"_Generated {datetime.now().isoformat(timespec='seconds')}. Completion is measured "
+        f"against everything scheduled this week; avg cost/intervention rate are measured "
+        f"only over tasks that actually resolved (done/failed/infra_failed)._\n"
     )
 
 
@@ -84,11 +92,13 @@ def telegram_line(week: str, fit: dict, green: int, ran: int, recovered: int = 0
     crash_suffix = f" · ⚠ {recovered} recovered/{gave_up} gave up (crash)" if (recovered or gave_up) else ""
     if fit.get("tasks_attempted", 0) == 0:
         return f"📊 {week}: no task attempts this week ({fit.get('note', '')}).{crash_suffix}"
-    return (f"📊 {week} · F={_fmt(f)} · {fit['tasks_attempted']} tasks · "
+    dropped, pending = fit.get("dropped", 0), fit.get("pending", 0)
+    drop_suffix = f" · {dropped} dropped/{pending} pending" if (dropped or pending) else ""
+    return (f"📊 {week} · F={_fmt(f)} · {fit.get('tasks_scheduled', fit['tasks_attempted'])} scheduled · "
             f"done {_fmt(fit.get('completion_rate'), pct=True)} · "
             f"acc {_fmt(fit.get('accuracy'), pct=True)} · "
             f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{ran or CANARY_TOTAL}"
-            f"{crash_suffix}")
+            f"{drop_suffix}{crash_suffix}")
 
 
 def send_telegram(text: str) -> bool:
