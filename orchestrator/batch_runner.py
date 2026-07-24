@@ -262,7 +262,7 @@ def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
             dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id=? AND spec=?",
                             (mission["id"], spec)).fetchone()
             if dup:
-                if dup[1] in ("quota_wait", "queued"):
+                if dup[1] in ("quota_wait", "queued", "interrupted"):  # H3: crash-recovered
                     ids.append(dup[0])            # resume it
                 continue                           # done/failed this week → skip
             if dry:
@@ -495,6 +495,47 @@ def expire_stale_parked() -> None:
             log(f"expired {cur.rowcount} stale parked task(s) from previous weeks")
 
 
+def reconcile_interrupted_tasks() -> int:
+    """H3 (docs/HARDENING.md, fixes F2): on every process start, before any new queueing,
+    find 'running' rows whose lease has expired -- the owning process crashed, was killed,
+    or the machine lost power. Previously these were orphaned FOREVER: no code path ever
+    read or reset status='running', so the task was never retried, never counted (fitness
+    counts only done/failed), and its seed was blocked for the rest of the week by dedup.
+
+    Recovered rows go to 'interrupted' (dedup-resumable, see queue_mission_tasks) with an
+    incremented attempt_count. Past MAX_TASK_ATTEMPTS, mark 'failed' instead of retrying
+    forever -- an honest give-up beats a silent crash-loop. Always logged, never silent;
+    surfaced on the scorecard so the operator sees it happened."""
+    import sqlite3
+    n_recovered = n_gave_up = 0
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
+        c.row_factory = sqlite3.Row
+        expired = c.execute(
+            "SELECT task_id, attempt_count FROM tasks WHERE status='running' "
+            "AND (lease_expires_at IS NULL OR lease_expires_at < datetime('now'))"
+        ).fetchall()
+        for row in expired:
+            tid, attempts = row["task_id"], (row["attempt_count"] or 0) + 1
+            if attempts >= ledger.MAX_TASK_ATTEMPTS:
+                c.execute(
+                    "UPDATE tasks SET status='failed', attempt_count=?, "
+                    "critic_notes=COALESCE(critic_notes,'') || "
+                    "' | gave up after ' || ? || ' interruptions (crash/power-loss recovery cap)' "
+                    "WHERE task_id=?", (attempts, attempts, tid))
+                n_gave_up += 1
+            else:
+                c.execute(
+                    "UPDATE tasks SET status='interrupted', attempt_count=?, "
+                    "critic_notes=COALESCE(critic_notes,'') || "
+                    "' | recovered from an orphaned running state (attempt ' || ? || ')' "
+                    "WHERE task_id=?", (attempts, attempts, tid))
+                n_recovered += 1
+    if n_recovered or n_gave_up:
+        log(f"crash recovery: {n_recovered} task(s) recovered for retry, "
+           f"{n_gave_up} gave up after {ledger.MAX_TASK_ATTEMPTS} interruptions")
+    return n_recovered + n_gave_up
+
+
 # ── execution ──────────────────────────────────────────────────────────────────
 def run_task(tid: int, mission: dict, roles: dict) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
@@ -648,7 +689,7 @@ def run_canaries(roles: dict) -> None:
         with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
             dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id='canaries' "
                            "AND spec=?", (spec,)).fetchone()
-        if dup and dup[1] not in ("quota_wait", "queued"):
+        if dup and dup[1] not in ("quota_wait", "queued", "interrupted"):  # H3
             log(f"{name}: already {dup[1]} this week — skipping"); continue
         tid = dup[0] if dup else ledger.queue_task("canaries", spec, "deterministic grade")
         ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
@@ -679,7 +720,7 @@ def run_canaries(roles: dict) -> None:
         rows = c.execute("SELECT status, critic_verdict FROM tasks WHERE mission_id='canaries' "
                          "AND spec LIKE ?", (f"[{wk}]%",)).fetchall()
     week_green = sum(1 for s, v in rows if s == "done" and v == "pass")
-    week_pending = sum(1 for s, _ in rows if s in ("quota_wait", "queued"))
+    week_pending = sum(1 for s, _ in rows if s in ("quota_wait", "queued", "interrupted"))
     log(f"canaries this week: {week_green}/{len(CANARIES)} green"
         f"{f', {week_pending} still quota-parked' if week_pending else ''}")
     if week_green + week_pending < len(CANARIES):
@@ -758,6 +799,7 @@ def _run(args) -> int:
         return 3
     roles = load_roles()
     expire_stale_parked()
+    reconcile_interrupted_tasks()
 
     if args.canaries:
         run_canaries(roles)
@@ -772,9 +814,9 @@ def _run(args) -> int:
             # task the operator actually wanted resumed was never reached (no error,
             # just a quiet no-op).
             parked = [r[0] for r in c.execute(
-                "SELECT task_id, mission_id FROM tasks WHERE status='quota_wait' "
-                "AND mission_id != 'canaries'")]
-        log(f"resume mode: {len(parked)} parked non-canary task(s)")
+                "SELECT task_id, mission_id FROM tasks WHERE status IN "
+                "('quota_wait', 'interrupted') AND mission_id != 'canaries'")]  # H3
+        log(f"resume mode: {len(parked)} parked/interrupted non-canary task(s)")
         ran = 0
         for tid in parked[:args.max_tasks]:
             with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:

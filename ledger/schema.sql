@@ -24,10 +24,15 @@ CREATE TABLE IF NOT EXISTS tasks (
     interventions  INTEGER DEFAULT 0,
     intervention_types TEXT,                   -- JSON array
     created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
-    run_id         TEXT                        -- orchestrator process that inserted this row
+    run_id         TEXT,                       -- orchestrator process that inserted this row
                                                  -- (H2, docs/HARDENING.md — a NULL run_id on a
                                                  -- new row is the rogue-write signature: the
                                                  -- worker is never told this schema exists)
+    lease_expires_at TEXT,                     -- H3: set when status->'running'; if still
+                                                 -- 'running' past this on next startup, the
+                                                 -- owning process crashed/was killed (F2)
+    attempt_count  INTEGER DEFAULT 0            -- H3: incremented on each interruption;
+                                                 -- capped to avoid a crash-loop retrying forever
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status  ON tasks(status);

@@ -151,6 +151,22 @@ Pairs with F2: the design assumes a crash/power-loss/disk-failure world and defe
 
 ## Hardened blueprint
 
+### F17 — Python-local vs SQLite-UTC clock mismatch · **P1 · PROVEN, found 2026-07-24 building H3**
+Measured directly: this machine's Python `datetime.now()` runs **2 hours ahead** of SQLite's
+`datetime('now')` (UTC). The codebase mixes both conventions — `created_at` defaults via SQL
+`datetime('now')` (UTC); `started_at`/`finished_at` are set via Python `datetime.now().isoformat()`
+(local). Any comparison mixing the two is silently wrong by the local UTC offset. Caught in
+practice: H3's first lease implementation compared a Python-local "10 minutes ago" timestamp
+against SQLite's UTC `datetime('now')` and the row did not register as expired — off by
+~2 hours, in the direction that would have made a real crash recovery silently fail to fire.
+Same class of risk applies to `ledger.weekly_fitness()`'s 7-day window (Python-computed cutoff
+vs UTC-stored `created_at`) — low practical impact at a 7-day grain, but the exact mechanism
+that just caused a real bug at a 25-minute grain. **Fix applied for the lease specifically**
+(H3, below): compute and compare entirely in SQLite's own clock via `datetime('now', '+N
+seconds')`, never mixing in a Python-computed value. **Not yet fixed elsewhere** — any future
+tight time comparison (anything under ~a few hours) must use the same SQL-only pattern; treat
+`datetime.now()` compared against a DB-stored UTC timestamp as unsafe by default in this codebase.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,
@@ -190,12 +206,25 @@ unknown** — i.e. genuinely un-attributable writes (the actual rogue-worker sig
 ignores rows correctly attributed to any live run. This preserves true detection while making
 false positives structurally impossible, instead of relying on "no one else is running."
 
-### H3 — Crash recovery via leases (fixes F2)
-- Add `tasks.lease_expires_at`, refreshed while a task runs.
-- **Startup reconciliation:** any `running` row whose lease has expired → `interrupted`, then
-  re-queued (attempt counter +1, capped to avoid crash-loops), logged and surfaced in the
-  scorecard as an explicit line — never silently.
-- `queue_mission_tasks()` dedup must treat `interrupted` as resumable.
+### H3 — Crash recovery via leases (fixes F2) · **IMPLEMENTED + PROVEN 2026-07-24**
+`tasks.lease_expires_at` + `attempt_count` added (schema + both live DBs migrated).
+`ledger.start_task()` sets a 1500s (25 min) lease — worker timeout (900s) + critic call + fact
+extraction + margin — computed entirely via SQLite's own `datetime('now', '+N seconds')` (see
+F17: a Python-computed lease compared against SQLite's clock was the first, broken version of
+this). `reconcile_interrupted_tasks()` runs at the start of every `_run()`, before any queueing:
+a `running` row past its lease → `interrupted` (attempt_count+1, dedup-resumable) or, past
+`MAX_TASK_ATTEMPTS=3`, an honest `failed` with a note — never a silent infinite crash-loop.
+`queue_mission_tasks()`, `run_canaries()`, and `--resume` all updated to treat `interrupted` as
+resumable. `scorecard.py` surfaces recovered/gave-up counts explicitly (file + Telegram line) —
+never silent, per spec.
+
+Proven on DB copies, 5 cases: a fresh crash (attempt 0, expired lease) → recovered to
+`interrupted`; a task with a **still-valid** lease (genuinely running) → left untouched, not
+falsely reaped; a task already at 2 prior interruptions → 3rd crash hits the cap → `failed` with
+an honest note, not another silent retry; `interrupted` confirmed in the dedup-resumable set;
+`scorecard.crash_recovery_counts()` confirmed non-zero after a real recovery. Separately verified
+the real `ledger.start_task()` production path sets a lease exactly ~1500s ahead of SQLite's own
+clock. Real repo untouched throughout (0 test rows leaked).
 
 ### H4 — Make the critic check truth, not shape (fixes F3, F4, F5)
 - **Mechanical citation validator (pre-critic, no LLM):** extract every cited URL, issue a

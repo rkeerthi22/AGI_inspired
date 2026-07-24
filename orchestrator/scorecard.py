@@ -45,7 +45,23 @@ def _fmt(v, pct=False):
     return f"{v*100:.0f}%" if pct else f"{v}"
 
 
-def render_md(week: str, fit: dict, green: int, ran: int) -> str:
+def crash_recovery_counts(since: datetime) -> tuple[int, int]:
+    """(recovered, gave_up) this week -- H3, docs/HARDENING.md fixes F2. Never silent:
+    a task orphaned by a crash/power-loss must show up here, not just quietly vanish."""
+    with sqlite3.connect(LEDGER_DB, timeout=30) as c:
+        notes = [r[0] or "" for r in c.execute(
+            "SELECT critic_notes FROM tasks WHERE created_at>=? AND "
+            "(critic_notes LIKE '%recovered from an orphaned running state%' OR "
+            "critic_notes LIKE '%gave up after%interruptions%')",
+            (since.isoformat(timespec="seconds"),)).fetchall()]
+    recovered = sum(1 for n in notes if "recovered from an orphaned" in n)
+    gave_up = sum(1 for n in notes if "gave up after" in n)
+    return recovered, gave_up
+
+
+def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, gave_up: int = 0) -> str:
+    crash_line = (f"- Crash recovery: {recovered} task(s) recovered, {gave_up} gave up "
+                  f"after repeated interruption\n" if (recovered or gave_up) else "")
     return (
         f"# Scorecard {week}\n\n"
         f"- **Fitness F:** {_fmt(fit.get('fitness'))}\n"
@@ -56,20 +72,23 @@ def render_md(week: str, fit: dict, green: int, ran: int) -> str:
         f"- Intervention rate: {_fmt(fit.get('intervention_rate'), pct=True)}\n"
         f"- Avg cost/task: ${fit.get('avg_cost_usd', 0) or 0}\n"
         f"- Canaries green: {green}/{ran or CANARY_TOTAL}\n"
+        f"{crash_line}"
         f"- Note: {fit.get('note', '')}\n\n"
         f"_Generated {datetime.now().isoformat(timespec='seconds')}. "
         f"Excludes quota_wait / infra_failed (not task attempts)._\n"
     )
 
 
-def telegram_line(week: str, fit: dict, green: int, ran: int) -> str:
+def telegram_line(week: str, fit: dict, green: int, ran: int, recovered: int = 0, gave_up: int = 0) -> str:
     f = fit.get("fitness")
+    crash_suffix = f" · ⚠ {recovered} recovered/{gave_up} gave up (crash)" if (recovered or gave_up) else ""
     if fit.get("tasks_attempted", 0) == 0:
-        return f"📊 {week}: no task attempts this week ({fit.get('note', '')})."
+        return f"📊 {week}: no task attempts this week ({fit.get('note', '')}).{crash_suffix}"
     return (f"📊 {week} · F={_fmt(f)} · {fit['tasks_attempted']} tasks · "
             f"done {_fmt(fit.get('completion_rate'), pct=True)} · "
             f"acc {_fmt(fit.get('accuracy'), pct=True)} · "
-            f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{ran or CANARY_TOTAL}")
+            f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{ran or CANARY_TOTAL}"
+            f"{crash_suffix}")
 
 
 def send_telegram(text: str) -> bool:
@@ -97,6 +116,7 @@ def build(deliver: bool = False) -> tuple[str, str]:
     since = _week_start()
     fit = ledger.weekly_fitness()
     green, ran = canaries_green(since)
+    recovered, gave_up = crash_recovery_counts(since)
     week = datetime.now().strftime("%Y-W%V")
 
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:
@@ -109,9 +129,9 @@ def build(deliver: bool = False) -> tuple[str, str]:
              fit.get("avg_cost_usd"), fit.get("fitness"), green, fit.get("note", "")))
 
     VIEW_DIR.mkdir(parents=True, exist_ok=True)
-    md = render_md(week, fit, green, ran)
+    md = render_md(week, fit, green, ran, recovered, gave_up)
     (VIEW_DIR / f"{week}.md").write_text(md, encoding="utf-8")
-    line = telegram_line(week, fit, green, ran)
+    line = telegram_line(week, fit, green, ran, recovered, gave_up)
     if deliver:
         deliver_telegram(line)
     return md, line

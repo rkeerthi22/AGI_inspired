@@ -44,11 +44,30 @@ def queue_task(mission_id: str, spec: str, pass_criteria: str) -> int:
         return cur.lastrowid
 
 
+# H3 (docs/HARDENING.md, fixes F2): worst-case legitimate single-task duration is the
+# worker subprocess timeout (900s) + critic call (≤300s) + fact extraction (~60s) + margin.
+# A task still 'running' past its lease on the NEXT process startup means the owning
+# process crashed/was killed — start_task() sets the lease once; there is no periodic
+# refresh because a task is one blocking call, never a long-running loop that could benefit
+# from one.
+LEASE_SECONDS = 1500  # 25 min
+MAX_TASK_ATTEMPTS = 3  # crash-loop cap: after this many interruptions, give up honestly
+
+
 def start_task(task_id: int, model_used: str) -> None:
+    # F17 (docs/HARDENING.md): this machine's Python local clock runs 2h ahead of
+    # SQLite's datetime('now') (UTC) -- measured directly. A lease compared later via
+    # SQL's datetime('now') must be COMPUTED in that same SQL/UTC clock domain, not
+    # Python's, or the comparison is silently wrong by the local UTC offset (caught by
+    # the H3 test: a "10 minutes ago, local time" lease looked like it hadn't expired
+    # yet from SQLite's UTC point of view). started_at stays Python-local for
+    # human-readable logs; the lease is UTC-only end to end.
     with _conn() as c:
         c.execute(
-            "UPDATE tasks SET status='running', started_at=?, model_used=? WHERE task_id=?",
-            (datetime.now().isoformat(timespec="seconds"), model_used, task_id),
+            "UPDATE tasks SET status='running', started_at=?, model_used=?, "
+            "lease_expires_at=datetime('now', ? || ' seconds') WHERE task_id=?",
+            (datetime.now().isoformat(timespec="seconds"), model_used,
+             f"+{LEASE_SECONDS}", task_id),
         )
 
 
