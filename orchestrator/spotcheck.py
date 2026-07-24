@@ -15,7 +15,7 @@ DB = ROOT / "ledger" / "ledger.db"
 
 
 def _conn():
-    c = sqlite3.connect(DB)
+    c = sqlite3.connect(DB, timeout=30)
     c.row_factory = sqlite3.Row
     return c
 

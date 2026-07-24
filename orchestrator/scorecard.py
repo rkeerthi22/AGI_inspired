@@ -29,7 +29,7 @@ def _week_start() -> datetime:
 def canaries_green(since: datetime) -> tuple[int, int]:
     """(passed, ran) canary tasks in the window. A canary passes on human verdict if
     present, else critic verdict."""
-    with sqlite3.connect(LEDGER_DB) as c:
+    with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
         rows = c.execute(
             "SELECT critic_verdict, human_verdict FROM tasks "
@@ -99,7 +99,7 @@ def build(deliver: bool = False) -> tuple[str, str]:
     green, ran = canaries_green(since)
     week = datetime.now().strftime("%Y-W%V")
 
-    with sqlite3.connect(LEDGER_DB) as c:
+    with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         c.execute(
             "INSERT INTO scorecards (week_start, tasks_attempted, completion_rate, accuracy,"
             " intervention_rate, avg_cost_usd, fitness, canaries_green, notes) "

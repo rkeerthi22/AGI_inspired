@@ -190,7 +190,7 @@ def main() -> int:
 
         # ── Step 5: ledgerbook writes ────────────────────────────────────────
         step("5/7 ledgerbook: decision + entities + estimate facts")
-        with sqlite3.connect(BOOK) as c:
+        with sqlite3.connect(BOOK, timeout=30) as c:
             c.execute("INSERT INTO decisions (statement, rationale) VALUES (?,?)",
                       (f"Onboarding niche selected autonomously: {winner['name']} "
                        f"({winner['slug']})",

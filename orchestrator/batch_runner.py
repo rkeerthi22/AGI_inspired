@@ -102,7 +102,7 @@ def _db_counts() -> dict:
     counts = {}
     for name, path in (("ledger", ledger.LEDGER_DB),
                        ("ledgerbook", ROOT / "memory" / "ledgerbook.db")):
-        with sqlite3.connect(path) as c:
+        with sqlite3.connect(path, timeout=30) as c:
             for table in ("tasks", "entities", "facts", "decisions", "experiences", "failures"):
                 counts[f"{name}.{table}"] = c.execute(
                     f"SELECT count(*) FROM {table}").fetchone()[0]
@@ -131,7 +131,7 @@ def db_integrity_check(before: dict, context: str) -> None:
     for key in diffs:
         dbname, table = key.split(".", 1)
         path = ledger.LEDGER_DB if dbname == "ledger" else ROOT / "memory" / "ledgerbook.db"
-        with sqlite3.connect(path) as c:
+        with sqlite3.connect(path, timeout=30) as c:
             c.row_factory = sqlite3.Row
             n_new = after[key] - before[key]
             if n_new <= 0:
@@ -224,7 +224,7 @@ def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
     import sqlite3
     wk = week_key()
     ids = []
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         for i, seed in enumerate(mission["seeds"], 1):
             spec = f"[{wk}][seed {i}] {seed}"
             dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id=? AND spec=?",
@@ -255,7 +255,7 @@ def is_first_run_for_mission(mission_id: str) -> bool:
     nothing, got marked FAIL for not producing a diff that cannot exist yet."""
     import sqlite3
     wk = week_key()
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         row = c.execute(
             "SELECT 1 FROM tasks WHERE mission_id=? AND status='done' AND spec NOT LIKE ? LIMIT 1",
             (mission_id, f"[{wk}]%")).fetchone()
@@ -310,7 +310,7 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
         log(f"task {tid}: fact-extraction call failed ({e}) — memory update skipped")
         return 0
     written = 0
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db") as c:
+    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
         for it in _parse_json_array(raw)[:40]:
             if not isinstance(it, dict):
                 continue
@@ -339,7 +339,7 @@ def retract_facts(task_id: int) -> int:
     are tainted and must not persist as current truths. Uses supersede-not-delete
     semantics per HARNESS_DESIGN §1.2."""
     import sqlite3
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db") as c:
+    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
         cur = c.execute(
             "UPDATE facts SET valid_until=datetime('now'), status='retracted' "
             "WHERE source_task_id=? AND valid_until IS NULL",
@@ -350,7 +350,7 @@ def retract_facts(task_id: int) -> int:
 def _recent_fact_lines(days: int = 14, cap: int = 120) -> str:
     """Fact-ledger view fed to synthesis tasks: current + prior week."""
     import sqlite3
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db") as c:
+    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
         rows = c.execute(
             "SELECT entity, statement, provenance_date, confidence FROM facts "
             "WHERE created_at >= datetime('now', ?) ORDER BY entity, id",
@@ -453,7 +453,7 @@ def expire_stale_parked() -> None:
     """quota_wait rows from a PREVIOUS ISO week are superseded by the new week's scan —
     mark them 'stale' (excluded from fitness, which counts only done/failed)."""
     import sqlite3
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         cur = c.execute(
             "UPDATE tasks SET status='stale', critic_notes=COALESCE(critic_notes,'') || "
             "' | expired: superseded by new week' WHERE status='quota_wait' AND spec NOT LIKE ?",
@@ -466,7 +466,7 @@ def expire_stale_parked() -> None:
 def run_task(tid: int, mission: dict, roles: dict) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
     import sqlite3
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
         row = dict(c.execute("SELECT * FROM tasks WHERE task_id=?", (tid,)).fetchone())
 
@@ -612,7 +612,7 @@ def run_canaries(roles: dict) -> None:
     wk = week_key()
     for name, prompt, grade in CANARIES:
         spec = f"[{wk}] {name}"
-        with sqlite3.connect(ledger.LEDGER_DB) as c:
+        with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
             dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id='canaries' "
                            "AND spec=?", (spec,)).fetchone()
         if dup and dup[1] not in ("quota_wait", "queued"):
@@ -642,7 +642,7 @@ def run_canaries(roles: dict) -> None:
     # "0/5 green" and fired a false regression escalation, ignoring canaries that
     # already passed earlier this week and weren't touched by this pass.
     import sqlite3
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         rows = c.execute("SELECT status, critic_verdict FROM tasks WHERE mission_id='canaries' "
                          "AND spec LIKE ?", (f"[{wk}]%",)).fetchall()
     week_green = sum(1 for s, v in rows if s == "done" and v == "pass")
@@ -673,6 +673,9 @@ def run_canaries(roles: dict) -> None:
 
 
 # ── main ───────────────────────────────────────────────────────────────────────
+LOCK_PATH_NAME = ".batch.lock"  # lives under RUNS; see runlock.py for F1 rationale
+
+
 def main() -> int:
     global _log_file
     try:
@@ -693,6 +696,18 @@ def main() -> int:
     RUNS.mkdir(exist_ok=True)
     _log_file = RUNS / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
 
+    import runlock
+    try:
+        with runlock.acquire(RUNS / LOCK_PATH_NAME):
+            return _run(args)
+    except runlock.AlreadyRunning as e:
+        log(f"another batch_runner is already running — skipping this fire ({e})")
+        return 0
+
+
+def _run(args) -> int:
+    """Everything that touches shared state (ledger/ledgerbook/workspace). Runs
+    ONLY while main() holds the exclusive lock — never call this directly."""
     if args.scorecard:
         import scorecard
         md, line = scorecard.build(deliver=args.deliver)
@@ -717,7 +732,7 @@ def main() -> int:
 
     if args.resume:
         import sqlite3
-        with sqlite3.connect(ledger.LEDGER_DB) as c:
+        with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
             # Filter OUT canaries (use --canaries to resume those) BEFORE slicing to
             # max_tasks -- found 2026-07-18: slicing first let canary rows, which sort
             # earlier by task_id, silently consume the whole budget while the mission
@@ -729,7 +744,7 @@ def main() -> int:
         log(f"resume mode: {len(parked)} parked non-canary task(s)")
         ran = 0
         for tid in parked[:args.max_tasks]:
-            with sqlite3.connect(ledger.LEDGER_DB) as c:
+            with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
                 mid = c.execute("SELECT mission_id FROM tasks WHERE task_id=?",
                                 (tid,)).fetchone()[0]
             st = run_task(tid, parse_mission(mid), roles)

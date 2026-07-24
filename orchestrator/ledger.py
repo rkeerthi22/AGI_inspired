@@ -14,8 +14,12 @@ W = {"completion": 0.35, "accuracy": 0.30, "intervention": 0.25, "cost": 0.10}
 COST_TARGET = 0.50
 
 
-def _conn(db=LEDGER_DB):
-    c = sqlite3.connect(db)
+def _conn(db=None):
+    # F12 (docs/HARDENING.md): db=LEDGER_DB as a default arg binds the path at
+    # IMPORT time, so a test/probe that reassigns ledger.LEDGER_DB to redirect
+    # at a copy is silently ignored and writes land in the real DB — this is
+    # exactly what happened during the 2026-07-19 audit. Resolve at CALL time.
+    c = sqlite3.connect(db if db is not None else LEDGER_DB, timeout=30)
     c.row_factory = sqlite3.Row
     return c
 

@@ -40,7 +40,7 @@ def _git(*args: str) -> subprocess.CompletedProcess:
 
 def _lesson_pool() -> dict[str, list[dict]]:
     """Unpromoted lessons grouped by mission (via tasks join)."""
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
         rows = c.execute(
             "SELECT lc.id, lc.lesson, lc.kind, lc.times_seen, t.mission_id "
@@ -56,7 +56,7 @@ def _lesson_pool() -> dict[str, list[dict]]:
 def _current_canary_green() -> int:
     """This week's canary green count — recorded at approval as the skill's baseline."""
     wk = datetime.now().strftime("%Y-W%V")
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         return c.execute(
             "SELECT count(*) FROM tasks WHERE mission_id='canaries' AND spec LIKE ? "
             "AND status='done' AND critic_verdict='pass'", (f"[{wk}]%",)).fetchone()[0]
@@ -170,11 +170,11 @@ def cmd_approve(name: str) -> int:
     # mark evidence rows promoted
     ev_m = re.search(r"evidence_lesson_ids:\s*\[([\d,\s]*)\]", text)
     ids = [int(x) for x in re.findall(r"\d+", ev_m.group(1))] if ev_m else []
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         for lid in ids:
             c.execute("UPDATE lesson_candidates SET promoted_to=? WHERE id=?",
                       (f"{mission}/{src.name}", lid))
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db") as c:
+    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
         c.execute("INSERT INTO decisions (statement, rationale) VALUES (?,?)",
                   (f"Skill promoted: {mission}/{src.name}",
                    f"Operator-approved. Canary baseline at approval: {baseline}. "
@@ -206,10 +206,10 @@ def cmd_rollback(relpath: str, reason: str = "operator/canary rollback") -> int:
         _log(f"no such active skill: {relpath}"); return 1
     _git("rm", "-q", str(target.relative_to(ROOT)))
     _git("commit", "-m", f"Rollback skill: {relpath} ({reason})")
-    with sqlite3.connect(ledger.LEDGER_DB) as c:
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         c.execute("UPDATE lesson_candidates SET promoted_to=NULL WHERE promoted_to=?",
                   (relpath,))
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db") as c:
+    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
         c.execute("INSERT INTO decisions (statement, rationale) VALUES (?,?)",
                   (f"Skill rolled back: {relpath}", reason))
     _log(f"ROLLED BACK {relpath} (git commit created; lessons returned to pool)")

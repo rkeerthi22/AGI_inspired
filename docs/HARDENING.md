@@ -151,7 +151,17 @@ Pairs with F2: the design assumes a crash/power-loss/disk-failure world and defe
 
 ## Hardened blueprint
 
-### H1 — Single-writer discipline (fixes F1, F11)
+### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
+`orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
+properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,
+lock released on exception) all pass; **two genuinely concurrent `batch_runner.py` processes**
+raced for the lock — exactly one proceeded, the other logged the skip and exited 0, lock
+correctly absent after both finished. This is the literal Sunday canaries/scorecard overlap
+that produced F1. `timeout=30` added to all 22 `sqlite3.connect()` call sites across the
+orchestrator (fixes F11); `ledger._conn()`'s default-arg path binding (F12) fixed alongside it
+since it's the same function. H2 (below) remains valuable as defense-in-depth for writes that
+originate outside the lock's coverage (e.g. a manual `sqlite3` session, or the lock file being
+externally deleted) but H1 alone removes the dominant real-world exposure.
 - **Run lock:** `runs/.batch.lock` acquired via `os.open(..., O_CREAT|O_EXCL)` (portable) at
   entry, released in a `finally`; stale locks (PID dead / older than max run duration) are
   reclaimed. Second instance exits `0` with "another run in progress — skipping", which is the
