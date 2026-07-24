@@ -298,6 +298,14 @@ before the next check fires — it is detection-and-undo, not a sandbox that pre
 from happening at all. It closes the specific F14 nightmare (the harness silently and permanently
 loses its own integrity mid-run) without an invasive unilateral system change.
 
+Proven live against the real repo (had to be — the mechanism IS git, so a fake sandboxed copy
+tests nothing real): planted an untracked file inside a protected path → detected, removed, tree
+clean afterward. Modified an existing tracked file (the literal F14 nightmare — a worker
+overwriting the harness's own code) → detected, `git checkout` restored it **byte-for-byte**
+(diffed against the original content, not just "looked fine"). Both correctly escalated — see
+docs/INCIDENTS.md 2026-07-24 for the real side effect that caused (two more false Telegram
+alarms, same class as the 07-19 incident, this time a conscious tradeoff not a missed patch).
+
 **Policy as code (F13) — NOT YET DONE.** `policy.yaml`'s deny-list/cost-cap/writes_allowed_under
 are still not read by any executable path. Deferred past this Phase 0 pass; tracked for Phase 1.
 

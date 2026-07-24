@@ -1,5 +1,30 @@
 # Incidents
 
+## 2026-07-24 — H9's fs-guard tamper test sent two more real false-alarm escalations
+
+**What happened:** Testing the new filesystem integrity guard (H9, docs/HARDENING.md F14)
+required a genuinely git-tracked working tree — the guard's whole mechanism IS `git status`/
+`git checkout`, so a sandboxed fake-copy test (the pattern used successfully for the DB guard
+tests) would have tested nothing real; `git -C <fake-temp-dir> status` just errors out silently
+on a non-repo. The test was therefore run deliberately against the real repo: plant a tamper
+(an untracked file, then a modified tracked file) → confirm the guard detects and reverts it.
+Both tests passed correctly. But `escalate()`'s real Telegram push fired for both, exactly the
+same user-facing outcome as the 2026-07-19 incident — this time from a conscious, reasoned
+tradeoff rather than a missed monkeypatch, but the result (two false alarms on the operator's
+phone about staged tests) is identical.
+
+**Fix applied:** appended a correction entry to `workspace/ESCALATIONS.md` (append, not rewrite).
+
+**Lesson:** when a test genuinely needs to run against the real repo (not everything can be
+sandboxed — git-based mechanisms are the clearest example), stub `escalate()` itself for the
+duration of the test rather than accepting the real side effect. A `contextlib.contextmanager`
+that monkeypatches `batch_runner.escalate` to a logging no-op, used around exactly the tamper
+lines, would have proven the guard's detection+revert behavior with zero real-world noise. Two
+incidents now share this root cause in spirit: testing this codebase requires either (a) full
+isolation via a throwaway git repo + every derived path patched, or (b) accepting you're
+touching production and explicitly neutralizing every side-effecting call (not just the ones
+the target function obviously makes) before you start.
+
 ## 2026-07-19 — Adversarial audit probe sent a false escalation (real Telegram alert) about itself
 
 **What happened:** While proving F1 (docs/HARDENING.md — the concurrency bug where
