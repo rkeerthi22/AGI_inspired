@@ -202,11 +202,11 @@ def main() -> int:
             for e in sel["estimates"]:
                 c.execute(
                     "INSERT INTO facts (entity, statement, provenance_url, provenance_date,"
-                    " confidence, status) VALUES (?,?,?,?,1,'candidate')",
+                    " confidence, status, run_id) VALUES (?,?,?,?,1,'candidate',?)",
                     (e["slug"],
                      f"Estimated conversion probability {e['conversion_probability']} "
                      f"(persona-simulation, MODEL-ESTIMATED not measured): {e['reason']}",
-                     "internal://onboarding_autonomy/4_selection", TODAY))
+                     "internal://onboarding_autonomy/4_selection", TODAY, ledger.RUN_ID))
 
         # niche_selection.md — the auditable record of steps 1-4
         est_rows = "\n".join(

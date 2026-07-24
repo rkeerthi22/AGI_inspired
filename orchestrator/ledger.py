@@ -3,11 +3,20 @@ Stdlib only. The orchestrator and any hand-run go through here so the ledger sta
 the single source of truth (HARNESS_DESIGN.md §3)."""
 import json
 import sqlite3
+import uuid
 from datetime import datetime, timedelta
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER_DB = ROOT / "ledger" / "ledger.db"
+
+# One run_id per PROCESS (generated once at import, which happens once per
+# `python orchestrator/...` invocation). Stamped on every row this process
+# inserts into tasks/facts. H2 (docs/HARDENING.md): a NULL run_id on a newly
+# appeared row is the real rogue-write signature — the worker is never told
+# this schema exists (containment fix, docs/INCIDENTS.md 2026-07-18), so it
+# has no way to produce a value here even if it tried to write directly.
+RUN_ID = uuid.uuid4().hex[:12]
 
 # Fitness weights — FIXED for 8 weeks, do not tune mid-window (§3.2)
 W = {"completion": 0.35, "accuracy": 0.30, "intervention": 0.25, "cost": 0.10}
@@ -28,9 +37,9 @@ def queue_task(mission_id: str, spec: str, pass_criteria: str) -> int:
     """Create a task with pre-written pass criteria. Returns task_id."""
     with _conn() as c:
         cur = c.execute(
-            "INSERT INTO tasks (mission_id, spec, pass_criteria, status) "
-            "VALUES (?,?,?,'queued')",
-            (mission_id, spec, pass_criteria),
+            "INSERT INTO tasks (mission_id, spec, pass_criteria, status, run_id) "
+            "VALUES (?,?,?,'queued',?)",
+            (mission_id, spec, pass_criteria, RUN_ID),
         )
         return cur.lastrowid
 

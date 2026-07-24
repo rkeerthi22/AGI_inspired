@@ -97,53 +97,85 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300) -> str:
         return json.loads(r.read())["message"]["content"]
 
 
-def _db_counts() -> dict:
+# Tables where the orchestrator stamps run_id on every insert (H2, docs/HARDENING.md).
+# A NULL run_id on a NEW row in one of these is the real rogue-write signature -- the
+# worker is never told this schema exists, so it cannot produce a valid value even if
+# it tried to write directly. Rows WITH a run_id (even a different process's, e.g. a
+# concurrent hand-run that H1's lock didn't quite prevent, or a reclaimed-stale-lock
+# edge case) are legitimate and must NOT be deleted -- that blind deletion is exactly
+# what F1's probe proved happens with plain count comparison, 2026-07-19.
+_PROVENANCE_TABLES = {"tasks": "task_id", "facts": "id"}
+
+
+def _db_snapshot() -> dict:
+    """count + max(id) per table, both DBs. max(id) lets the check identify EXACTLY the
+    new rows later (WHERE id > snapshot_max_id) rather than guessing via ORDER BY LIMIT,
+    which can misidentify rows if anything else changed the table shape meanwhile."""
     import sqlite3
-    counts = {}
+    snap = {}
     for name, path in (("ledger", ledger.LEDGER_DB),
                        ("ledgerbook", ROOT / "memory" / "ledgerbook.db")):
         with sqlite3.connect(path, timeout=30) as c:
             for table in ("tasks", "entities", "facts", "decisions", "experiences", "failures"):
-                counts[f"{name}.{table}"] = c.execute(
-                    f"SELECT count(*) FROM {table}").fetchone()[0]
-    return counts
+                id_col = _PROVENANCE_TABLES.get(table, "id")
+                row = c.execute(f"SELECT count(*), max({id_col}) FROM {table}").fetchone()
+                snap[f"{name}.{table}"] = {"count": row[0], "max_id": row[1] or 0}
+    return snap
 
 
 def db_integrity_snapshot() -> dict:
     """Call immediately BEFORE a worker subprocess runs."""
-    return _db_counts()
+    return _db_snapshot()
 
 
 def db_integrity_check(before: dict, context: str) -> None:
     """Call immediately AFTER a worker subprocess returns, BEFORE the orchestrator's own
-    ledger.finish_task() write. Any row the worker itself added (not the orchestrator --
-    the orchestrator hasn't written yet at this point) is unauthorized by construction.
-    Quarantines the extra rows (dump + delete) rather than trusting them. See
-    docs/INCIDENTS.md 2026-07-18."""
+    ledger.finish_task() write. See docs/INCIDENTS.md 2026-07-18 for why this exists and
+    docs/HARDENING.md F1/H2 for why it is provenance-based (run_id) rather than a blind
+    count comparison: the earlier count-only version deleted a legitimate CONCURRENT
+    process's rows and raised a false alarm about it, proven on DB copies 2026-07-19.
+
+    For tasks/facts: only rows with id > snapshot's max_id AND run_id IS NULL are
+    quarantined -- a concurrent legitimate insert (valid run_id) is left untouched.
+    For the other four tables (never written by the live worker path, and not
+    run_id-tracked): unchanged blind behavior, now safe in practice because H1 serializes
+    orchestrator processes."""
     import json as _json
     import sqlite3
-    after = _db_counts()
-    diffs = {k: (before[k], after[k]) for k in after if after[k] != before[k]}
-    if not diffs:
+    after = _db_snapshot()
+    changed = {k: (before[k], after[k]) for k in after if after[k] != before[k]}
+    if not changed:
         return
-    log(f"INTEGRITY VIOLATION during {context}: unauthorized DB writes detected {diffs}")
-    dump = {"context": context, "diffs": diffs, "quarantined_rows": {}}
-    for key in diffs:
+    dump = {"context": context, "changed": changed, "quarantined_rows": {}, "spared_rows": {}}
+    any_quarantined = False
+    for key, (b, a) in changed.items():
+        if a["count"] <= b["count"]:
+            continue  # a decrease is not a worker-write; leave it, just recorded above
         dbname, table = key.split(".", 1)
         path = ledger.LEDGER_DB if dbname == "ledger" else ROOT / "memory" / "ledgerbook.db"
         with sqlite3.connect(path, timeout=30) as c:
             c.row_factory = sqlite3.Row
-            n_new = after[key] - before[key]
-            if n_new <= 0:
-                continue  # a decrease is not a worker-write; leave it, just log
-            rows = c.execute(f"SELECT * FROM {table} ORDER BY id DESC LIMIT ?"
-                             if table != "tasks" else
-                             f"SELECT * FROM {table} ORDER BY task_id DESC LIMIT ?",
-                             (n_new,)).fetchall()
-            id_col = "task_id" if table == "tasks" else "id"
-            dump["quarantined_rows"][key] = [dict(r) for r in rows]
-            ids = [r[id_col] for r in rows]
+            id_col = _PROVENANCE_TABLES.get(table, "id")
+            new_rows = c.execute(
+                f"SELECT * FROM {table} WHERE {id_col} > ?", (b["max_id"],)).fetchall()
+            if table in _PROVENANCE_TABLES:
+                bad = [r for r in new_rows if r["run_id"] is None]
+                good = [r for r in new_rows if r["run_id"] is not None]
+                if good:
+                    dump["spared_rows"][key] = [dict(r) for r in good]
+                    log(f"{context}: {len(good)} new {table} row(s) have valid run_id "
+                       f"(concurrent legitimate run) -- spared")
+            else:
+                bad = new_rows  # unchanged legacy behavior for non-provenance tables
+            if not bad:
+                continue
+            any_quarantined = True
+            dump["quarantined_rows"][key] = [dict(r) for r in bad]
+            ids = [r[id_col] for r in bad]
             c.executemany(f"DELETE FROM {table} WHERE {id_col}=?", [(i,) for i in ids])
+    if not any_quarantined:
+        return  # every new row had valid provenance -- not an incident, nothing to log loudly
+    log(f"INTEGRITY VIOLATION during {context}: unauthorized DB writes detected {changed}")
     RUNS.mkdir(exist_ok=True)
     qpath = RUNS / f"quarantine_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
     qpath.write_text(_json.dumps(dump, indent=2, default=str), encoding="utf-8")
@@ -327,8 +359,9 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
             c.execute("INSERT OR IGNORE INTO entities (type, name) VALUES (?,?)",
                       (etype, entity))
             c.execute("INSERT INTO facts (entity, statement, provenance_url, provenance_date,"
-                      " confidence, status, source_task_id) VALUES (?,?,?,?,?,'candidate',?)",
-                      (entity, stmt, url, date, conf, tid))
+                      " confidence, status, source_task_id, run_id) "
+                      "VALUES (?,?,?,?,?,'candidate',?,?)",
+                      (entity, stmt, url, date, conf, tid, ledger.RUN_ID))
             written += 1
     return written
 

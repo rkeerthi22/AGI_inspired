@@ -169,7 +169,21 @@ externally deleted) but H1 alone removes the dominant real-world exposure.
 - **Stagger crons:** canaries Sun 02:00, scorecard Sun 05:30 — beyond worst-case canary runtime.
 - **`timeout=30` + retry-on-locked** on every connect (centralise in `ledger._conn`).
 
-### H2 — Provenance-based integrity, not count-based (fixes F1 properly)
+### H2 — Provenance-based integrity, not count-based (fixes F1 properly) · **IMPLEMENTED + PROVEN 2026-07-24**
+`tasks.run_id`/`facts.run_id` columns added (both live DBs migrated + schema.sql updated);
+`ledger.RUN_ID` generated once per process; every orchestrator insert (`ledger.queue_task`,
+`extract_facts`, `onboarding_autonomy`'s fact insert) stamps it. `db_integrity_check()` rewritten
+around `WHERE id > snapshot_max_id` (exact new-row identification, not count-diff guessing) and
+quarantines only rows with `run_id IS NULL` on the two provenance-tracked tables — a legitimate
+concurrent write (any non-null run_id) is spared and logged as informational, never deleted.
+
+Proven with the same rigor as the original F1 finding, both directions, on DB copies: a row
+stamped with a foreign-but-valid run_id (simulating another live orchestrator process) survived
+the check; a row with `run_id IS NULL` (simulating an actual rogue write — exactly what a worker
+using its terminal/python tools directly against the DB would produce, since it is never told
+this schema exists) was correctly quarantined. This time the probe also explicitly sandboxed
+`ESCALATIONS` (not just `ROOT`/`RUNS`), applying the lesson from the 2026-07-19 false-alarm
+incident (docs/INCIDENTS.md) — verified zero leakage into the real repo.
 Give every orchestrator run a `run_id` (UUID). Stamp `tasks.run_id` and `facts.run_id` on every
 insert the orchestrator makes. The guard then quarantines **only rows whose `run_id` is NULL or
 unknown** — i.e. genuinely un-attributable writes (the actual rogue-worker signature) — and

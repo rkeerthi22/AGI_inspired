@@ -23,7 +23,11 @@ CREATE TABLE IF NOT EXISTS tasks (
     human_verdict  TEXT,                       -- pass | fail | NULL(not spot-checked)
     interventions  INTEGER DEFAULT 0,
     intervention_types TEXT,                   -- JSON array
-    created_at     TEXT    NOT NULL DEFAULT (datetime('now'))
+    created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+    run_id         TEXT                        -- orchestrator process that inserted this row
+                                                 -- (H2, docs/HARDENING.md — a NULL run_id on a
+                                                 -- new row is the rogue-write signature: the
+                                                 -- worker is never told this schema exists)
 );
 CREATE INDEX IF NOT EXISTS idx_tasks_mission ON tasks(mission_id);
 CREATE INDEX IF NOT EXISTS idx_tasks_status  ON tasks(status);
@@ -54,7 +58,8 @@ CREATE TABLE IF NOT EXISTS facts (
     status         TEXT NOT NULL DEFAULT 'candidate', -- candidate | permanent | expired
     ttl_expires    TEXT,                         -- candidates auto-expire (14d default)
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
-    source_task_id INTEGER                       -- task that produced this fact (for retraction)
+    source_task_id INTEGER,                      -- task that produced this fact (for retraction)
+    run_id         TEXT                          -- orchestrator process that inserted this row (H2)
 );
 CREATE INDEX IF NOT EXISTS idx_facts_entity ON facts(entity);
 CREATE INDEX IF NOT EXISTS idx_facts_status ON facts(status);
