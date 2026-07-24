@@ -217,9 +217,13 @@ false positives structurally impossible, instead of relying on "no one else is r
   informed rather than a skim.
 - Cap total injected skill text and log every injection in the run log.
 
-### H8 — Test isolation (fixes F12)
+### H8 — Test isolation (fixes F12) · **elevated priority — this already caused a real incident**
 Remove default-arg DB binding; resolve paths through a single accessor so tests can redirect
-safely. Add a `--db-root` flag used by all probes.
+safely. Add a `--db-root` flag used by all probes. Not hypothetical: this exact bug class fired
+for real during this audit — the F1 probe patched `batch_runner.ROOT` but `ESCALATIONS` is a
+`Path` built from `ROOT` at import time, so `escalate()` wrote to (and Telegram-alerted) the
+REAL system about a staged test. Full writeup: docs/INCIDENTS.md 2026-07-19. Every `= ROOT / ...`
+module constant is a landmine for the next test unless this is fixed centrally.
 
 ### H9 — Real filesystem confinement + real durability (fixes F14, F13, F16)
 - **Confinement (F14):** the worker subprocess must not run with `write_file`/`terminal`/

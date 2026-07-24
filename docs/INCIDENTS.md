@@ -1,5 +1,38 @@
 # Incidents
 
+## 2026-07-19 — Adversarial audit probe sent a false escalation (real Telegram alert) about itself
+
+**What happened:** While proving F1 (docs/HARDENING.md — the concurrency bug where
+`db_integrity_check()` deletes a legitimate concurrent process's rows), the probe script
+sandboxed the test by reassigning `batch_runner.ROOT` and `batch_runner.RUNS` to a temp
+directory before calling the real `db_integrity_snapshot()`/`db_integrity_check()` functions.
+The DB-count comparison correctly detected the staged "process B" write and correctly
+quarantined it (into the temp dir — that part worked). But `db_integrity_check()`'s failure
+path also calls `escalate()`, and `escalate()` writes to a module-level constant —
+`ESCALATIONS = ROOT / "workspace" / "ESCALATIONS.md"` — **computed once at import time from
+the original `ROOT`**, not re-derived from `batch_runner.ROOT` at call time. Reassigning
+`ROOT` after import does nothing to a `Path` object already built from its old value.
+
+Result: `escalate()` wrote a "worker wrote directly to a database" line straight into the
+**real** `workspace/ESCALATIONS.md`, and — since `escalate()` also best-effort pushes to
+Telegram and the home channel had been live since 2026-07-18 — very likely sent a **genuine
+alarm to the operator's phone about a deliberately-staged test scenario**, not a real incident.
+
+**Root cause:** identical bug class to F12 (`ledger._conn(db=LEDGER_DB)`'s default-arg path
+binding) — a config/path value captured once at import time, assumed to be redirectable by
+reassigning the module attribute it was *derived from*, when in fact the derived value itself
+needs to be reassigned (or, better, computed lazily at call time rather than at import time).
+
+**Fix applied:** appended a correction entry to `workspace/ESCALATIONS.md` (append, not
+rewrite — the audit trail doesn't get silently edited, even to fix a mistake in it).
+
+**Lesson:** sandboxing a test by patching a module's `ROOT`/base-path attribute is not safe
+unless EVERY derived constant in that module is either (a) also lazily computed at call time,
+or (b) individually patched. A probe that redirects "the important paths" and trusts the rest
+will silently miss any constant built from the original value before the patch landed. When
+writing a future test harness for this codebase, prefer passing paths as function arguments
+over relying on module-global patching, or audit every `= ROOT / ...` line in the module first.
+
 ## 2026-07-18 — Worker wrote directly into ledger.db / ledgerbook.db, self-graded its own task
 
 **What happened:** The first live batch-engine task (mission 001, seed 1: PromptBase) was run
