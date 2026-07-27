@@ -311,6 +311,49 @@ was not "fixed the bug class" — any future `datetime.now()`-vs-`created_at` co
 in this codebase must be treated as unsafe by default until it goes through
 `ledger.window_start_sql()` or the same `datetime('now', …)`-in-SQL pattern H3/H6 already used.
 
+### F20 — The worker was graded against a spec it was never shown · **P0 · PROVEN, found + fixed 2026-07-27**
+`run_critic()` feeds the critic `row['pass_criteria']` — the mission's **full** `## Done-definition`.
+`run_task()` fed the worker only `mission_objective()`, the one-line `## Objective` section. Nothing
+ever handed the analyst the requirements it was judged on, so the two halves of the loop were
+grading against different documents.
+
+Proven by the first real W31 run (2026-07-27 04:00, mission 001), not by reading code: **all three
+attempted tasks failed review, 0/3**, and every stated reason was a done-definition item absent from
+the worker's prompt — the top "Changes since last week" diff section (tasks 24, 25, 26), NEW flags on
+unseen products (24, 26), ≥2 product URLs per price range (24), and one section per tracked
+competitor (26). The research itself was substantially fine; the deliverables were shaped wrong
+because the required shape was never communicated. This is a self-inflicted completion-rate floor:
+no amount of worker improvement could have passed, and the fitness score would have kept reporting
+the resulting 0% as an analyst-quality problem.
+
+**Why it was not simply "send the mission file":** the done-definition also names `workspace/…`
+paths and `memory/ledgerbook.db`, and handing a tool-holding worker our own storage layout is the
+exact cause of the 2026-07-18 rogue-write incident (docs/INCIDENTS.md). The fix therefore filters:
+`deliverable_requirements()` drops every line matching `_INTERNAL_CRITERIA_RE` (workspace/memory
+paths, ledgerbook/ledger.db, verdict-logging) and takes each dropped line's continuations and
+sub-bullets with it, so the worker never receives half a requirement. Injected into the prompt
+*before* `baseline_note`, so a first-ever run's "do not attempt a week-over-week diff" still reads
+as the later, overriding exception.
+
+**Verified**: `deliverable_requirements()` on both live missions — 001 emits exactly the four
+requirements that caused today's failures, 002 emits its evidence/sourcing rules, and an explicit
+leak assertion confirms zero internal path/schema strings survive. Full `run_task()` prompt assembly
+proven end-to-end against a **copy** of `ledger.db` with `escalate()` stubbed (per INCIDENTS.md
+2026-07-24 — stub the side-effecting call, don't just redirect paths): 14/14 assertions pass,
+including that the containment instruction and compliance floor are still intact and that the
+critic's prior objections still replay after the requirements. Tasks 24/25/26 re-queued (status
+only — `critic_verdict`/`critic_notes` deliberately preserved so the retry replays the reviewer's
+exact objections) to prove the fix on the exact tasks that exposed it.
+
+**Related, measured the same morning — the token cap is a gate, not a limiter.** Task 26 alone spent
+**8,517,508** input tokens against a **3,000,000** daily hard stop, and the day closed at
+**10,786,463 (360% of cap)**. `policy.token_budget_breached()` is checked *before* a call, so it
+correctly parked the following task (27, the week's synthesis) but could not stop the one already in
+flight. Cap raised 3M → 12M against that measurement (operator decision 2026-07-27) — at 3M it was
+not protecting quota, it was parking honest work. The in-flight overshoot remains **unfixed and
+open**: a single runaway task can still exceed the daily cap several times over before anything
+notices.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,

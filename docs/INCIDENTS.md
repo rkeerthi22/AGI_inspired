@@ -1,5 +1,54 @@
 # Incidents
 
+## 2026-07-27 — W31's first real run scored 0/3 because the worker was graded on a spec it never received
+
+**What happened:** The Monday 04:00 `AGI_M1_shopify` cron fired correctly (`Last Result: 0`, log
+`runs/batch_20260727_040003.log`, 04:00→04:21) and produced the mission's worst possible outcome:
+**all three attempted research tasks failed review**, fitness 0.35 with completion 0%. Reading the
+critic's stated reasons made the pattern obvious — task 24 "omits the required top 'Changes since
+last week' diff section… fails to flag any new products with 'NEW'… provides only one product URL
+instead of the required ≥2", task 25 the missing diff section, task 26 the diff section plus wrong
+document structure ("organized thematically rather than with one section per tracked competitor").
+Every single objection cited a requirement from the mission's `## Done-definition`. The worker's
+prompt contains no part of that section: `run_task()` passes `mission_objective()`, which extracts
+only `## Objective`. The critic, meanwhile, receives `row['pass_criteria']` — the full
+done-definition. The two halves of the loop were reading different documents, and the analyst was
+being marked down for not satisfying requirements it had no way to know existed.
+
+**Root cause:** an asymmetry introduced by a *previous, correct* security fix. After the 2026-07-18
+rogue-write incident the worker prompt was deliberately reduced to a path-free one-line objective
+("prevention by ignorance"), because the mission file names `workspace/…` and `memory/ledgerbook.db`
+and a tool-holding worker will act on paths it is shown. That fix protected containment but silently
+took the *output specification* with it, and nothing on the critic side was narrowed to match. The
+gap survived because the failure mode looks exactly like ordinary poor analyst work — a plausible
+0% that invites tuning the worker rather than auditing what the worker was told.
+
+**Fix applied:** `deliverable_requirements()` (`orchestrator/batch_runner.py`) extracts the
+done-definition and strips every line naming an internal path or schema via `_INTERNAL_CRITERIA_RE`,
+dropping each matched line's continuations and sub-bullets so a requirement is never half-delivered.
+Injected into the worker prompt ahead of `baseline_note` so a first-ever run's "no week-over-week
+diff" exception still overrides the diff requirement. Verified before going anywhere near a live
+run: leak assertions on both real missions (zero internal strings survive), then full prompt
+assembly through the real `run_task()` against a **copy** of `ledger.db` with `escalate()` stubbed —
+14/14 assertions including containment and compliance blocks still intact. Tasks 24/25/26 re-queued,
+status-only, with `critic_verdict`/`critic_notes` preserved so the retry replays the reviewer's
+exact objections.
+
+**Also fixed this session:** `ollama_chat()` was discarding `message.thinking`. Verified live by
+calling `/api/chat` twice, with and without the API's `think` flag — `glm-5.2:cloud` returns a
+populated reasoning trace either way, so there was never a "high-tier reasoning mode" to enable; the
+harness was simply throwing the trace away. Critic calls now persist it to
+`runs/task<id>_critic_reasoning.txt` (file only — never fed back into a prompt, per F10). Confirmed
+with a real call: 1,222 chars captured, verdict parsing unaffected.
+
+**Lesson:** when a security fix removes context from a prompt, something downstream is still
+grading against the removed context — check both sides of every evaluator/executor pair in the same
+session, because the resulting failure is indistinguishable from genuine incompetence. More
+generally: a 0% completion rate is evidence about the *harness* at least as often as about the
+model. The first question on a total failure should be "was the thing being graded ever told the
+rules," not "why is the model bad" — reading the critic's own stated reasons answered this in
+minutes, and they were sitting in `critic_notes` the whole time.
+
 ## 2026-07-27 — W31's promotion-review ignition was refused by Task Scheduler on battery power
 
 **What happened:** Today, 2026-07-27, is the exact date `missions/_M1_INDEX.md` scheduled for W31

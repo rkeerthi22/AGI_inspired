@@ -94,15 +94,43 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     return (proc.stdout or "").strip(), usage
 
 
-def ollama_chat(model: str, prompt: str, timeout: int = 300) -> str:
-    """Tool-free call for the critic (no web needed, cheaper than a hermes session)."""
+def ollama_chat(model: str, prompt: str, timeout: int = 300,
+                trace_path: Path | None = None) -> str:
+    """Tool-free call for the critic (no web needed, cheaper than a hermes session).
+
+    glm-5.2:cloud returns its full chain-of-thought in `message.thinking` on EVERY
+    call -- verified live 2026-07-27 by calling /api/chat twice, with and without the
+    API's `think` flag: both replies carried a populated `thinking` field of the same
+    shape. So there was never a "high-tier reasoning mode" to switch on; the model was
+    already reasoning at full tier and this function was simply discarding the trace by
+    reading `message.content` alone.
+
+    When `trace_path` is given the trace is persisted there. Rationale matches the
+    existing runs/task<id>_worker_raw.txt convention (docs/INCIDENTS.md 2026-07-18): a
+    FAIL verdict whose reasoning survives on disk is diagnosable; one whose reasoning
+    was dropped is an unfalsifiable assertion. Deliberately a FILE ONLY -- the trace is
+    never read back into any prompt, because it is model text derived from fetched web
+    content and F10 (docs/HARDENING.md) treats that as an injection path.
+    """
     import urllib.request
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
                        "stream": False}).encode()
     req = urllib.request.Request("http://127.0.0.1:11434/api/chat", data=body,
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        return json.loads(r.read())["message"]["content"]
+        msg = json.loads(r.read()).get("message", {})
+    if trace_path is not None:
+        thinking = (msg.get("thinking") or "").strip()
+        if thinking:
+            # Never let an audit-trail write failure kill a real run.
+            try:
+                trace_path.write_text(
+                    f"# reasoning trace — model={model} — "
+                    f"{datetime.now().isoformat(timespec='seconds')}\n\n{thinking}\n",
+                    encoding="utf-8")
+            except Exception as e:
+                log(f"reasoning trace not persisted to {trace_path.name} ({e})")
+    return msg.get("content", "")
 
 
 # ── F9 cross-provider failover (docs/HARDENING.md) ──────────────────────────────
@@ -468,6 +496,53 @@ def pass_criteria_for(mission: dict) -> str:
     return m.group(1).strip() if m else "deliverable exists; every fact sourced+dated"
 
 
+# Lines in a done-definition that describe the ORCHESTRATOR's job, not the analyst's.
+# These name our own storage layout, and handing a tool-holding worker that layout is
+# precisely what produced the 2026-07-18 rogue-write incident (docs/INCIDENTS.md), so
+# they are stripped before any of this text reaches a worker prompt.
+_INTERNAL_CRITERIA_RE = re.compile(
+    r"workspace[/\\]|memory[/\\]|ledgerbook|ledger\.db|\bthe ledger\b|critic verdict",
+    re.I)
+
+
+def deliverable_requirements(mission: dict) -> str:
+    """The mission's done-definition reduced to the CONTENT/FORMAT requirements the
+    analyst is actually judged on -- every line naming an internal path or schema removed.
+
+    F20 (docs/HARDENING.md): run_critic() feeds the critic row['pass_criteria'] -- the
+    FULL done-definition -- while the worker only ever received mission_objective()'s
+    single "## Objective" line. The analyst was therefore graded against requirements it
+    was never shown. Proven live 2026-07-27, the first real W31 run: mission 001 tasks
+    24, 25 and 26 ALL failed review, and every stated reason was a done-definition item
+    absent from the worker's prompt -- the top "Changes since last week" diff section,
+    NEW flags on unseen products, >=2 product URLs per price range, and one section per
+    tracked competitor. Completion for the day was 0/3 on requirements the worker had no
+    way to know existed.
+
+    Whole requirements are dropped, never half of one: a matching line takes its
+    continuation lines and sub-bullets (anything more indented) with it, so the worker
+    never sees a dangling fragment like "price/promo facts get a valid_until" with the
+    sentence that gave it meaning removed."""
+    kept: list[str] = []
+    drop_indent: int | None = None
+    for line in pass_criteria_for(mission).splitlines():
+        if not line.strip():
+            drop_indent = None          # a blank line ends any requirement block
+            kept.append(line)
+            continue
+        indent = len(line) - len(line.lstrip())
+        if drop_indent is not None:
+            if indent > drop_indent:
+                continue                # continuation / sub-bullet of a dropped line
+            drop_indent = None          # back at a sibling level -- resume keeping
+        if _INTERNAL_CRITERIA_RE.search(line):
+            drop_indent = indent
+            continue
+        kept.append(line)
+    # Drop "[ ]" checkboxes -- they read as a form to tick rather than a spec to satisfy.
+    return re.sub(r"^(\s*-)\s*\[[ x]\]\s*", r"\1 ", "\n".join(kept).strip(), flags=re.M)
+
+
 def is_first_run_for_mission(mission_id: str) -> bool:
     """True if this mission has never completed a task in an earlier week. A mission's
     week-1 run structurally cannot satisfy a 'changes since last week' criterion -- there
@@ -648,7 +723,11 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool) -> tuple[str, s
             # its later sections "absent" when they sat past the truncation (2026-07-18,
             # task 5 — Notion section at ~9.5k was called missing). Models here have 262k
             # context; the cap only guards against pathological outputs.
-            f"DELIVERABLE:\n{out[:24000]}")
+            f"DELIVERABLE:\n{out[:24000]}",
+            # Persist WHY, not just the verdict: today's three 001 failures (24/25/26)
+            # were only diagnosable because the one-sentence reason happened to name a
+            # missing section. The full trace makes that reliable instead of lucky.
+            trace_path=RUNS / f"task{row['task_id']}_critic_reasoning.txt")
     except Exception as e:
         return "needs_review", f"critic call failed: {e}"
 
@@ -845,10 +924,23 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     skills_block = (f"\n\nAPPROVED ANALYST TECHNIQUES (from your past reviewed work — "
                     f"apply where relevant):\n{skill_notes}" if skill_notes else "")
     compliance_block = policy.compliance_prompt_block()
+    # F20 (docs/HARDENING.md): the critic grades against the mission's done-definition;
+    # until now the worker never saw it, so it was judged on a spec it had no access to
+    # (mission 001 tasks 24/25/26, 2026-07-27 -- 0/3, every reason a requirement stated
+    # only in text the worker was not given). Internal paths/schema are stripped by
+    # deliverable_requirements(), so this does NOT reopen the 2026-07-18 containment hole.
+    # Ordered BEFORE baseline_note deliberately: on a first-ever run baseline_note's "do
+    # not attempt a week-over-week diff" must read as the later, overriding exception to
+    # the diff requirement below it.
+    requirements = deliverable_requirements(mission)
+    requirements_block = (
+        "\n\nREQUIRED SHAPE OF THE DELIVERABLE — a reviewer checks your output against "
+        "exactly these points, and a missing one is a FAIL even when the research itself "
+        f"is sound:\n{requirements}" if requirements else "")
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
-        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}{baseline_note}{prior_feedback}"
-        f"{skills_block}\n\n"
+        f"YOUR TASK THIS RUN (one task only):\n{row['spec']}"
+        f"{requirements_block}{baseline_note}{prior_feedback}{skills_block}\n\n"
         f"Use web search for every fact. RULES: every fact needs a source URL + retrieval date "
         f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
         f"are unverified — verify each is real before citing it. Write the deliverable as clean "

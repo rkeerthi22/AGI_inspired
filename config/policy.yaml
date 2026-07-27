@@ -20,10 +20,24 @@ workspace_confinement:
 cost_caps:
   usd_per_task_target: 0.50
   usd_per_day_hard_stop: 5.00     # orchestrator halts + escalates on breach (paid providers)
-  tokens_per_day_hard_stop: 3000000  # F8 (docs/HARDENING.md): Ollama reports no $, cost_usd
+  tokens_per_day_hard_stop: 12000000  # F8 (docs/HARDENING.md): Ollama reports no $, cost_usd
                                       # is always 0.0 -- token count is the real consumption
-                                      # signal until a paid key exists. ~2.7x the measured
-                                      # 7-day daily average (2026-07-24); tune as usage settles.
+                                      # signal until a paid key exists.
+                                      # RAISED 3M -> 12M on 2026-07-27 against measured data,
+                                      # not a guess: the first full W31 run spent 10,786,463
+                                      # tokens on ONE mission day (3 research tasks + critics),
+                                      # and a single legitimate broad-search seed (task 26,
+                                      # "identify the current top Notion-template seller")
+                                      # used 8,517,508 by itself -- 2.8x the entire old cap in
+                                      # one task. At 3M the cap was not protecting the quota,
+                                      # it was parking honest work: everything after task 26
+                                      # (incl. the week's synthesis) was blocked for the day.
+                                      # NOTE this is a PRE-CALL gate, not an in-flight limiter
+                                      # -- it stops the NEXT task, and cannot stop one already
+                                      # running from overshooting (that is how the day reached
+                                      # 360% of the old cap). Ollama Pro is flat-rate with 429
+                                      # rate-limiting, so the provider's own quota, not spend,
+                                      # remains the real limiter (§1.6).
   manager_calls_per_day: 40
 
 quota_policy:
