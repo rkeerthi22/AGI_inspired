@@ -83,6 +83,13 @@ counter resets at **00:00 UTC / 02:00 local**, prove the fix with:
 ```bash
 python orchestrator/batch_runner.py --mission 001-shopify-competitor-intel --max-tasks 2
 ```
+**Now scheduled** as one-time task `AGI_M1_F20proof`, 2026-07-28 02:15 local (15 min after the
+token reset, clear of `AGI_M1_backup` at 02:00), with the same battery posture as the A1 fix.
+Delete it once verified: `schtasks /delete /tn "AGI_M1_F20proof" /f`. Running the command by hand
+instead is safe — H1's run-lock prevents a concurrent double-run, and week-dedup makes the second
+pass a no-op. **Caveat: it carries `LogonType=Interactive` like every other task**, so it will NOT
+fire if the machine is logged out at 02:15 — the elevated LogonType fix below therefore gates this
+run too, not just Sunday's crons.
 `--max-tasks 2`, not 1: task 27 (synthesis) has `started_at=NULL`, so the F6 fairness sort runs it
 FIRST; only the second slot reaches task 24, which is the row that actually exercises F20.
 **Why the deadline is hard:** `AGI_M1_shopify` next fires Mon 2026-08-03, which is W32.

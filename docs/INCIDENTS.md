@@ -114,13 +114,31 @@ scheduled task's `Principal`/`LogonType` requires an elevated session; a non-ele
 only" — the token is UAC-filtered). This needs the operator to run, in an elevated PowerShell:
 
 ```powershell
-$tasks = @("AGI_M1_backup","AGI_M1_canaries","AGI_M1_content","AGI_M1_scorecard","AGI_M1_shopify")
-foreach ($t in $tasks) {
-  $principal = New-ScheduledTaskPrincipal -UserId "moham" -LogonType S4U -RunLevel Limited
-  Set-ScheduledTask -TaskName $t -Principal $principal | Out-Null
+# Refuse to run non-elevated -- the whole point of the 2026-07-27 follow-on below is that a
+# non-elevated run FAILS PER TASK while still printing a plausible-looking summary.
+$pr = New-Object Security.Principal.WindowsPrincipal([Security.Principal.WindowsIdentity]::GetCurrent())
+if (-not $pr.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+  Write-Host "NOT ELEVATED - open PowerShell as Administrator and re-run. Aborting." -ForegroundColor Red
+  return
 }
+# Enumerate rather than hardcode: one-time tasks get added (e.g. AGI_M1_F20proof, 2026-07-28)
+# and a fixed 5-name list silently leaves them on Interactive.
+$ok = 0; $bad = 0
+foreach ($t in (Get-ScheduledTask -TaskName "AGI_M1_*").TaskName) {
+  try {
+    $principal = New-ScheduledTaskPrincipal -UserId "moham" -LogonType S4U -RunLevel Limited -ErrorAction Stop
+    Set-ScheduledTask -TaskName $t -Principal $principal -ErrorAction Stop | Out-Null
+    Write-Host "  OK    $t" -ForegroundColor Green; $ok++
+  } catch {
+    Write-Host "  FAIL  $t -- $($_.Exception.Message)" -ForegroundColor Red; $bad++
+  }
+}
+Write-Host "applied=$ok failed=$bad"
+# Independent re-read -- believe THIS, not the loop above.
 Get-ScheduledTask -TaskName "AGI_M1_*" | Select-Object TaskName, @{n='LogonType';e={$_.Principal.LogonType}}
 ```
+Every row must read `S4U`. Any row still reading `Interactive` means that task was not changed,
+regardless of what the loop printed.
 
 **Lesson:** "verified by re-reading each task's settings" only verifies what you re-read. The
 original health check's own root-cause claim (`DisallowStartIfOnBatteries=true`) was never
