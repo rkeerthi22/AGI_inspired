@@ -25,6 +25,15 @@ just taken. **All 5 `AGI_M1_*` tasks now run regardless of battery power** (fixe
 `docs/INCIDENTS.md`) — they previously had `DisallowStartIfOnBatteries=true` and were silently
 REFUSED by Task Scheduler (not run, not queued, no error visible anywhere but the raw result
 code) the one Sunday it mattered most, breaking that week's promotion-review ignition entirely.
+**Ignition is NOT fully closed yet, though:** all 5 tasks still have `Principal.LogonType =
+Interactive`, a second independent cause of the identical Win32 4320 refusal — requires an
+unlocked interactive session at fire time, battery state aside. Fix needs an elevated PowerShell
+(can't be applied non-elevated — confirmed `Access is denied`); see **operator duty** below and
+`docs/INCIDENTS.md`'s 2026-07-27 follow-on entry for the exact command.
+**Operator duty (one-time, ~1 min, do before next Sunday):** run the `Set-ScheduledTask
+-Principal ... -LogonType S4U` command in `docs/INCIDENTS.md` (2026-07-27 follow-on entry) from
+an elevated PowerShell, then confirm all 5 tasks read `S4U` — until this runs, canaries/scorecard
+can still silently refuse to fire if the laptop is locked at trigger time.
 **Operator weekly duty (3–5 min):** `python orchestrator/spotcheck.py list` → open 3–5 artifacts,
 verify a fact or two against its cited source, then `spotcheck.py pass|fail <id> [note]` — this
 feeds the accuracy term of fitness; without it accuracy stays n/a all through baseline.
@@ -69,9 +78,13 @@ row for `gemma4:12b` and treat that deliverable as spot-check-priority (an escal
 `trigger="model_failover"` fires automatically, but a human read is still warranted for a
 smaller/local model's output). Wed 04:00 mission 002 runs its set. Sun 03:30/04:00 canaries +
 scorecard should fire even if the laptop is on battery (A1 fix) — if `Last Result` on either task
-is still nonzero after a fire, the battery-refusal fix didn't hold and needs re-checking, not
-re-assuming. Zero `runs/quarantine_*.json` files at any point (containment guard) remains the one
-non-negotiable signal — anything else is a normal operating variance.
+is still nonzero after a fire, don't assume it's the battery fix regressing: check
+`Principal.LogonType` first (`Get-ScheduledTask -TaskName AGI_M1_* | select TaskName,
+@{n='LogonType';e={$_.Principal.LogonType}}`) — as of this writing it's still `Interactive` on
+all 5 and the operator-duty fix above has likely not been run yet, which is the far more probable
+cause of a refusal than the already-verified battery settings drifting back. Zero
+`runs/quarantine_*.json` files at any point (containment guard) remains the one non-negotiable
+signal — anything else is a normal operating variance.
 
 ## M1 acceptance (all must hold — HARNESS_DESIGN.md §7)
 - ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks ·
