@@ -61,16 +61,30 @@ correctness, and compounds because manager and critic are currently the *same mo
 (`glm-5.2:cloud`), sharing blind spots. Truncation at 24k has already produced one false FAIL
 at the old 8k cap; the class of error persists for very long deliverables.
 
-### F6 — Head-of-line blocking starves later seeds · **P1 · OBSERVED**
+### F6 — Head-of-line blocking starves later seeds · **P1 · FIXED + PROVEN 2026-07-27**
 On the first `quota_wait` the runner logs "parking remaining tasks" and `break`s. The next fire
 re-processes the same ordered list, so a seed that reliably parks first permanently blocks the
-seeds behind it. Live evidence — mission 002:
+seeds behind it. Live evidence — mission 002 (2026-07-18) and independently reconfirmed on
+mission 001 during the 2026-07-27 Phase-2 health check:
 
 | task | status | started_at |
 |---|---|---|
 | 12 (seed 1) | quota_wait | 2026-07-18T18:29:18 (attempted repeatedly) |
 | 13 (seed 2) | queued | **None — never once attempted** |
 | 14 (seed 3) | queued | **None — never once attempted** |
+| 16 (seed 1, W30) | quota_wait | 2026-07-20T04:00:02 (attempted, started_at SET) |
+| 17-19 (seeds 2-4, W30) | queued | **None — never once attempted, stuck a full week** |
+
+**Fixed:** `queue_mission_tasks()` and the `--resume` block in `_run()` (`batch_runner.py`) no
+longer return task_ids in fixed seed order every call. They now sort never-attempted rows
+(`started_at IS NULL`) ahead of already-attempted ones (`started_at` set — the task reached
+`start_task()`/`hermes_worker()` before hitting quota or the token budget), tie-broken by
+`task_id`. On a mission's FIRST fire of the week every row is equally untried, so the order is
+unchanged from before (seed 1,2,3,4); the fix only changes behavior on a RETRY fire, which is
+exactly where the starvation happened. Proven on a DB copy: seeded the exact live scenario (seed
+1 attempted+parked, seeds 2-4 queued/untouched) under the current week key, confirmed
+`queue_mission_tasks()` now returns `[seed2, seed3, seed4, seed1]` instead of
+`[seed1, seed2, seed3, seed4]`.
 
 ### F7 — Metric integrity inverts under scarcity · **P1 · PROVEN**
 `expire_stale_parked()` flips last week's `quota_wait` → `stale`, and `weekly_fitness()` counts
@@ -86,9 +100,42 @@ input tokens** logged. There is currently **no working spend or consumption guar
 the provider's own quota is the sole limiter. The moment a paid API key is added (the standing
 recommendation), an unbounded retry loop becomes a direct financial risk.
 
-### F9 — Cross-provider failover is config-only · **P2 · PROVEN**
+### F9 — Cross-provider failover is config-only · **P2 · FIXED + PROVEN 2026-07-27**
 `models.yaml` defines `fallback_chain`, but no orchestrator code reads it. §1.6's core lesson —
 429 is *account-level*, so failover must cross **providers** — is documented but unimplemented.
+
+**Fixed:** `batch_runner.py` gained `load_fallback_chain()` + `worker_with_failover()` (wrapping
+`hermes_worker()`, used by `run_task`/`run_canaries`) and `synthesis_with_failover()` (wrapping
+`ollama_chat()`, used by `run_synthesis()` — quota shows up as `HTTPError(429)` there, not text in
+a subprocess reply, so detection differs even though the chain-walking logic is shared). On a
+quota error ONLY (a genuine subprocess timeout still propagates as `subprocess.TimeoutExpired`
+exactly as before — this does not become a general retry-on-any-failure mechanism), the chain
+advances worker → `fallback_chain` entries not already tried, ending at local `gemma4:12b`.
+Operator decision 2026-07-27: complete the work on a slow local model rather than park it.
+
+**Kill assumption probed live before building this** (per CLAUDE.md's "find the kill assumption
+first"): one real `hermes -z ... --provider ollama -m gemma4:12b` run correctly answered a
+factual question (Shopify founded 2006) with a genuinely reachable citation (HTTP 200, verified
+via `citecheck.verify()`) in ~7 minutes for a single fact. **Residual, documented risk, not a
+blocker:** the same probe self-reported "today's date" wrong by 2 years when asked to state it
+unprompted — not disqualifying, because every real worker prompt already injects the literal
+current date as text (`run_task()`, RULES clause) for the model to copy rather than compute; still,
+every failed-over deliverable is escalated (new trigger `model_failover`, added to
+`policy.yaml`'s `escalation.triggers` + `policy.VALID_TRIGGERS`) for spot-check priority rather
+than trusted silently, since a smaller/local model is a real accuracy downgrade regardless of this
+one probe's result.
+
+Local (non-`:cloud`) rungs get `LOCAL_FALLBACK_TIMEOUT_S=3600` instead of the cloud
+`WORKER_TIMEOUT_S=900` — gemma4:12b is measured at 1.54 tok/s (§1.6) and drives hermes's full
+browser tool-calling loop; the cloud timeout would kill a real multi-fact brief mid-generation.
+`ledger.update_model_used()` (new) keeps `model_used` truthful to whichever model actually
+produced the output, including the deliverable's own footer text — provenance that used to be
+silently wrong the moment a failover occurred. Proven via DB-copy/mocked-call tests: (1) sustained
+quota on the two cloud rungs correctly reaches and succeeds on gemma, with the extended timeout
+applied only to that rung; (2) an all-rungs-quota-exhausted chain correctly reports `exhausted`
+(parks, same as pre-fix behavior); (3) a genuine `TimeoutExpired` on any rung still propagates
+unchanged, not swallowed by the failover loop; (4) `ledger.update_model_used()` correctly updates
+the live schema's `model_used` column.
 
 ### F10 — Indirect prompt-injection path into all future prompts · **P2 · REASONED**
 Chain: hostile web page → worker deliverable → `lesson_candidates` → model-drafted candidate
@@ -129,11 +176,34 @@ a docstring; `batch_runner.py`'s two matches are a comment and a hardcoded
 `MAX_WORKER_CALLS_PER_RUN = 12`). Every stated policy control is currently a document, not a
 control — the deny-list included.
 
-### F15 — `promote.py` commits are not isolated · **P2 · PROVEN**
+### F15 — `promote.py` commits are not isolated · **P2 · FIXED + PROVEN 2026-07-27**
 `cmd_approve`/`cmd_rollback` do `_git("add", <specific paths>)` then `_git("commit", -m …)` with
 no pathspec — committing the entire staged index. An approval issued while other work is staged
 sweeps it into a "Promote skill" commit, corrupting the audit trail's one-change-per-commit
 property. Fix: `git commit -- <paths>` (explicit pathspec) or commit from a clean index check.
+
+**Fixed, and a sharper fix than first drafted.** The naive version of "add a pathspec" broke
+immediately when actually run: `_candidates/*.md` files are **never git-tracked**
+(`cmd_review()` writes them with plain `write_text()`, no `_git()` call — confirmed via
+`git log --all -- 'skills_analyst/_candidates/*'`, empty). `cmd_approve()` already unlinks the
+source candidate from disk before the git call, so once a pathspec limits the commit to
+`[dest, _candidates/]`, the `_candidates/` half matches nothing — `git commit -- <path matching
+nothing>` **errors and aborts the whole commit**, true every time the approved skill is the only
+pending candidate for its mission (the common case: `MAX_CANDIDATES_PER_MISSION=1`). Caught only
+by actually running the fix (an isolated scratch git repo, per the H9-incident lesson that
+git-based mechanisms need a real repository), not by reading the diff. Second, independent bug
+the same root cause exposed: the original `git add <dir>` on `_candidates/` would have swept up
+any OTHER still-pending, unreviewed candidate sitting in that same directory into whichever
+candidate's approval commit happened to run — a second one-change-per-commit violation the
+original F15 writeup didn't name. **Corrected fix:** drop `_candidates/` from the git add/commit
+paths entirely — `cmd_approve` stages and commits `dest` only; `cmd_rollback` already scoped to
+the single tracked `target` path, so it only needed the pathspec added, not the same rethink.
+Proven in an isolated scratch git repo (unrelated staged change present, exactly the F15
+scenario) for both commands: the resulting commit contains only the skill path, the unrelated
+change remains staged-but-uncommitted afterward, and — unlike the first draft — the commit
+succeeds instead of erroring when `_candidates/` is otherwise empty. The rollback proof reused
+the actual production `newest_skill_below_baseline()` + `cmd_rollback()` functions (not a
+reimplementation), doubling as the C2 auto-rollback verification below.
 
 ### F16 — The "source of truth" has no second copy · **P0 · PROVEN**
 `CLAUDE.md` promises *"Nightly `hermes backup` + `git push` = recovery."* Every clause is false
@@ -166,6 +236,20 @@ that just caused a real bug at a 25-minute grain. **Fix applied for the lease sp
 seconds')`, never mixing in a Python-computed value. **Not yet fixed elsewhere** — any future
 tight time comparison (anything under ~a few hours) must use the same SQL-only pattern; treat
 `datetime.now()` compared against a DB-stored UTC timestamp as unsafe by default in this codebase.
+
+**CONFIRMED LIVE 2026-07-27** (not yet fixed — flagged as a follow-up task, not fixed inline
+during the Phase-2 on-ramp pass that found it, to keep that pass's scope to what was actually
+approved): while verifying the promotion machinery's scorecard build, directly measured the
+predicted residual risk actually manifesting. `weekly_fitness()`'s window start (Python-local
+`datetime.now() - timedelta(days=7)`) compared against `created_at` (SQLite-UTC) shifts the
+real boundary ~2h later than a true 7-days-ago-in-UTC cutoff — confirmed by comparing the
+computed boundary against real task rows straddling it. Same root cause recurs in TWO more call
+sites never touched by the H3 fix: `scorecard.py`'s `_week_start()`, feeding both
+`canaries_green()` and `crash_recovery_counts()`. Impact remains narrow (only rows within the ~2h
+boundary sliver are affected, not a systemic score inversion) but is the same bug class F17 named
+as generalizable. Fix sketched and handed off rather than built inline: reuse the SQL-only-clock
+pattern from H3 (`datetime('now', '-7 days')` computed IN SQL, never in Python) across all three
+sites, ideally behind one shared helper so they can't drift independently again.
 
 ### F18 — Task status ignored critic verdict; a REJECTED deliverable read as complete · **P0 · PROVEN, found 2026-07-24 fixing fitness reporting**
 `run_task()`/`run_synthesis()` set `status="done"` unconditionally once the critic returned ANY
@@ -430,8 +514,33 @@ blocking / no rotating start offset), F9 (`fallback_chain` cross-provider traver
 half of F8 (no paid provider exists yet to make it real), F15 (`promote.py` commit pathspec
 isolation).
 
-**Phase 2 — W31 promotion under hardened conditions.** H7 first, then enable the gate. The
-self-improvement loop must not be the thing that discovers these flaws.
+**Phase 2 on-ramp — 2026-07-27 (the day W31 was scheduled to start).** A read-only health check
+ahead of enabling gated promotion found the loop's own ignition was broken: both Sunday crons
+that feed it (`AGI_M1_canaries`, `AGI_M1_scorecard` — the latter is what actually runs
+`promote.cmd_review()`, see `_run()`'s `--scorecard` branch) were **refused by Task Scheduler**
+that morning (Win32 4320, "operator/administrator has refused the request") because the laptop
+woke on battery and every `AGI_M1_*` task had `DisallowStartIfOnBatteries=true` — confirmed by the
+complete absence of any `batch_*.log` for that fire; Python never started. Fixed (operator
+decision: run regardless of power) by flipping `DisallowStartIfOnBatteries`/
+`StopIfGoingOnBatteries` to `false` and `StartWhenAvailable` to `true` on all 5 scheduled tasks,
+verified by re-reading each task's settings and confirming triggers/actions were untouched by the
+mutation. Same pass also closed **F6, F9, and F15** (all three above) as direct blockers/adjacent
+risks to a clean promotion cycle, and verified the promotion machinery itself end-to-end against
+the live pool and an isolated auto-rollback rehearsal (see `promote.py review --dry`,
+`newest_skill_below_baseline()`/`cmd_rollback()` proof under F15, above). See
+`docs/INCIDENTS.md` for the full incident writeup. **Two things this pass explicitly did NOT
+close, surfaced rather than silently skipped:** no git remote is configured
+(`git remote -v` empty), so recovery stays local-only — CLAUDE.md's "nightly backup + `git push`
+= recovery" is still partly aspirational until one is added, which needs an operator choice
+(external service + auth), not a code fix; and the F17 clock-mismatch class was reconfirmed live
+in `weekly_fitness()`'s window boundary (see F17, above) but not fixed in this pass — handed off
+as a separate follow-up rather than expanding this pass's approved scope.
+
+**Phase 2 — W31 promotion under hardened conditions.** H7 (still open — candidate-note template
+constraints / F10 injection-surface hardening was not part of this pass either) remains the one
+item the original roadmap wanted before enabling the gate; the ignition/fairness/audit-trail
+fixes above are a precondition for a clean cycle, not a substitute for H7. The self-improvement
+loop must not be the thing that discovers these flaws.
 
 **Phase 2.5 — Runtime abstraction (the "better than Hermes" step).** Operator intent, stated
 2026-07-19: this harness should surpass Hermes rather than remain a script on top of it. Taken
@@ -482,6 +591,10 @@ M2 breaks three current assumptions that need design work, not just a new missio
 ## Note on scope
 This document started as an audit + blueprint; sections are updated in place as work lands, each
 marked IMPLEMENTED + PROVEN with the date and what was actually verified (never claimed from
-code-reading alone — see CLAUDE.md's verification ladder). As of 2026-07-24: Phase 0 (H1, H2, H3,
-H9) and most of Phase 1 (H4, F7/F18, the token half of H6, H13/F13) are done. Still open: F6, F9,
-the USD half of F8, F15, and Phase 2 onward (W31 gated promotion, runtime abstraction, M2).
+code-reading alone — see CLAUDE.md's verification ladder). As of 2026-07-27: Phase 0 (H1, H2, H3,
+H9) and Phase 1 (H4, F7/F18, the token half of H6, H13/F13) are done, and the Phase 2 on-ramp
+closed F6, F9, and F15, plus fixed the cron battery-refusal bug that had silently broken the
+promotion loop's own ignition. Still open: H7 (candidate-note injection hardening — the roadmap's
+own stated precondition for enabling the promotion gate), the USD half of F8, no git remote
+(recovery is local-only), the reconfirmed F17 clock-mismatch class in `weekly_fitness()`'s window
+boundary (flagged as a follow-up task, not fixed), and Phase 2.5 onward (runtime abstraction, M2).

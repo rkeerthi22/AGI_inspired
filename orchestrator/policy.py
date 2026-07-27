@@ -31,7 +31,7 @@ STATE_PATH = ROOT / "runs" / "policy_state.json"
 # escalate(trigger=...) call in batch_runner.py must use one of these names --
 # keeps policy.yaml authoritative instead of parallel decoration.
 VALID_TRIGGERS = {"deny_list_match", "pass_criteria_ambiguous", "cost_cap_breach",
-                  "repeated_task_failure"}
+                  "repeated_task_failure", "model_failover"}
 
 
 def load() -> dict:

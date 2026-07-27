@@ -39,6 +39,9 @@ escalation:
     - pass_criteria_ambiguous
     - cost_cap_breach
     - repeated_task_failure   # after tool-loop hard stop fires
+    - model_failover          # F9: task completed on a fallback model after quota
+                              # exhaustion on the primary -- flags the deliverable for
+                              # spot-check priority (degraded model, not a free pass)
   behavior: park_task_continue_queue   # never idle behind a question
 
 compliance_floor:            # hard-coded refusals (§2.5)

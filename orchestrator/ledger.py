@@ -86,6 +86,15 @@ def finish_task(task_id: int, *, artifacts, cost_usd=0.0, tokens_in=0, tokens_ou
         )
 
 
+def update_model_used(task_id: int, model_used: str) -> None:
+    """F9 (docs/HARDENING.md): cross-provider failover means the model that actually
+    produced a task's output can differ from the one start_task() recorded before the
+    call ran. Without this, model_used stays permanently wrong for any failed-over
+    task -- misleading provenance on exactly the deliverables that most need scrutiny."""
+    with _conn() as c:
+        c.execute("UPDATE tasks SET model_used=? WHERE task_id=?", (model_used, task_id))
+
+
 def add_lesson(task_id: int, lesson: str, kind: str = "worked") -> None:
     with _conn() as c:
         c.execute(

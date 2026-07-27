@@ -70,7 +70,8 @@ def escalate(reason: str, trigger: str | None = None) -> None:
 
 
 # ── model calls ────────────────────────────────────────────────────────────────
-def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path) -> tuple[str, dict]:
+def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
+                  timeout: int = WORKER_TIMEOUT_S) -> tuple[str, dict]:
     # SECURITY (docs/INCIDENTS.md 2026-07-18): an unrestricted worker previously wrote
     # its own rows straight into ledger.db/ledgerbook.db and self-graded its own task.
     # Tried `-t web` to strip file/terminal/code tools -- it does NOT map to a real
@@ -86,7 +87,7 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path) -> tuple[str, 
     cmd = ["hermes", "-z", prompt, "--provider", model_cfg["provider"],
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=WORKER_TIMEOUT_S, cwd=str(ROOT))
+                          errors="replace", timeout=timeout, cwd=str(ROOT))
     usage = {}
     if usage_path.exists():
         usage = json.loads(usage_path.read_text(encoding="utf-8"))
@@ -102,6 +103,112 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300) -> str:
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())["message"]["content"]
+
+
+# ── F9 cross-provider failover (docs/HARDENING.md) ──────────────────────────────
+# models.yaml declared fallback_chain but no orchestrator code ever read it -- 429 is
+# ACCOUNT-level (HARNESS_DESIGN §1.6), so a second Ollama Cloud model does not survive
+# quota exhaustion; only a genuinely different consumption path does. The chain's last
+# rung is local gemma4:12b -- operator decision 2026-07-27: complete the work on a slow
+# local model rather than park it. Kill-assumption probed live before building this:
+# one real `hermes -z ... --provider ollama -m gemma4:12b` run correctly answered a
+# factual question (Shopify founded 2006) with a genuinely reachable citation in ~7 min
+# for a single fact. Residual, documented risk: the same probe self-reported "today's
+# date" wrong by 2 years when not told -- NOT a blocker, because every real worker
+# prompt already injects the literal current date as text (run_task(), line ~730) for
+# the model to copy rather than compute; still, every failed-over deliverable is
+# escalated (trigger="model_failover") for spot-check priority rather than trusted
+# silently, precisely because a smaller/local model is a real accuracy downgrade.
+LOCAL_FALLBACK_TIMEOUT_S = 3600  # gemma4:12b measured 1.54 tok/s (§1.6) driving hermes's
+                                  # full browser tool-calling loop -- WORKER_TIMEOUT_S
+                                  # (900s) would kill a real multi-fact brief mid-generation.
+
+
+def _is_local_model(model_cfg: dict) -> bool:
+    """Every cloud Ollama model in config/models.yaml is suffixed `:cloud`; anything
+    else runs on the local daemon and needs LOCAL_FALLBACK_TIMEOUT_S, not
+    WORKER_TIMEOUT_S -- confirmed convention, checked across the whole file."""
+    return ":cloud" not in (model_cfg.get("model") or "")
+
+
+def load_fallback_chain() -> list[dict]:
+    cfg = yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))
+    return cfg.get("fallback_chain") or []
+
+
+def _failover_candidates(worker_cfg: dict) -> list[dict]:
+    """worker_cfg first, then fallback_chain entries not already equal to it, deduped
+    by (provider, model) so a chain that happens to list the worker's own model again
+    doesn't retry it twice."""
+    candidates = [worker_cfg]
+    seen = {(worker_cfg["provider"], worker_cfg["model"])}
+    for c in load_fallback_chain():
+        key = (c["provider"], c["model"])
+        if key not in seen:
+            candidates.append(c)
+            seen.add(key)
+    return candidates
+
+
+def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
+                         log_prefix: str) -> tuple[str, dict, dict, bool]:
+    """hermes_worker() with failover on QUOTA ERRORS ONLY. A genuine subprocess timeout
+    on any one candidate still raises subprocess.TimeoutExpired exactly as before --
+    the caller's existing except-block handles it unchanged. This only widens what
+    happens on actual quota-error text, matching F9's own scope ("on sustained 429 ...
+    fail over"), not a general retry-on-any-failure mechanism.
+
+    Returns (out, usage, model_cfg_used, exhausted). exhausted=True means every
+    candidate in the chain returned a quota error -- caller should park exactly as it
+    did before this fix existed."""
+    candidates = _failover_candidates(worker_cfg)
+    out, usage, cfg_used = "", {}, candidates[0]
+    for i, cfg in enumerate(candidates):
+        attempt_path = usage_path if i == 0 else usage_path.with_name(
+            f"{usage_path.stem}_fallback{i}{usage_path.suffix}")
+        timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else WORKER_TIMEOUT_S
+        out, usage = hermes_worker(prompt, cfg, attempt_path, timeout=timeout)
+        cfg_used = cfg
+        if not is_quota_error(out):
+            if i > 0:
+                log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
+                   f"(rung {i+1}/{len(candidates)})")
+            return out, usage, cfg_used, False
+        more = i + 1 < len(candidates)
+        log(f"{log_prefix}: quota error on {cfg['provider']}/{cfg['model']} "
+           f"({i+1}/{len(candidates)})" +
+           (" -- trying next" if more else " -- chain exhausted"))
+    return out, usage, cfg_used, True
+
+
+def synthesis_with_failover(prompt: str, worker_cfg: dict,
+                            log_prefix: str) -> tuple[str | None, dict, bool]:
+    """ollama_chat() with the same F9 failover, for synthesis's tool-free HTTP call
+    (urllib, not the hermes CLI subprocess) -- quota shows up as HTTPError code 429
+    here, not as text in a subprocess reply, so the detection differs from
+    worker_with_failover() even though the chain-walking logic is the same. Any
+    non-429 HTTPError re-raises immediately, preserving the existing infra_failed
+    handling at the call site."""
+    import urllib.error
+    candidates = _failover_candidates(worker_cfg)
+    cfg_used = candidates[-1]
+    for i, cfg in enumerate(candidates):
+        timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else 600
+        cfg_used = cfg
+        try:
+            out = ollama_chat(cfg["model"], prompt, timeout=timeout)
+            if i > 0:
+                log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
+                   f"(rung {i+1}/{len(candidates)})")
+            return out, cfg, False
+        except urllib.error.HTTPError as e:
+            if e.code != 429:
+                raise
+            more = i + 1 < len(candidates)
+            log(f"{log_prefix}: quota error (HTTP 429) on {cfg['provider']}/{cfg['model']} "
+               f"({i+1}/{len(candidates)})" +
+               (" -- trying next" if more else " -- chain exhausted"))
+    return None, cfg_used, True
 
 
 # Tables where the orchestrator stamps run_id on every insert (H2, docs/HARDENING.md).
@@ -319,26 +426,41 @@ def week_key() -> str:
 
 
 def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
-    """Queue this week's tasks (dedup on mission+seed#+week). Returns task_ids to run."""
+    """Queue this week's tasks (dedup on mission+seed#+week). Returns task_ids to run,
+    ordered so NEVER-ATTEMPTED seeds go before any seed already attempted this week.
+
+    F6 (docs/HARDENING.md): this used to return ids in fixed seed order every call. On a
+    retry fire, a seed that already parked (started_at IS SET -- it reached start_task()
+    and hermes_worker() actually ran before hitting quota) was still first in line, hit
+    the same quota/budget wall again, and the caller's `break`-on-quota_wait meant the
+    seeds behind it were never even tried. Live evidence 2026-07-24: mission 001 seed 1
+    (task 16) sat quota_wait since 2026-07-20 while seeds 2-4 (tasks 17-19) sat 'queued'
+    with started_at=NULL -- structurally unable to ever run as long as seed 1 kept
+    getting first crack at a scarce daily budget. Sorting never-attempted (started_at
+    NULL) ahead of already-attempted gives every seed one try before any seed gets a
+    second -- a fairness/rotation fix, not a scheduling rewrite. On a mission's first
+    fire of the week all rows are equally untried, so ties break on task_id and the
+    order is unchanged from before (seed 1,2,3,4)."""
     import sqlite3
     wk = week_key()
-    ids = []
+    rows = []  # (task_id, started_at) in seed-encounter order; sorted before returning
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         for i, seed in enumerate(mission["seeds"], 1):
             spec = f"[{wk}][seed {i}] {seed}"
-            dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id=? AND spec=?",
-                            (mission["id"], spec)).fetchone()
+            dup = c.execute("SELECT task_id, status, started_at FROM tasks WHERE "
+                            "mission_id=? AND spec=?", (mission["id"], spec)).fetchone()
             if dup:
                 if dup[1] in ("quota_wait", "queued", "interrupted"):  # H3: crash-recovered
-                    ids.append(dup[0])            # resume it
-                continue                           # done/failed this week → skip
+                    rows.append((dup[0], dup[2]))     # resume it
+                continue                               # done/failed this week → skip
             if dry:
                 log(f"DRY: would queue: {spec[:100]}")
                 continue
             tid = ledger.queue_task(mission["id"], spec,
                                     pass_criteria_for(mission))
-            ids.append(tid)
-    return ids
+            rows.append((tid, None))                  # brand new row, never started
+    rows.sort(key=lambda r: (r[1] is not None, r[0]))
+    return [tid for tid, _ in rows]
 
 
 def pass_criteria_for(mission: dict) -> str:
@@ -564,15 +686,17 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         escalate(f"task {tid}: daily token budget exhausted, parked (synthesis)",
                 trigger="cost_cap_breach")
         log(f"task {tid}: quota_wait (token budget)"); return "quota_wait"
-    ledger.start_task(tid, f"{roles['worker']['provider']}/{roles['worker']['model']} (tool-free synthesis)")
+    worker_cfg = roles["worker"]
+    ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']} (tool-free synthesis)")
     import urllib.error
     try:
-        out = ollama_chat(roles["worker"]["model"], prompt, timeout=600)
+        # F9: synthesis_with_failover() consumes every 429 internally (trying the next
+        # candidate) and only ever re-raises a NON-429 HTTPError, so the branch below
+        # no longer needs its own e.code==429 case -- that path is handled before it
+        # could reach here.
+        out, model_used_cfg, exhausted = synthesis_with_failover(
+            prompt, worker_cfg, log_prefix=f"task {tid} (synthesis)")
     except urllib.error.HTTPError as e:
-        if e.code == 429:
-            ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                               critic_notes="quota/usage limit — parked (§1.6)")
-            log(f"task {tid}: quota_wait (parked)"); return "quota_wait"
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis HTTP {e.code}")
         log(f"task {tid}: infra_failed (HTTP {e.code})"); return "infra_failed"
@@ -580,6 +704,19 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis call failed: {e}")
         log(f"task {tid}: infra_failed ({e})"); return "infra_failed"
+
+    if exhausted:
+        ledger.finish_task(tid, artifacts=[], status="quota_wait",
+                           critic_notes="quota/usage limit on every model in the "
+                                        "fallback chain — parked (§1.6, F9)")
+        log(f"task {tid}: quota_wait (fallback chain exhausted)"); return "quota_wait"
+    if model_used_cfg != worker_cfg:
+        ledger.update_model_used(
+            tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']} (tool-free synthesis)")
+        escalate(f"task {tid}: synthesis completed via failover to "
+                f"{model_used_cfg['provider']}/{model_used_cfg['model']} after quota "
+                f"exhaustion on the primary worker", trigger="model_failover")
+        worker_cfg = model_used_cfg  # so the deliverable footer below is truthful too
 
     (RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
     out = _strip_tool_chatter(out)
@@ -591,7 +728,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     slug = re.sub(r"[^a-z0-9]+", "-", row["spec"].lower())[:60].strip("-")
     dest = out_dir / f"{wk}_{slug}.md"
     dest.write_text(out + f"\n\n---\n_task {tid} · {datetime.now().isoformat(timespec='seconds')}"
-                          f" · {roles['worker']['model']} (synthesis, tool-free)_\n",
+                          f" · {worker_cfg['model']} (synthesis, tool-free)_\n",
                     encoding="utf-8")
     verdict, verdict_text = run_critic(row, out, roles, baseline)
     if verdict == "needs_review":
@@ -737,10 +874,11 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     snapshot = db_integrity_snapshot()
     fs_snapshot = fs_integrity_snapshot()
     try:
-        out, usage = hermes_worker(prompt, worker_cfg, usage_path)
+        out, usage, model_used_cfg, exhausted = worker_with_failover(
+            prompt, worker_cfg, usage_path, log_prefix=f"task {tid}")
     except subprocess.TimeoutExpired:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes=f"worker timeout ({WORKER_TIMEOUT_S}s)")
+                           critic_notes="worker timeout")
         log(f"task {tid}: infra_failed (timeout)")
         return "infra_failed"
 
@@ -752,11 +890,21 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     (RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
     out = _strip_tool_chatter(out)
 
-    if is_quota_error(out):
+    if exhausted:
+        # F9: every model in the chain hit quota -- park exactly as before this fix.
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                           critic_notes="quota/usage limit — parked (§1.6)")
-        log(f"task {tid}: quota_wait (parked)")
+                           critic_notes="quota/usage limit on every model in the "
+                                        "fallback chain — parked (§1.6, F9)")
+        log(f"task {tid}: quota_wait (fallback chain exhausted)")
         return "quota_wait"
+    if model_used_cfg != worker_cfg:
+        # F9: keep provenance truthful and flag the degraded-model deliverable for
+        # spot-check priority -- a failover completion is not a free pass.
+        ledger.update_model_used(tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']}")
+        escalate(f"task {tid}: completed via failover to {model_used_cfg['provider']}/"
+                f"{model_used_cfg['model']} after quota exhaustion on the primary worker",
+                trigger="model_failover")
+        worker_cfg = model_used_cfg  # so the deliverable footer below is truthful too
     if worker_failed(out, usage):
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"worker API failure (full text in "
@@ -890,17 +1038,24 @@ def run_canaries(roles: dict) -> None:
         snapshot = db_integrity_snapshot()
         fs_snapshot = fs_integrity_snapshot()
         try:
-            out, usage = hermes_worker(prompt, worker_cfg, RUNS / f"canary_{name}.usage.json")
+            out, usage, model_used_cfg, exhausted = worker_with_failover(
+                prompt, worker_cfg, RUNS / f"canary_{name}.usage.json", log_prefix=f"canary {name}")
         except subprocess.TimeoutExpired:
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes="canary timeout")
             log(f"{name}: infra_failed (timeout)"); continue
         db_integrity_check(snapshot, context=f"canary {name}")
         fs_integrity_check(fs_snapshot, context=f"canary {name}")
-        if is_quota_error(out):
+        if exhausted:
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                               critic_notes="quota — canary parked")
-            log(f"{name}: quota_wait"); continue
+                               critic_notes="quota on every model in the fallback chain "
+                                            "— canary parked (F9)")
+            log(f"{name}: quota_wait (fallback chain exhausted)"); continue
+        if model_used_cfg != worker_cfg:
+            ledger.update_model_used(tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']}")
+            escalate(f"canary {name}: completed via failover to {model_used_cfg['provider']}/"
+                    f"{model_used_cfg['model']} after quota exhaustion on the primary worker",
+                    trigger="model_failover")
         ok = bool(grade(out))
         green += ok
         ledger.finish_task(tid, artifacts=[], status="done",
@@ -1017,9 +1172,13 @@ def _run(args) -> int:
             # earlier by task_id, silently consume the whole budget while the mission
             # task the operator actually wanted resumed was never reached (no error,
             # just a quiet no-op).
+            # F6 (docs/HARDENING.md): never-attempted (started_at NULL -- hit the
+            # pre-start_task() token-budget check, not an actual worker call) go before
+            # already-attempted, same fairness rule as queue_mission_tasks() above.
             parked = [r[0] for r in c.execute(
                 "SELECT task_id, mission_id FROM tasks WHERE status IN "
-                "('quota_wait', 'interrupted') AND mission_id != 'canaries'")]  # H3
+                "('quota_wait', 'interrupted') AND mission_id != 'canaries' "
+                "ORDER BY (started_at IS NOT NULL), task_id")]  # H3
         log(f"resume mode: {len(parked)} parked/interrupted non-canary task(s)")
         ran = 0
         for tid in parked[:args.max_tasks]:

@@ -179,8 +179,26 @@ def cmd_approve(name: str) -> int:
                   (f"Skill promoted: {mission}/{src.name}",
                    f"Operator-approved. Canary baseline at approval: {baseline}. "
                    f"Evidence lesson ids: {ids}."))
-    _git("add", str(dest.relative_to(ROOT)), str(CANDIDATES.relative_to(ROOT)))
-    _git("commit", "-m", f"Promote skill: {mission}/{src.name} (canary baseline {baseline})")
+    # F15 (docs/HARDENING.md): commit with an explicit pathspec, not a bare `git commit`
+    # (which commits the WHOLE staged index). Without this, an approval issued while
+    # unrelated work is staged elsewhere in the repo sweeps it into a "Promote skill"
+    # commit, breaking the audit trail's one-change-per-commit property.
+    #
+    # Scoped to `dest` ONLY -- candidate drafts under _candidates/ are never git-tracked
+    # (cmd_review() writes them with plain write_text(), no _git() call), so src.unlink()
+    # above needs no corresponding git action, and there is nothing at CANDIDATES for a
+    # commit pathspec to match. Two real bugs, found while proving this fix rather than
+    # just reading it: (1) `git commit -- <path matching nothing>` errors and aborts the
+    # WHOLE commit -- true every time this is the only pending candidate for its mission,
+    # the common case (MAX_CANDIDATES_PER_MISSION=1); (2) the old `git add <dir>` swept up
+    # ANY other untracked, still-pending, unreviewed candidate sitting in the same
+    # directory into THIS approval's commit -- a second, independent one-change-per-commit
+    # violation the F15 writeup didn't name but the same fix (never touch that directory)
+    # also closes.
+    relp = str(dest.relative_to(ROOT))
+    _git("add", relp)
+    _git("commit", "-m", f"Promote skill: {mission}/{src.name} (canary baseline {baseline})",
+         "--", relp)
     _log(f"APPROVED -> {dest.relative_to(ROOT)} (canary baseline {baseline}, committed)")
     return 0
 
@@ -204,8 +222,12 @@ def cmd_rollback(relpath: str, reason: str = "operator/canary rollback") -> int:
     target = SKILLS / relpath
     if not target.exists():
         _log(f"no such active skill: {relpath}"); return 1
-    _git("rm", "-q", str(target.relative_to(ROOT)))
-    _git("commit", "-m", f"Rollback skill: {relpath} ({reason})")
+    # F15 (docs/HARDENING.md): same pathspec-isolation fix as cmd_approve — an
+    # auto-rollback fired mid-session (e.g. from run_canaries()) must never absorb
+    # whatever else happens to be staged at that moment.
+    relp = str(target.relative_to(ROOT))
+    _git("rm", "-q", relp)
+    _git("commit", "-m", f"Rollback skill: {relpath} ({reason})", "--", relp)
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         c.execute("UPDATE lesson_candidates SET promoted_to=NULL WHERE promoted_to=?",
                   (relpath,))

@@ -17,10 +17,14 @@ starts with the first cron week (W29).
 **Weekly task budget:** 001 (~4) + 002 (~3) + syntheses ≈ **≥10 tasks/week** productive floor
 (HARNESS_DESIGN.md §7); canaries run separately and never count toward fitness.
 **Kill switch:** `schtasks /delete /tn "AGI_M1_*" /f` (automation only; ledger state survives).
-**Hardening:** adversarial audit + Phase 0 fixes landed 2026-07-24 — see `docs/HARDENING.md` for
-the full findings (run-lock, crash recovery, nightly backup, filesystem tamper-detection) and
-`docs/INCIDENTS.md` for what actually broke while proving them. A 5th cron, `AGI_M1_backup`
-(daily 02:00), now exists — restore-tested, not just taken.
+**Hardening:** adversarial audit + Phase 0 fixes landed 2026-07-24, Phase 1 (policy enforcement,
+critic truth-checking, fitness honesty) also 2026-07-24, and a Phase 2 on-ramp pass 2026-07-27 —
+see `docs/HARDENING.md` for the full findings and `docs/INCIDENTS.md` for what actually broke
+while proving them. A 5th cron, `AGI_M1_backup` (daily 02:00), now exists — restore-tested, not
+just taken. **All 5 `AGI_M1_*` tasks now run regardless of battery power** (fixed 2026-07-27,
+`docs/INCIDENTS.md`) — they previously had `DisallowStartIfOnBatteries=true` and were silently
+REFUSED by Task Scheduler (not run, not queued, no error visible anywhere but the raw result
+code) the one Sunday it mattered most, breaking that week's promotion-review ignition entirely.
 **Operator weekly duty (3–5 min):** `python orchestrator/spotcheck.py list` → open 3–5 artifacts,
 verify a fact or two against its cited source, then `spotcheck.py pass|fail <id> [note]` — this
 feeds the accuracy term of fitness; without it accuracy stays n/a all through baseline.
@@ -29,14 +33,23 @@ first real scorecard delivered and confirmed received. Scorecards/escalations no
 Telegram automatically every Sunday with no further action needed.
 
 ## Run schedule (8 weeks)
-- **W29–W30 (through Sun 2026-07-26) — baseline.** Missions run; self-improvement mechanism is
-  BUILT but promotion stays OFF by policy. Measure the floor: completion rate, accuracy on
-  spot-checks, intervention rate, cost/task.
+- **W29–W30 (through Sun 2026-07-26) — baseline.** Missions ran; self-improvement mechanism is
+  BUILT but promotion stayed OFF by policy. Real result, not the target: completion rate came in
+  at **0%** for the 7-day window measured 2026-07-27 (mission 002's 3 W30 tasks were all
+  critic-rejected; mission 001 had 4 tasks stuck behind head-of-line blocking, now fixed — see
+  F6/F18, `docs/HARDENING.md`). Canaries never ran for W30 either — the Sunday cron that would
+  have fired them was refused by Task Scheduler on battery power (`docs/INCIDENTS.md`,
+  2026-07-27 entry), fixed the same day. Baseline is honestly low, not fabricated-high; the whole
+  point of the Phase 1 fitness-honesty fix was to make sure a week like this shows as a week like
+  this instead of 100%.
 - **W31 onward (from Mon 2026-07-27) — full loop.** Gated skill promotion ON (HARNESS_DESIGN.md
   §2.4, `orchestrator/promote.py`). Weekly scorecard (Sunday, via Telegram) now also runs a
   promotion review pass — expect an occasional Telegram line like "1 candidate skill awaiting
   your approval." 5 fixed canary tasks re-run weekly; a promoted skill whose canary green-count
   drops below its approval baseline auto-rolls-back (only judged on complete, non-parked data).
+  Machinery verified end-to-end 2026-07-27 (`review --dry` against the live pool, an isolated
+  rehearsal of the auto-rollback path) — no skill has been promoted yet, `skills_analyst/` holds
+  only its README, so W31 is a cold start of the loop, not a resumption.
 
 **Promotion workflow (starts mattering W31):**
 ```
@@ -47,12 +60,18 @@ python orchestrator/promote.py rollback <mission>/<file>   # undo any active ski
 ```
 Skills live at `skills_analyst/<mission_id>/*.md` — every promotion/rollback is a git commit.
 
-**W30 unattended-cycle watchlist** (first fully-automated week — verify after each cron fires,
-don't just assume): Sun 03:30/04:00 parked canaries resume without duplicating + scorecard
-delivers to Telegram; Mon 04:00 stale-parked W29 rows flip to `stale`, #3/#4 retries carry the
-critic's prior feedback in-prompt, synthesis produces the first real week-over-week diff; Wed
-04:00 mission 002 runs its set. Zero `runs/quarantine_*.json` files at any point (containment
-guard) is the one non-negotiable signal — anything else is a normal operating variance.
+**W31 unattended-cycle watchlist** (verify after each cron fires, don't just assume): Mon 04:00
+mission 001 — the 4 tasks stuck since 2026-07-20 (task 16 `quota_wait`, 17-19 never-attempted)
+should now be attempted FAIRLY (F6 fix: untried seeds go first) rather than seed 1 perpetually
+eating the only shot before the others are ever tried; if quota runs out mid-mission, expect the
+F9 failover to reach `gemma4:12b` rather than parking outright — check `model_used` on any `done`
+row for `gemma4:12b` and treat that deliverable as spot-check-priority (an escalation with
+`trigger="model_failover"` fires automatically, but a human read is still warranted for a
+smaller/local model's output). Wed 04:00 mission 002 runs its set. Sun 03:30/04:00 canaries +
+scorecard should fire even if the laptop is on battery (A1 fix) — if `Last Result` on either task
+is still nonzero after a fire, the battery-refusal fix didn't hold and needs re-checking, not
+re-assuming. Zero `runs/quarantine_*.json` files at any point (containment guard) remains the one
+non-negotiable signal — anything else is a normal operating variance.
 
 ## M1 acceptance (all must hold — HARNESS_DESIGN.md §7)
 - ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks ·

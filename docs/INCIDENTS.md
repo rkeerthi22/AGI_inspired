@@ -1,5 +1,42 @@
 # Incidents
 
+## 2026-07-27 — W31's promotion-review ignition was refused by Task Scheduler on battery power
+
+**What happened:** Today, 2026-07-27, is the exact date `missions/_M1_INDEX.md` scheduled for W31
+gated skill promotion to start. A read-only health check run before enabling anything found both
+Sunday crons the promotion loop depends on — `AGI_M1_canaries` and `AGI_M1_scorecard` (the latter
+is what actually invokes `promote.cmd_review()`, inside `_run()`'s `--scorecard` branch) —
+reporting `Last Result: -2147020576` from their most recent fire (2026-07-27 01:17:47). Decoded
+(`net helpmsg 4320`): **"The operator or administrator has refused the request."** Cross-checked
+against `runs/schtask_last.log`: no batch log of any kind exists for that timestamp — Python never
+started. Root cause, confirmed via `schtasks /query ... /xml`: all 5 `AGI_M1_*` tasks had
+`DisallowStartIfOnBatteries=true` and `StopIfGoingOnBatteries=true`; the laptop woke on battery at
+that hour, and Task Scheduler refused the launch outright rather than running it or queuing it.
+This week's promotion review therefore never ran — not a code bug, a scheduling-policy default
+that happened to gate the one week it mattered most.
+
+**Why this matters:** the promotion loop's evidence chain (lesson pool → review → candidate →
+operator approval → canary-baseline rollback protection) is entirely useless if the review pass
+that starts it can silently fail to fire, with no error surfaced anywhere except a raw Win32
+result code an operator would have to go looking for. A "gated" promotion system is not actually
+gated by evidence if its own ignition depends on the laptop being plugged in at 3:30am on a
+Sunday.
+
+**Fix applied:** operator decision — run regardless of power. Set
+`DisallowStartIfOnBatteries=$false`, `StopIfGoingOnBatteries=$false`,
+`StartWhenAvailable=$true` on all 5 `AGI_M1_*` scheduled tasks via
+`Get-ScheduledTask`/`Set-ScheduledTask` (mutating `.Settings` in place, not replacing it, so
+triggers/actions were preserved — verified by re-reading each task's XML afterward: all 5 show the
+flipped flags with 1 trigger and the original action/args intact).
+
+**Lesson:** a scheduled task's default power/battery conditions are exactly the kind of "unread
+policy" this project has repeatedly found elsewhere (policy.yaml/F13, the deny-list, the cost
+caps) — declared once at task-creation time, never revisited, and invisible until the one day
+conditions line up to trigger them. Same shape as F13: a control existing in configuration is not
+the same as the control being correct for what depends on it. Worth a standing check before any
+future "does the automation actually run" audit: read `Get-ScheduledTask ... .Settings`, don't
+just confirm the task exists and has the right trigger time.
+
 ## 2026-07-24 — F18: critic-REJECTED tasks read as 100% complete in the live scorecard
 
 **What happened:** While implementing the fitness-reporting fix the operator asked for ("fix
