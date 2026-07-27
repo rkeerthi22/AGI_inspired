@@ -187,6 +187,40 @@ DB copy first: `weekly_fitness()` against the copy returned exactly `completion_
 `tasks_scheduled: 10`, `dropped: 1`, `pending: 6` — matching hand-calculation. Live `ledger.db`
 now reports the same, real number. See docs/INCIDENTS.md for the full writeup.
 
+### F19 — F17's clock-domain bug recurred in 3 more call sites · **P1 · PROVEN, found + fixed 2026-07-27**
+Live measurement, DB-copy-first (same discipline as F18): F17's lease fix (H3) was never
+generalized to the codebase's other "last N days" comparisons. `ledger.weekly_fitness()`'s window
+start (`datetime.now() - timedelta(days=7)`, Python-local) and `scorecard._week_start()` (same
+pattern, feeding both `canaries_green()` and `crash_recovery_counts()`) both compared a
+Python-computed boundary against `created_at` (SQL `datetime('now')`, UTC, space-separated).
+
+Two mismatches compound here, not one: (1) the 2h local/UTC offset F17 already named, and (2) a
+second, previously-undocumented bug in the same family — `datetime.isoformat()` emits a `T`
+separator (`'...T02:49:05'`) while SQLite's own `datetime('now')` emits a space
+(`'...  02:49:05'`); since `' ' < 'T'` in ASCII, a same-calendar-date `created_at >= boundary`
+string comparison silently loses even when the actual wall-clock time is later. Live-measured
+against a DB copy of the real `ledger.db`: the buggy window reported `tasks_scheduled: 3` when
+the true 7-day window held 7 (task_ids 16–19, all `queued`/`quota_wait`, wrongly excluded) — not
+the "narrow boundary sliver" the offset alone would suggest; the separator bug silently erased an
+entire same-day cohort. This directly undermined H5/F7's own fix (never let pending/abandoned
+work vanish from the scorecard): the 4 excluded tasks were exactly the `pending` rows F7 was
+built to keep visible.
+
+**Fixed**: `ledger.window_start_sql(days=7)` — the boundary is now always asked FROM SQLite
+(`SELECT datetime('now', '-N days')`), never computed via Python's clock, guaranteeing both the
+correct clock domain and identical string format to `created_at`. `weekly_fitness()`,
+`scorecard._week_start()` (and its consumers `canaries_green()`/`crash_recovery_counts()`, whose
+signatures changed from `datetime` to the SQL-domain `str`) all now share this one helper instead
+of each reimplementing the comparison. Proven on a DB copy of the real `ledger.db`: patched
+`weekly_fitness()` returns `tasks_scheduled: 7` (was 3), `pending: 4` (previously folded into an
+undercount, invisible); `canaries_green`/`crash_recovery_counts` run clean against the same copy
+(0/0 in both cases — no canary/crash rows fall in this particular window, confirmed by hand-query
+before and after). Live `ledger.db` untouched throughout — verification was DB-copy-only, per the
+same discipline established for F18. **Lesson for F17's own generalization**: "fixed the lease"
+was not "fixed the bug class" — any future `datetime.now()`-vs-`created_at` comparison anywhere
+in this codebase must be treated as unsafe by default until it goes through
+`ledger.window_start_sql()` or the same `datetime('now', …)`-in-SQL pattern H3/H6 already used.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,
