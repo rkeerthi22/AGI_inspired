@@ -73,6 +73,32 @@ python orchestrator/promote.py rollback <mission>/<file>   # undo any active ski
 ```
 Skills live at `skills_analyst/<mission_id>/*.md` — every promotion/rollback is a git commit.
 
+**PENDING OPERATOR ACTION — run before Mon 2026-08-03 04:00 (hard deadline).**
+W31's first fire scored 0/3 on mission 001 because of F20 (docs/HARDENING.md): the worker was
+graded against the mission's `## Done-definition` but only ever received the one-line
+`## Objective`, so every failure cited a requirement it was never shown. Fixed and committed
+2026-07-27; tasks 24/25/26 were re-queued (status only — their `critic_verdict`/`critic_notes` are
+deliberately preserved so the retry replays the reviewer's exact objections). Once the token
+counter resets at **00:00 UTC / 02:00 local**, prove the fix with:
+```bash
+python orchestrator/batch_runner.py --mission 001-shopify-competitor-intel --max-tasks 2
+```
+`--max-tasks 2`, not 1: task 27 (synthesis) has `started_at=NULL`, so the F6 fairness sort runs it
+FIRST; only the second slot reaches task 24, which is the row that actually exercises F20.
+**Why the deadline is hard:** `AGI_M1_shopify` next fires Mon 2026-08-03, which is W32.
+`queue_mission_tasks()` dedups on `[<week>][seed N]`, so it will look for W32 specs, create fresh
+rows, and never touch the W31 ones — and `expire_stale_parked()` only collects `quota_wait`, not
+`queued`. Left alone, tasks 24/25/26 become permanently orphaned `queued` rows that count as
+`pending` in every future fitness window. If the run does not happen before then, set them back to
+`failed` so the record stays honest.
+
+**Lesson-pool note (2026-07-27):** lesson_candidates #5/#6/#7 (mission 001) were retracted — they
+recorded the three F20 failures, i.e. a harness defect, not an analyst technique. Left in the pool
+they would have had Sunday's `promote.cmd_review()` draft a skill teaching the analyst to work
+around a bug that no longer exists, then inject it into every future 001 prompt. Rows preserved
+with a `promoted_to` retraction marker (audit trail intact); mission 001 now contributes nothing to
+the pool, and only 002 (3 lessons) is above the drafting bar.
+
 **W31 unattended-cycle watchlist** (verify after each cron fires, don't just assume): Mon 04:00
 mission 001 — the 4 tasks stuck since 2026-07-20 (task 16 `quota_wait`, 17-19 never-attempted)
 should now be attempted FAIRLY (F6 fix: untried seeds go first) rather than seed 1 perpetually
