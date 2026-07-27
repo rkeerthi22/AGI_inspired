@@ -25,19 +25,23 @@ just taken. **All 5 `AGI_M1_*` tasks now run regardless of battery power** (fixe
 `docs/INCIDENTS.md`) — they previously had `DisallowStartIfOnBatteries=true` and were silently
 REFUSED by Task Scheduler (not run, not queued, no error visible anywhere but the raw result
 code) the one Sunday it mattered most, breaking that week's promotion-review ignition entirely.
-**Ignition is NOT fully closed yet, though:** all 5 tasks still have `Principal.LogonType =
-Interactive`, a second independent cause of the identical Win32 4320 refusal — requires an
-unlocked interactive session at fire time, battery state aside. Fix needs an elevated PowerShell
-(can't be applied non-elevated — confirmed `Access is denied`); see **operator duty** below and
-`docs/INCIDENTS.md`'s 2026-07-27 follow-on entry for the exact command. **A first reported attempt
-did NOT verify** — re-checked live via two independent read paths (`Get-ScheduledTask` with a
-forced module reload, and `schtasks /query /xml`) and all 5 still show `Interactive`; see
-`docs/INCIDENTS.md`'s second follow-on entry. Don't trust a "looks fixed" report here — re-read
-`Principal.LogonType` live before treating this as closed.
-**Operator duty (one-time, ~1 min, do before next Sunday):** run the `Set-ScheduledTask
--Principal ... -LogonType S4U` command in `docs/INCIDENTS.md` (2026-07-27 follow-on entry) from
-an elevated PowerShell, then confirm all 5 tasks read `S4U` — until this runs, canaries/scorecard
-can still silently refuse to fire if the laptop is locked at trigger time.
+**IGNITION FULLY CLOSED 2026-07-27** (both independent causes of the Win32 4320 refusal). The
+second cause was `Principal.LogonType = Interactive`, which requires an unlocked interactive
+session at fire time regardless of battery state; a first reported attempt at this did NOT verify
+(see `docs/INCIDENTS.md`'s second 2026-07-27 follow-on). The operator re-ran it from an elevated
+PowerShell and it now **verifies on all 6 tasks** — confirmed here independently, not taken on
+report, via the two read paths that exposed the earlier false positive: `Get-ScheduledTask` after
+a forced `Remove-Module`/`Import-Module ScheduledTasks -Force` (rules out a stale cmdlet cache)
+AND `schtasks /query /tn … /xml` (a separate code path against the Task Scheduler store). Both
+return `S4U` for all 6. Cross-checked that the principal change did not disturb anything else:
+every trigger/next-run-time is intact, `DisallowStartIfOnBatteries`/`StopIfGoingOnBatteries` are
+still `False` with `StartWhenAvailable=True` (the A1 fix survived), all action lines unchanged,
+all tasks `Ready`. Note it is **6** tasks, not 5 — the one-time `AGI_M1_F20proof` was included
+because the command enumerates `AGI_M1_*` rather than hardcoding names; the original five-name
+version would have left tonight's proof run on `Interactive`.
+**Standing rule this leaves behind:** re-read `Principal.LogonType` live after any task is added
+or re-registered — `Register-ScheduledTask` defaults new tasks to `Interactive`, so a future
+one-time task silently reintroduces the gap for itself.
 **Operator weekly duty (3–5 min):** `python orchestrator/spotcheck.py list` → open 3–5 artifacts,
 verify a fact or two against its cited source, then `spotcheck.py pass|fail <id> [note]` — this
 feeds the accuracy term of fitness; without it accuracy stays n/a all through baseline.

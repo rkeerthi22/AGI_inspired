@@ -107,7 +107,8 @@ commit written, docs updated — while the crons are still exactly as capable of
 to fire on a future Sunday when the laptop happens to be locked instead of on battery. Two
 independent locks were installed here; only one had a fix applied to it and be verified.
 
-**Fix status: NOT applied — blocked on privilege, not investigated further.** Changing a
+**Fix status: APPLIED + INDEPENDENTLY VERIFIED 2026-07-27** (see the closing note at the end of
+this file's second follow-on entry). Originally blocked on privilege — changing a
 scheduled task's `Principal`/`LogonType` requires an elevated session; a non-elevated
 `Set-ScheduledTask -Principal ...` call returned `Access is denied` (confirmed live:
 `whoami /groups` shows this shell's `BUILTIN\Administrators` membership is "Group used for deny
@@ -175,9 +176,28 @@ for all 5 (unchanged) — easy to misread as `S4U` at a glance if skimmed quickl
 elevated run silently no-op'ing (e.g. a missing "Log on as a batch job" right) remains possible
 but unconfirmed.
 
-**Status: still NOT fixed as of this entry.** Re-issued the command with explicit per-task
-try/catch (`Write-Host "$t : OK"` / `"$t : FAILED - <message>"`) so the next attempt cannot be
-misread either way. Awaiting a re-run with the actual pass/fail output pasted back.
+**Status: RESOLVED 2026-07-27, verified — this entry's own protocol is what closed it.** The
+command was re-issued with explicit per-task try/catch, plus two further hardening changes made
+after this entry: it now (a) refuses to run when not elevated, instead of failing per-task and
+printing a plausible summary — the exact shape of the false positive above — and (b) enumerates
+`Get-ScheduledTask -TaskName "AGI_M1_*"` rather than hardcoding five names. (b) mattered
+immediately: a sixth task (`AGI_M1_F20proof`, the one-time F20 proof run scheduled for 02:15 the
+same night) had been registered in between, and the hardcoded version would have left exactly the
+task that needed to fire that night still on `Interactive`.
+
+The operator re-ran it elevated and reported success. Per this entry's own lesson that report was
+NOT taken as closure: live state was re-read through both independent paths that exposed the first
+false positive — `Get-ScheduledTask` after a forced `Remove-Module`/`Import-Module ScheduledTasks
+-Force`, and `schtasks /query /tn … /xml`. **Both return `S4U` for all 6 tasks.** Also cross-checked
+that the principal change disturbed nothing else (the failure mode this file already warns about —
+"re-reading each task's settings only verifies what you re-read"): all triggers/next-run-times
+intact, `DisallowStartIfOnBatteries`/`StopIfGoingOnBatteries` still `False` with
+`StartWhenAvailable=True` (the A1 battery fix survived), action lines unchanged, all tasks `Ready`.
+Both independent causes of the Win32 4320 refusal are now closed.
+
+**Residual, worth knowing:** `Register-ScheduledTask` defaults new tasks to `Interactive`, so any
+future task silently reintroduces this gap for itself. The standing rule is now recorded in
+`missions/_M1_INDEX.md`: re-read `Principal.LogonType` after adding or re-registering any task.
 
 **Lesson:** when a fix depends on privilege the assistant cannot itself confirm was actually
 exercised (elevation happens in a separate, unobserved window), do not accept "ran it, looks
