@@ -10,7 +10,7 @@ Stdlib only."""
 import argparse
 import sqlite3
 import sys
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -22,19 +22,27 @@ VIEW_DIR = ROOT / "memory" / "scorecards"
 CANARY_TOTAL = 5
 
 
-def _week_start() -> datetime:
-    return datetime.now() - timedelta(days=7)
+def _week_start() -> str:
+    # F17/F19 (docs/HARDENING.md): this used to be datetime.now() - timedelta(days=7),
+    # compared as a 'T'-separated Python isoformat() string against created_at (UTC,
+    # space-separated -- SQLite's own datetime('now') format). Both the clock (local
+    # vs UTC) and the string format were wrong, and live-measured together they
+    # silently dropped same-day rows from the window, not just a boundary sliver.
+    # ledger.window_start_sql() asks SQLite for the boundary in SQLite's own domain,
+    # so it compares correctly against created_at with no conversion needed here.
+    return ledger.window_start_sql(7)
 
 
-def canaries_green(since: datetime) -> tuple[int, int]:
-    """(passed, ran) canary tasks in the window. A canary passes on human verdict if
+def canaries_green(since: str) -> tuple[int, int]:
+    """(passed, ran) canary tasks in the window. `since` must already be in SQLite's
+    datetime() string domain (see _week_start()). A canary passes on human verdict if
     present, else critic verdict."""
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
         rows = c.execute(
             "SELECT critic_verdict, human_verdict FROM tasks "
             "WHERE mission_id='canaries' AND status='done' AND created_at>=?",
-            (since.isoformat(timespec="seconds"),)).fetchall()
+            (since,)).fetchall()
     passed = sum(1 for r in rows if (r["human_verdict"] or r["critic_verdict"]) == "pass")
     return passed, len(rows)
 
@@ -45,15 +53,16 @@ def _fmt(v, pct=False):
     return f"{v*100:.0f}%" if pct else f"{v}"
 
 
-def crash_recovery_counts(since: datetime) -> tuple[int, int]:
+def crash_recovery_counts(since: str) -> tuple[int, int]:
     """(recovered, gave_up) this week -- H3, docs/HARDENING.md fixes F2. Never silent:
-    a task orphaned by a crash/power-loss must show up here, not just quietly vanish."""
+    a task orphaned by a crash/power-loss must show up here, not just quietly vanish.
+    `since` must already be in SQLite's datetime() string domain (see _week_start())."""
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         notes = [r[0] or "" for r in c.execute(
             "SELECT critic_notes FROM tasks WHERE created_at>=? AND "
             "(critic_notes LIKE '%recovered from an orphaned running state%' OR "
             "critic_notes LIKE '%gave up after%interruptions%')",
-            (since.isoformat(timespec="seconds"),)).fetchall()]
+            (since,)).fetchall()]
     recovered = sum(1 for n in notes if "recovered from an orphaned" in n)
     gave_up = sum(1 for n in notes if "gave up after" in n)
     return recovered, gave_up
@@ -134,7 +143,7 @@ def build(deliver: bool = False) -> tuple[str, str]:
             "INSERT INTO scorecards (week_start, tasks_attempted, completion_rate, accuracy,"
             " intervention_rate, avg_cost_usd, fitness, canaries_green, notes) "
             "VALUES (?,?,?,?,?,?,?,?,?)",
-            (since.strftime("%Y-%m-%d"), fit.get("tasks_attempted"),
+            (since[:10], fit.get("tasks_attempted"),
              fit.get("completion_rate"), fit.get("accuracy"), fit.get("intervention_rate"),
              fit.get("avg_cost_usd"), fit.get("fitness"), green, fit.get("note", "")))
 

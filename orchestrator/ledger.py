@@ -4,7 +4,7 @@ the single source of truth (HARNESS_DESIGN.md §3)."""
 import json
 import sqlite3
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -31,6 +31,22 @@ def _conn(db=None):
     c = sqlite3.connect(db if db is not None else LEDGER_DB, timeout=30)
     c.row_factory = sqlite3.Row
     return c
+
+
+def window_start_sql(days: int = 7) -> str:
+    """UTC-domain window boundary (now - `days`), computed entirely inside
+    SQLite so it matches created_at's clock domain -- both the value AND the
+    string format. F17/F19 (docs/HARDENING.md): Python's datetime.now() runs
+    ~2h ahead of SQLite's UTC datetime('now') on this machine, AND
+    datetime.isoformat() emits a 'T' separator that sorts after SQLite's own
+    ' ' separator in a string '>=' comparison -- either mismatch alone
+    silently drops same-day rows from a window query against created_at
+    (compounding: live-measured 2026-07-27, the two together excluded 4 of 7
+    true in-window tasks from weekly_fitness(), not just a boundary sliver).
+    Never construct a comparison boundary against created_at in Python;
+    always ask SQLite for it, in SQLite's own format."""
+    with _conn() as c:
+        return c.execute("SELECT datetime('now', ?)", (f"-{days} days",)).fetchone()[0]
 
 
 def queue_task(mission_id: str, spec: str, pass_criteria: str) -> int:
@@ -110,8 +126,11 @@ PENDING_STATUSES = ("queued", "quota_wait", "running", "interrupted",
 
 def weekly_fitness(week_start: str | None = None) -> dict:
     """Compute F over ALL non-canary tasks SCHEDULED in the 7 days from week_start
-    (default: last 7 days) -- not just the ones that happened to reach a terminal
-    state before this call ran.
+    (default: last 7 days, via window_start_sql() -- see F17/F19) -- not just the
+    ones that happened to reach a terminal state before this call ran. If passed
+    explicitly, week_start must already be in SQLite's own datetime() string
+    domain (space-separated, e.g. from window_start_sql()) -- not an
+    arbitrary ISO string -- so it compares correctly against created_at.
 
     F7/F18 (docs/HARDENING.md): the original query filtered to
     `status IN ('done','failed')` for BOTH the numerator and the denominator, which
@@ -130,6 +149,11 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     completion_rate = done/n_total here is correct as long as that invariant
     holds; this function does not re-derive it from critic_verdict, by design --
     status is meant to be the single resolved-outcome field everything else reads.
+    F19 (docs/HARDENING.md): the window boundary itself used to be computed via
+    Python's datetime.now() - timedelta(days=7), compared against a UTC,
+    space-separated created_at -- wrong clock AND wrong string format, live-
+    measured to silently drop 4 of 7 true in-window tasks. Fixed by asking
+    SQLite for the boundary (window_start_sql()) instead of computing it here.
 
     completion_rate's denominator is now EVERYTHING scheduled this window
     (terminal + pending + stale), so a week that ends with most seeds never
@@ -140,12 +164,11 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     look cheaper/better-behaved the more work it fails to attempt. Weights (W)
     are untouched -- FIXED for 8 weeks (§3.2); this is a denominator/status-
     source fix, not a new scoring term."""
-    start = (datetime.fromisoformat(week_start) if week_start
-             else datetime.now() - timedelta(days=7))
+    start = week_start if week_start else window_start_sql(7)
     with _conn() as c:
         rows = c.execute(
             "SELECT * FROM tasks WHERE created_at >= ? AND mission_id != 'canaries'",
-            (start.isoformat(timespec="seconds"),)
+            (start,)
         ).fetchall()
     n_total = len(rows)
     if n_total == 0:
