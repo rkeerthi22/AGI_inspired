@@ -528,7 +528,15 @@ mutation. Same pass also closed **F6, F9, and F15** (all three above) as direct 
 risks to a clean promotion cycle, and verified the promotion machinery itself end-to-end against
 the live pool and an isolated auto-rollback rehearsal (see `promote.py review --dry`,
 `newest_skill_below_baseline()`/`cmd_rollback()` proof under F15, above). See
-`docs/INCIDENTS.md` for the full incident writeup. **Two things this pass explicitly did NOT
+`docs/INCIDENTS.md` for the full incident writeup. **Follow-on found the same day, NOT yet
+fixed:** independently re-checked all 5 tasks afterward and found `Principal.LogonType =
+Interactive` still set on every one — a second, independently-documented cause of the exact same
+Win32 4320 refusal, untouched by the battery fix above. The crons can still silently refuse to
+fire whenever the machine is locked/no one is logged in, battery state aside. Needs an elevated
+`Set-ScheduledTask -Principal ... -LogonType S4U` — blocked in-session by UAC token filtering
+(`Access is denied`), so this is an operator action, not a code fix. Full writeup + exact command:
+`docs/INCIDENTS.md`, "2026-07-27 — follow-on: the battery fix left the real ignition blocker
+untouched." **Two things this pass explicitly did NOT
 close, surfaced rather than silently skipped:** no git remote is configured
 (`git remote -v` empty), so recovery stays local-only — CLAUDE.md's "nightly backup + `git push`
 = recovery" is still partly aspirational until one is added, which needs an operator choice

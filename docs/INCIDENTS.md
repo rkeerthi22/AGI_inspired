@@ -37,6 +37,49 @@ the same as the control being correct for what depends on it. Worth a standing c
 future "does the automation actually run" audit: read `Get-ScheduledTask ... .Settings`, don't
 just confirm the task exists and has the right trigger time.
 
+## 2026-07-27 — follow-on: the battery fix left the real ignition blocker untouched
+
+**What happened:** Independently re-checked all 5 `AGI_M1_*` tasks after the battery-flag fix
+above landed (commit `ff0013a`) and found `Principal.LogonType = Interactive` on every one of
+them — unchanged by that fix, and never mentioned by its diagnosis or its docs. `LogonType:
+Interactive` requires an actual unlocked interactive desktop session to exist at fire time; with
+nobody logged in (locked screen, or logged off), Task Scheduler refuses the launch with the exact
+same error this incident already named — Win32 4320 / `0x800710E0`, "the operator or
+administrator has refused the request." Confirmed this is a second, independent, well-documented
+cause of that identical error code (not a guess): see [Fix: Operator Refused the Request Error in
+Windows Task Scheduler](https://www.geeksforgeeks.org/techtips/operator-refused-request-error-in-win/),
+whose fix #2 is switching the task to "run whether user is logged in or not" — i.e. changing
+`LogonType` away from `Interactive` (to `S4U`, which needs no stored password).
+
+**Why this matters:** the battery fix and this fix are two separate necessary conditions for the
+same symptom, not one fix and a rediscovery of it. A pass that only closes the power-conditions
+path can genuinely believe "ignition is fixed" — settings re-read correctly, triggers intact,
+commit written, docs updated — while the crons are still exactly as capable of silently refusing
+to fire on a future Sunday when the laptop happens to be locked instead of on battery. Two
+independent locks were installed here; only one had a fix applied to it and be verified.
+
+**Fix status: NOT applied — blocked on privilege, not investigated further.** Changing a
+scheduled task's `Principal`/`LogonType` requires an elevated session; a non-elevated
+`Set-ScheduledTask -Principal ...` call returned `Access is denied` (confirmed live:
+`whoami /groups` shows this shell's `BUILTIN\Administrators` membership is "Group used for deny
+only" — the token is UAC-filtered). This needs the operator to run, in an elevated PowerShell:
+
+```powershell
+$tasks = @("AGI_M1_backup","AGI_M1_canaries","AGI_M1_content","AGI_M1_scorecard","AGI_M1_shopify")
+foreach ($t in $tasks) {
+  $principal = New-ScheduledTaskPrincipal -UserId "moham" -LogonType S4U -RunLevel Limited
+  Set-ScheduledTask -TaskName $t -Principal $principal | Out-Null
+}
+Get-ScheduledTask -TaskName "AGI_M1_*" | Select-Object TaskName, @{n='LogonType';e={$_.Principal.LogonType}}
+```
+
+**Lesson:** "verified by re-reading each task's settings" only verifies what you re-read. The
+original health check's own root-cause claim (`DisallowStartIfOnBatteries=true`) was never
+cross-checked against the *other* documented cause of the identical error code, so the fix closed
+the diagnosed cause without checking whether it was the *only* cause. Same shape as the lesson
+just above it in this file, one incident later: a control existing (or now correctly configured)
+is not the same as it being the complete set of controls that gate what depends on it.
+
 ## 2026-07-24 — F18: critic-REJECTED tasks read as 100% complete in the live scorecard
 
 **What happened:** While implementing the fitness-reporting fix the operator asked for ("fix
