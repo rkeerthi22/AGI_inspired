@@ -29,7 +29,11 @@ code) the one Sunday it mattered most, breaking that week's promotion-review ign
 Interactive`, a second independent cause of the identical Win32 4320 refusal — requires an
 unlocked interactive session at fire time, battery state aside. Fix needs an elevated PowerShell
 (can't be applied non-elevated — confirmed `Access is denied`); see **operator duty** below and
-`docs/INCIDENTS.md`'s 2026-07-27 follow-on entry for the exact command.
+`docs/INCIDENTS.md`'s 2026-07-27 follow-on entry for the exact command. **A first reported attempt
+did NOT verify** — re-checked live via two independent read paths (`Get-ScheduledTask` with a
+forced module reload, and `schtasks /query /xml`) and all 5 still show `Interactive`; see
+`docs/INCIDENTS.md`'s second follow-on entry. Don't trust a "looks fixed" report here — re-read
+`Principal.LogonType` live before treating this as closed.
 **Operator duty (one-time, ~1 min, do before next Sunday):** run the `Set-ScheduledTask
 -Principal ... -LogonType S4U` command in `docs/INCIDENTS.md` (2026-07-27 follow-on entry) from
 an elevated PowerShell, then confirm all 5 tasks read `S4U` — until this runs, canaries/scorecard

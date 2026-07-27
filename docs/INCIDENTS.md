@@ -80,6 +80,43 @@ the diagnosed cause without checking whether it was the *only* cause. Same shape
 just above it in this file, one incident later: a control existing (or now correctly configured)
 is not the same as it being the complete set of controls that gate what depends on it.
 
+## 2026-07-27 — second follow-on: elevation self-trigger failed; a reported fix didn't verify
+
+**What happened:** Two more attempts at closing the LogonType gap above, both worth recording.
+
+First, tried triggering the elevation from inside the session itself via `Start-Process
+powershell -Verb RunAs -Wait -EncodedCommand ...`. Windows returned `Start-Process : This command
+cannot be run due to the error: The operation was canceled by the user.` almost immediately —
+consistent with there being no interactive desktop session available to render the UAC consent
+dialog on (the exact condition this whole finding is about), though a real dismissal can't be
+ruled out either. Either way: self-elevation from this session is not a working path.
+
+Second, the operator reported running the elevated fix manually and having all 5 tasks read
+`S4U`. Independent re-verification immediately after — via `Get-ScheduledTask` (with a forced
+`Remove-Module`/`Import-Module ScheduledTasks -Force` first, to rule out a stale cmdlet cache) AND
+separately via `schtasks /query /tn ... /xml` (a completely different code path, reading the Task
+Scheduler service's raw XML directly) — showed `LogonType` still `Interactive` /
+`<LogonType>InteractiveToken</LogonType>` on every task checked. Not a caching artifact: two
+independent read paths agreed with each other and disagreed with the report.
+
+**Why this matters:** same shape as F18 and the HC-verification pattern elsewhere in this
+project — a report of success is not evidence of success. The most probable explanation is a
+non-elevated run: `Set-ScheduledTask -Principal` under a normal token throws `Access is denied`
+per iteration inside the `foreach`, which does not halt the loop (no `-ErrorAction Stop`), so the
+loop completes, the trailing `Get-ScheduledTask ... LogonType` line runs and prints `Interactive`
+for all 5 (unchanged) — easy to misread as `S4U` at a glance if skimmed quickly. A genuinely
+elevated run silently no-op'ing (e.g. a missing "Log on as a batch job" right) remains possible
+but unconfirmed.
+
+**Status: still NOT fixed as of this entry.** Re-issued the command with explicit per-task
+try/catch (`Write-Host "$t : OK"` / `"$t : FAILED - <message>"`) so the next attempt cannot be
+misread either way. Awaiting a re-run with the actual pass/fail output pasted back.
+
+**Lesson:** when a fix depends on privilege the assistant cannot itself confirm was actually
+exercised (elevation happens in a separate, unobserved window), do not accept "ran it, looks
+fixed" as closing the loop — re-read the live state through an independent code path before
+updating any status field. Two read paths that disagree with a report beat one report, every time.
+
 ## 2026-07-24 — F18: critic-REJECTED tasks read as 100% complete in the live scorecard
 
 **What happened:** While implementing the fitness-reporting fix the operator asked for ("fix
