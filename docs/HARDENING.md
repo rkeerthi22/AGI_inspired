@@ -251,6 +251,12 @@ as generalizable. Fix sketched and handed off rather than built inline: reuse th
 pattern from H3 (`datetime('now', '-7 days')` computed IN SQL, never in Python) across all three
 sites, ideally behind one shared helper so they can't drift independently again.
 
+**Fixed same day, F19 (below):** live measurement of the actual DB (not just the code) found the
+impact was bigger than "narrow" — a second, compounding bug (Python `isoformat()`'s `T` separator
+sorting after SQLite's own space separator) meant same-day rows were dropped outright, not just a
+~2h sliver; `weekly_fitness()` undercounted `tasks_scheduled` 3 vs the true 7. See F19 for the fix
+(`ledger.window_start_sql()`, one shared helper, all three sites) and the DB-copy-first proof.
+
 ### F18 — Task status ignored critic verdict; a REJECTED deliverable read as complete · **P0 · PROVEN, found 2026-07-24 fixing fitness reporting**
 `run_task()`/`run_synthesis()` set `status="done"` unconditionally once the critic returned ANY
 verdict — pass or fail — storing the actual judgment only in the separate `critic_verdict`
@@ -635,8 +641,9 @@ This document started as an audit + blueprint; sections are updated in place as 
 marked IMPLEMENTED + PROVEN with the date and what was actually verified (never claimed from
 code-reading alone — see CLAUDE.md's verification ladder). As of 2026-07-27: Phase 0 (H1, H2, H3,
 H9) and Phase 1 (H4, F7/F18, the token half of H6, H13/F13) are done, and the Phase 2 on-ramp
-closed F6, F9, and F15, plus fixed the cron battery-refusal bug that had silently broken the
-promotion loop's own ignition. Still open: H7 (candidate-note injection hardening — the roadmap's
-own stated precondition for enabling the promotion gate), the USD half of F8, no git remote
-(recovery is local-only), the reconfirmed F17 clock-mismatch class in `weekly_fitness()`'s window
-boundary (flagged as a follow-up task, not fixed), and Phase 2.5 onward (runtime abstraction, M2).
+closed F6, F9, and F15, and F19 closed the reconfirmed F17 clock-mismatch class in
+`weekly_fitness()`'s window boundary (found and fixed same day — it was worse than first scoped,
+see F19). Also fixed the cron battery-refusal bug that had silently broken the promotion loop's
+own ignition. Still open: H7 (candidate-note injection hardening — the roadmap's own stated
+precondition for enabling the promotion gate), the USD half of F8, no git remote (recovery is
+local-only), and Phase 2.5 onward (runtime abstraction, M2).
