@@ -68,6 +68,18 @@ def crash_recovery_counts(since: str) -> tuple[int, int]:
     return recovered, gave_up
 
 
+def _ai_check_suffix(fit: dict) -> str:
+    """F28 (docs/HARDENING.md): human_verdict exists to be an INDEPENDENT signal on
+    the critic's own judgment, but the CLI that records it cannot tell an operator's
+    keystroke from an assistant acting on the operator's behalf -- both write the
+    identical column. Rather than silently reclassify or discount those rows (a change
+    to the locked accuracy formula this session has no standing to make), surface the
+    count wherever accuracy is reported, so the number is never read as more
+    independent than it actually is."""
+    n = fit.get("spot_checked_ai", 0)
+    return f", {n} AI-performed pending operator confirmation" if n else ""
+
+
 def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, gave_up: int = 0) -> str:
     crash_line = (f"- Crash recovery: {recovered} task(s) recovered, {gave_up} gave up "
                   f"after repeated interruption\n" if (recovered or gave_up) else "")
@@ -83,8 +95,8 @@ def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, ga
         f"{scope_line}"
         f"- Completion: {_fmt(fit.get('completion_rate'), pct=True)} (of tasks SCHEDULED, "
         f"not just resolved)\n"
-        f"- Accuracy (spot-checked {fit.get('spot_checked', 0)}): "
-        f"{_fmt(fit.get('accuracy'), pct=True)}\n"
+        f"- Accuracy (spot-checked {fit.get('spot_checked', 0)}"
+        f"{_ai_check_suffix(fit)}): {_fmt(fit.get('accuracy'), pct=True)}\n"
         f"- Intervention rate: {_fmt(fit.get('intervention_rate'), pct=True)}\n"
         f"- Avg cost/task: ${fit.get('avg_cost_usd', 0) or 0}\n"
         f"- Canaries green: {green}/{ran or CANARY_TOTAL}\n"
@@ -103,11 +115,13 @@ def telegram_line(week: str, fit: dict, green: int, ran: int, recovered: int = 0
         return f"📊 {week}: no task attempts this week ({fit.get('note', '')}).{crash_suffix}"
     dropped, pending = fit.get("dropped", 0), fit.get("pending", 0)
     drop_suffix = f" · {dropped} dropped/{pending} pending" if (dropped or pending) else ""
+    ai_n = fit.get("spot_checked_ai", 0)
+    ai_suffix = f" · ⚠ {ai_n} spot-check(s) AI-performed, pending your confirmation" if ai_n else ""
     return (f"📊 {week} · F={_fmt(f)} · {fit.get('tasks_scheduled', fit['tasks_attempted'])} scheduled · "
             f"done {_fmt(fit.get('completion_rate'), pct=True)} · "
             f"acc {_fmt(fit.get('accuracy'), pct=True)} · "
             f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{ran or CANARY_TOTAL}"
-            f"{drop_suffix}{crash_suffix}")
+            f"{drop_suffix}{crash_suffix}{ai_suffix}")
 
 
 def send_telegram(text: str) -> bool:

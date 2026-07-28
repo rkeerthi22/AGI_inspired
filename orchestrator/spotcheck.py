@@ -5,7 +5,23 @@
     python orchestrator/spotcheck.py fail 12 [note]   # mark task 12 wrong
 
 `human_verdict` feeds ledger.weekly_fitness() accuracy (already implemented) — 3–5
-spot-checks per week during the M1 baseline keeps accuracy measurable. Stdlib only."""
+spot-checks per week during the M1 baseline keeps accuracy measurable.
+
+F28 (docs/HARDENING.md): this CLI has no way to tell who is actually at the keyboard.
+On 2026-07-28 the assistant ran real verification (fetched cited pages, compared claims
+against them) and recorded the result through this exact tool -- schema-identical to a
+genuine operator check, because `human_verdict` and `critic_notes` cannot express who
+did the checking. That is dangerous specifically in a project whose recurring theme is
+an agent's own output being indistinguishable from independent verification (see the
+2026-07-18 rogue-write incident and F5's manager==critic note).
+
+CONVENTION, not enforced by code: if the assistant performs a check on your behalf
+(rather than you reading the source yourself), the note MUST start with
+"AI-PERFORMED CHECK" verbatim. ledger.weekly_fitness() greps for that exact string to
+report `spot_checked_ai` alongside `spot_checked`, and scorecard.py surfaces it as a
+caveat -- so the number stays visible without silently reclassifying it or touching the
+locked accuracy formula. Re-running this command yourself on the same task overwrites
+the row with a genuine independent read."""
 import sqlite3
 import sys
 from pathlib import Path

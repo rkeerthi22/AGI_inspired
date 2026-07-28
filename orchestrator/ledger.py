@@ -231,6 +231,18 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     spot = [r for r in terminal if r["human_verdict"] in ("pass", "fail")]
     accuracy = (sum(1 for r in spot if r["human_verdict"] == "pass") / len(spot)
                 if spot else None)
+    # F28 (docs/HARDENING.md): `human_verdict` exists specifically to be an
+    # INDEPENDENT check on the system's own critic (spotcheck.py's own docstring:
+    # "the missing input for the fitness accuracy term"). On 2026-07-28 three
+    # human_verdict rows were written by this session's own assistant, not the
+    # operator -- the CLI has no way to tell the two apart, so they are
+    # schema-identical to a genuine independent check. Not fixed by restricting who
+    # can write a verdict (spotcheck.py is meant to be run by whoever is at the
+    # keyboard); fixed by making the fact visible wherever accuracy is reported, via
+    # the marker text those checks were written with (see spotcheck.py's own note),
+    # rather than silently discounting them from the accuracy math -- W (§3.2) and
+    # this formula are locked, not a place to add a new conditional this session.
+    spot_checked_ai = sum(1 for r in spot if "AI-PERFORMED CHECK" in (r["critic_notes"] or ""))
     interventions = sum(r["interventions"] for r in terminal)
     avg_cost = sum(r["cost_usd"] for r in terminal) / n_terminal if n_terminal else 0.0
     completion_rate = completed / n_total
@@ -247,6 +259,7 @@ def weekly_fitness(week_start: str | None = None) -> dict:
         "intervention_rate": round(intervention_norm, 3),
         "avg_cost_usd": round(avg_cost, 4), "fitness": round(fitness, 3),
         "spot_checked": len(spot),
+        "spot_checked_ai": spot_checked_ai,
     }
 
 
