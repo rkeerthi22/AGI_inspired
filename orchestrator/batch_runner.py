@@ -976,6 +976,24 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
         f"are unverified — verify each is real before citing it. Write the deliverable as clean "
         f"markdown.\n\n"
+        # F25 (docs/HARDENING.md): the 2026-07-28 spot-check found confidence 3 asserted on
+        # values absent from the cited page, and one verbatim-quoted price sentence that does
+        # not exist on the page it names. The prompt had never said what the levels MEAN, so
+        # "3" was being used to signal conviction rather than verification.
+        f"WHAT THE CONFIDENCE LEVELS MEAN — these are claims about EVIDENCE, not about how "
+        f"sure you feel:\n"
+        f"  3 = you loaded the cited page THIS RUN and read the exact value on it.\n"
+        f"  2 = the value comes from a secondary/aggregator source, or the primary page was "
+        f"blocked, cached, or rendered incompletely.\n"
+        f"  1 = inferred, dated, or otherwise uncertain.\n"
+        f"If a page was unreachable, 403/404, or Cloudflare-blocked, the highest honest "
+        f"confidence is 1 — say so plainly rather than assigning 3 to a source you could not "
+        f"read. Never cite a page you did not successfully open for a value you did not see "
+        f"on it.\n"
+        f"QUOTATIONS: text in quotation marks must be copied VERBATIM from the cited page. If "
+        f"you are paraphrasing or reconstructing pricing/terms, write it as your own summary "
+        f"without quote marks. A quoted sentence that does not appear on the page is treated "
+        f"as fabrication, even when the underlying number is right.\n\n"
         f"IMPORTANT: this is a research-only task. Use ONLY web/browser tools to look things up. "
         f"Do NOT use any file, terminal, code-execution, or memory tool for ANY reason — do not "
         f"create, write, or edit any file, and do not run any command. A separate system persists "
