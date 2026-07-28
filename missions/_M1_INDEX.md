@@ -65,8 +65,9 @@ Telegram automatically every Sunday with no further action needed.
   your approval." 5 fixed canary tasks re-run weekly; a promoted skill whose canary green-count
   drops below its approval baseline auto-rolls-back (only judged on complete, non-parked data).
   Machinery verified end-to-end 2026-07-27 (`review --dry` against the live pool, an isolated
-  rehearsal of the auto-rollback path) — no skill has been promoted yet, `skills_analyst/` holds
-  only its README, so W31 is a cold start of the loop, not a resumption.
+  rehearsal of the auto-rollback path), then actually exercised in production 2026-07-28 during the
+  F20 proof — no skill has been promoted yet, `skills_analyst/` holds only its README, so the
+  promotion GATE itself remains a cold start; the mission tasks feeding its lesson pool are not.
 
 **Promotion workflow (starts mattering W31):**
 ```
@@ -77,31 +78,34 @@ python orchestrator/promote.py rollback <mission>/<file>   # undo any active ski
 ```
 Skills live at `skills_analyst/<mission_id>/*.md` — every promotion/rollback is a git commit.
 
-**PENDING OPERATOR ACTION — run before Mon 2026-08-03 04:00 (hard deadline).**
-W31's first fire scored 0/3 on mission 001 because of F20 (docs/HARDENING.md): the worker was
-graded against the mission's `## Done-definition` but only ever received the one-line
-`## Objective`, so every failure cited a requirement it was never shown. Fixed and committed
-2026-07-27; tasks 24/25/26 were re-queued (status only — their `critic_verdict`/`critic_notes` are
-deliberately preserved so the retry replays the reviewer's exact objections). Once the token
-counter resets at **00:00 UTC / 02:00 local**, prove the fix with:
-```bash
-python orchestrator/batch_runner.py --mission 001-shopify-competitor-intel --max-tasks 2
-```
-**Now scheduled** as one-time task `AGI_M1_F20proof`, 2026-07-28 02:15 local (15 min after the
-token reset, clear of `AGI_M1_backup` at 02:00), with the same battery posture as the A1 fix.
-Delete it once verified: `schtasks /delete /tn "AGI_M1_F20proof" /f`. Running the command by hand
-instead is safe — H1's run-lock prevents a concurrent double-run, and week-dedup makes the second
-pass a no-op. **Caveat: it carries `LogonType=Interactive` like every other task**, so it will NOT
-fire if the machine is logged out at 02:15 — the elevated LogonType fix below therefore gates this
-run too, not just Sunday's crons.
-`--max-tasks 2`, not 1: task 27 (synthesis) has `started_at=NULL`, so the F6 fairness sort runs it
-FIRST; only the second slot reaches task 24, which is the row that actually exercises F20.
-**Why the deadline is hard:** `AGI_M1_shopify` next fires Mon 2026-08-03, which is W32.
-`queue_mission_tasks()` dedups on `[<week>][seed N]`, so it will look for W32 specs, create fresh
-rows, and never touch the W31 ones — and `expire_stale_parked()` only collects `quota_wait`, not
-`queued`. Left alone, tasks 24/25/26 become permanently orphaned `queued` rows that count as
-`pending` in every future fitness window. If the run does not happen before then, set them back to
-`failed` so the record stays honest.
+**F20 PROOF: RESOLVED 2026-07-28.** Ran overnight (`AGI_M1_F20proof`, deleted post-verification —
+tasks 24/25 first at 02:15, task 26 after an operator-approved cap raise). Confirmed the fix: the
+structural objections that caused W31's original 0/3 (missing diff section, no NEW flags, <2
+product URLs) are gone from every retry. Along the way it surfaced and fixed five further defects
+in the machinery that JUDGES the work, none in the work itself — see `docs/HARDENING.md`:
+- **F21/F22/F22b** — retries were erasing prior token accounting and the critic's review history;
+  the daily budget counter was measuring the wrong day; two individually-correct fixes for these
+  composed into a third bug (parking a task re-dated its old spend to today).
+- **F23/F23c** — citecheck falsely accused sound research of fabrication: it read only 9% of large
+  pages and did bare substring matching that broke on formatting (`$14` vs `$ 14`), and a URL regex
+  swallowed trailing `<br>` tags into 4 of 6 "unreachable" citations on the synthesis task.
+- **F24** — admission control: refuses a task before it starts if its predicted cost won't fit the
+  remaining daily budget, rather than discovering the overshoot after the fact (how 2026-07-27 hit
+  360% of the old cap in one call).
+- **F25** — found by the FIRST real operator-style spot-check, which failed two deliverables the
+  automated critic had just passed: a bare substring check let `"19"` match inside `"$194"`, and
+  task 24 quoted a price sentence that does not exist on its cited page. Confidence-level semantics
+  and a verbatim-quotation rule were added to the worker prompt as the corresponding fix.
+- **F26/F27/F28** — JSON-LD parsing added to citecheck (real, but honestly: it did not change any
+  outcome tonight, since F23's raised byte cap already covered the one case that motivated it); a
+  found-not-fixed risk documented (raw substring matching can confirm the right digits for the
+  wrong reason — 4 unrelated matches for "129" on one real page); and spot-checks the assistant
+  performs are now flagged `spot_checked_ai` in the scorecard, since they are not independent of
+  the system they're checking, matching the theme running through every incident in this file.
+
+**W31 final state:** completion 43%, accuracy 33% (3 spot-checks, all flagged AI-performed pending
+operator confirmation — F28), fitness 0.60. Not fabricated-high, not silently corrected without a
+trail — every verdict change carries an audit note explaining why.
 
 **Lesson-pool note (2026-07-27):** lesson_candidates #5/#6/#7 (mission 001) were retracted — they
 recorded the three F20 failures, i.e. a harness defect, not an analyst technique. Left in the pool
@@ -110,22 +114,15 @@ around a bug that no longer exists, then inject it into every future 001 prompt.
 with a `promoted_to` retraction marker (audit trail intact); mission 001 now contributes nothing to
 the pool, and only 002 (3 lessons) is above the drafting bar.
 
-**W31 unattended-cycle watchlist** (verify after each cron fires, don't just assume): Mon 04:00
-mission 001 — the 4 tasks stuck since 2026-07-20 (task 16 `quota_wait`, 17-19 never-attempted)
-should now be attempted FAIRLY (F6 fix: untried seeds go first) rather than seed 1 perpetually
-eating the only shot before the others are ever tried; if quota runs out mid-mission, expect the
-F9 failover to reach `gemma4:12b` rather than parking outright — check `model_used` on any `done`
-row for `gemma4:12b` and treat that deliverable as spot-check-priority (an escalation with
-`trigger="model_failover"` fires automatically, but a human read is still warranted for a
-smaller/local model's output). Wed 04:00 mission 002 runs its set. Sun 03:30/04:00 canaries +
-scorecard should fire even if the laptop is on battery (A1 fix) — if `Last Result` on either task
-is still nonzero after a fire, don't assume it's the battery fix regressing: check
-`Principal.LogonType` first (`Get-ScheduledTask -TaskName AGI_M1_* | select TaskName,
-@{n='LogonType';e={$_.Principal.LogonType}}`) — as of this writing it's still `Interactive` on
-all 5 and the operator-duty fix above has likely not been run yet, which is the far more probable
-cause of a refusal than the already-verified battery settings drifting back. Zero
-`runs/quarantine_*.json` files at any point (containment guard) remains the one non-negotiable
-signal — anything else is a normal operating variance.
+**Unattended-cycle watchlist, forward-looking:** Wed 04:00 mission 002 runs its set. Sun 03:30/04:00
+canaries + scorecard fire on both `S4U` LogonType and battery-agnostic power settings (both verified
+2026-07-28 — see the ignition note above); if `Last Result` on either task is ever nonzero again,
+re-check `Principal.LogonType` first (`Get-ScheduledTask -TaskName AGI_M1_* | select TaskName,
+@{n='LogonType';e={$_.Principal.LogonType}}`) since `Register-ScheduledTask` defaults new/re-created
+tasks back to `Interactive` — the standing rule noted above, not a regression in the fix itself.
+Zero `runs/quarantine_*.json` files at any point (containment guard) remains the one non-negotiable
+signal — anything else is a normal operating variance. Mon 2026-08-03 04:00 is W32's first real
+fire under all of F20-F28 — the first fully unattended run since tonight's manual proof.
 
 ## M1 acceptance (all must hold — HARNESS_DESIGN.md §7)
 - ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks ·

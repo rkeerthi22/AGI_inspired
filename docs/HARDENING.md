@@ -820,21 +820,59 @@ mutation. Same pass also closed **F6, F9, and F15** (all three above) as direct 
 risks to a clean promotion cycle, and verified the promotion machinery itself end-to-end against
 the live pool and an isolated auto-rollback rehearsal (see `promote.py review --dry`,
 `newest_skill_below_baseline()`/`cmd_rollback()` proof under F15, above). See
-`docs/INCIDENTS.md` for the full incident writeup. **Follow-on found the same day, NOT yet
-fixed:** independently re-checked all 5 tasks afterward and found `Principal.LogonType =
+`docs/INCIDENTS.md` for the full incident writeup. **Follow-on found the same day, RESOLVED
+2026-07-27:** independently re-checked all 5 tasks afterward and found `Principal.LogonType =
 Interactive` still set on every one — a second, independently-documented cause of the exact same
-Win32 4320 refusal, untouched by the battery fix above. The crons can still silently refuse to
-fire whenever the machine is locked/no one is logged in, battery state aside. Needs an elevated
-`Set-ScheduledTask -Principal ... -LogonType S4U` — blocked in-session by UAC token filtering
-(`Access is denied`), so this is an operator action, not a code fix. Full writeup + exact command:
-`docs/INCIDENTS.md`, "2026-07-27 — follow-on: the battery fix left the real ignition blocker
-untouched." **Two things this pass explicitly did NOT
+Win32 4320 refusal, untouched by the battery fix above. Needed an elevated
+`Set-ScheduledTask -Principal ... -LogonType S4U`, which this session could not apply itself
+(`Access is denied` under UAC token filtering). The operator ran it elevated; a first reported
+success did NOT independently verify (`docs/INCIDENTS.md`'s second follow-on entry — the report was
+consistent with a non-elevated run whose per-task errors didn't halt the loop). Re-issued with
+explicit per-task try/catch, an elevation guard, and `AGI_M1_*` enumeration instead of five
+hardcoded names (which would have missed the one-time `AGI_M1_F20proof`, registered hours later for
+the same night's proof run). The operator re-ran it; independently confirmed via two separate read
+paths (`Get-ScheduledTask` after a forced module reload, and `schtasks /query /xml`) — both report
+`S4U` on all 6 tasks. Both independent causes of the Win32 4320 refusal are closed. **Two things
+this pass explicitly did NOT
 close, surfaced rather than silently skipped:** no git remote is configured
 (`git remote -v` empty), so recovery stays local-only — CLAUDE.md's "nightly backup + `git push`
 = recovery" is still partly aspirational until one is added, which needs an operator choice
 (external service + auth), not a code fix; and the F17 clock-mismatch class was reconfirmed live
 in `weekly_fitness()`'s window boundary (see F17, above) but not fixed in this pass — handed off
 as a separate follow-up rather than expanding this pass's approved scope.
+
+**Phase 2 go-live — 2026-07-28.** W31's first real fire scored 0/3 on mission 001, and the
+mechanism was the on-ramp's own remaining gap: worker prompts included the fairness/failover/audit
+fixes above but never the mission's `## Done-definition` — the critic grades against it, the worker
+never saw it (**F20**, P0). Proving the fix live surfaced five further defects, all in the
+machinery that judges the work rather than the work itself: retries silently erasing prior token
+accounting and the critic's review history (**F21**), the daily budget counting the wrong day and
+then two individually-correct fixes for that composing into a third bug (**F22, F22b**), and
+citecheck falsely accusing sound research of fabrication via byte-cap truncation, format-brittle
+matching, and a URL regex that swallowed trailing HTML tags (**F23, F23c**) — proven by re-judging
+the *same, unchanged* deliverables on corrected evidence: two verdicts flipped FAIL→PASS with no
+work redone. Admission control (**F24**) closes the cap's last real gap: refusing a task before it
+starts if its predicted cost cannot fit the remaining budget, since a hermes subprocess cannot be
+stopped mid-research once admitted.
+
+The most consequential result came from the *first real operator-style spot-check*, which failed
+two deliverables the automated critic had just passed: a bare substring match let `"19"` verify
+against a page whose only prices were `$16`/`$24`/`$194`/`$296`, and one deliverable quoted a price
+sentence that does not exist on its cited page — a fabricated quotation the mechanical check could
+not catch (**F25**). Confidence-level semantics ("3 means you loaded the page and read the value")
+and a verbatim-quotation rule were added to the worker prompt as the direct response. JSON-LD
+parsing was added to citecheck for structured (schema.org) values (**F26**) — genuinely built and
+tested, but an honest correction is on record: it did not change any outcome that night, since
+F23's raised byte cap already covered the one case that motivated it. Verifying it surfaced a
+distinct, unfixed risk — raw substring matching can confirm the right digits for the wrong reason,
+4 unrelated matches for "129" on one real page (**F27**, found, not fixed — no live wrong-verdict
+evidence yet). Finally, spot-checks the assistant performs on the operator's behalf are now flagged
+(`spot_checked_ai`) in the scorecard rather than read as indistinguishable from an independent
+check (**F28**) — the same failure shape as the 2026-07-18 rogue-write incident, one layer up.
+
+**W31 closed at:** completion 43%, accuracy 33% (3 spot-checks, all AI-performed pending operator
+confirmation), fitness 0.60 — honestly low, every correction carrying an audit trail, not a claim
+of a clean night.
 
 **Phase 2 — W31 promotion under hardened conditions.** H7 (still open — candidate-note template
 constraints / F10 injection-surface hardening was not part of this pass either) remains the one
@@ -891,11 +929,15 @@ M2 breaks three current assumptions that need design work, not just a new missio
 ## Note on scope
 This document started as an audit + blueprint; sections are updated in place as work lands, each
 marked IMPLEMENTED + PROVEN with the date and what was actually verified (never claimed from
-code-reading alone — see CLAUDE.md's verification ladder). As of 2026-07-27: Phase 0 (H1, H2, H3,
-H9) and Phase 1 (H4, F7/F18, the token half of H6, H13/F13) are done, and the Phase 2 on-ramp
-closed F6, F9, and F15, and F19 closed the reconfirmed F17 clock-mismatch class in
-`weekly_fitness()`'s window boundary (found and fixed same day — it was worse than first scoped,
-see F19). Also fixed the cron battery-refusal bug that had silently broken the promotion loop's
-own ignition. Still open: H7 (candidate-note injection hardening — the roadmap's own stated
-precondition for enabling the promotion gate), the USD half of F8, no git remote (recovery is
-local-only), and Phase 2.5 onward (runtime abstraction, M2).
+code-reading alone — see CLAUDE.md's verification ladder). As of 2026-07-28: Phase 0 (H1, H2, H3,
+H9) and Phase 1 (H4, F7/F18, the token half of H6, H13/F13) are done. The Phase 2 on-ramp closed
+F6, F9, F15, and F19 (the reconfirmed F17 clock-mismatch class in `weekly_fitness()`'s window
+boundary — worse than first scoped), fixed the cron battery-refusal bug, and its LogonType
+follow-on is now also closed (independently reverified — see the Phase 2 on-ramp entry above; a
+first reported fix did not verify and is documented as its own lesson). Phase 2 go-live
+(2026-07-28) fixed F20 through F26 and F28, found F27 without fixing it (no live wrong-verdict
+evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
+Still open: **H7** (candidate-note injection hardening — the roadmap's own stated precondition for
+enabling the promotion gate; no skill has been promoted yet, so this has not yet been forced), the
+USD half of F8, **F27** (raw substring matching's coincidental-match risk), no git remote (recovery
+is local-only), and Phase 2.5 onward (runtime abstraction, M2).
