@@ -480,6 +480,33 @@ composing individually-verified changes needs its own test, because neither chan
 the interaction; and a fix to a data-integrity bug must be run, never eyeballed — the code read
 exactly like a working fix.
 
+### F25 — Substring matching verified claims that were false · **P1 · PROVEN by spot-check, fixed 2026-07-28**
+The first real operator-style spot-check (tasks 24, 25) failed both deliverables the automated
+critic had just passed — and the gap was the literal check itself. It confirms a *string appears
+somewhere on the page*, not that it appears *as the claimed fact*. `"19"` is a substring of
+`"$194"`, so "PromptHero Starter $19/mo" (confidence 3) verified cleanly against a page whose only
+prices are $0/$16/$24/$59/$99/$194/$296. F23's normalisation made this worse: stripping `$` and
+whitespace to fix false negatives also made short numerics match more places.
+
+Worse was found by reading rather than matching: task 24 presents
+`"$14 for your first month — then $19/mo. Cancel anytime."` as a **direct quotation** at confidence
+3. The cited page's entire visible text is `$100 / $14 / $3.99 / $9.99` — no `$19`, no "first
+month"; it advertises a flat `$14/mo`. citecheck passed it because `$14` does appear. A fabricated
+quotation attributed to a real source is invisible to any substring test.
+
+**Fixed**: numeric literals now require a token boundary — a digit run adjacent to more digits is a
+different number, not evidence. Thousands separators are still collapsed *inside* numbers so
+rendering differences match, without gluing neighbours together the way whole-string normalisation
+did. 10 assertions: the three false positives now fail, all seven F23 cases still pass.
+
+**Lesson:** three defects in this one checker in a single night (F23 truncation, F23c URL
+corruption, F25 substring) all shared a root: it was written to answer "does this string exist"
+when the question is "does this page support this claim". Those diverge in both directions, and the
+mechanical check can only ever answer the first. Confirming a literal means a claim is
+*supportable*, never that it is true. The operator spot-check is not a formality on top of the
+critic — it is the only layer that reads claim against source, and it caught what every automated
+layer passed.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,

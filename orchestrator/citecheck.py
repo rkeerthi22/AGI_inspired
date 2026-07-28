@@ -101,15 +101,32 @@ def _literal_present(literal: str, body: str) -> bool:
     Normalising away whitespace, commas, currency symbols and NBSP on BOTH sides keeps
     the check meaningful while removing that whole class of false accusation.
 
-    Deliberately still a substring test, so it stays advisory evidence rather than
-    proof: a bare number can coincidentally appear elsewhere on a page. That is
-    acceptable because is_hard_fail() keys on unreachable citations only -- the literal
-    signal informs the critic's judgment, it never fails a deliverable by itself."""
+    F25 (docs/HARDENING.md): numeric literals additionally require a TOKEN boundary.
+    F23's normalisation fixed false negatives but bought false positives with them: "19"
+    is a substring of "$194", so a claimed "Starter $19/mo" verified happily against a
+    page whose only prices are $16/$24/$194/$296. Caught by the 2026-07-28 spot-check on
+    tasks 24/25, where several confidence-3 prices "verified" against pages that do not
+    contain them. A digit run adjacent to more digits is a different number, never
+    evidence for this one.
+
+    Still advisory evidence rather than proof, even so: a standalone number can appear on
+    a page for unrelated reasons, and no substring test can tell "the Starter plan costs
+    $19" from "19 appears here". That is acceptable because is_hard_fail() keys on
+    unreachable citations only -- the literal signal informs the critic's judgment and
+    never fails a deliverable by itself. Confirming a number means the claim is
+    SUPPORTABLE, not that it is true; only a reader comparing claim to page can do that,
+    which is exactly what the operator spot-check is for."""
     low, lit = body.lower(), literal.lower().strip()
+    core = _NORM_RE.sub("", lit)
+    if re.fullmatch(r"\d[\d.]*%?", core):
+        # Collapse thousands separators inside numbers only ("42,000" -> "42000") so
+        # rendering differences still match, without gluing neighbouring numbers together
+        # the way whole-string normalisation would ("$16 $24" -> "1624").
+        return re.search(rf"(?<![\d.]){re.escape(core)}(?![\d])",
+                         re.sub(r"(?<=\d),(?=\d)", "", low)) is not None
     if lit in low:
         return True
-    norm_lit = _NORM_RE.sub("", lit)
-    return bool(norm_lit) and norm_lit in _NORM_RE.sub("", low)
+    return bool(core) and core in _NORM_RE.sub("", low)
 
 
 def _resolve_safety(hostname: str) -> str | None:
