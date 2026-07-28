@@ -761,9 +761,24 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     brief_block = "\n\n".join(
         f"### {p.name}\n{p.read_text(encoding='utf-8')[:6000]}" for p in briefs[:6]) or "(none)"
     facts_block = _recent_fact_lines()
+    # F20, extended to synthesis 2026-07-28. This path was deliberately left out of the
+    # original fix because there was no failure evidence for it -- there is now: task 27
+    # failed the same night with the exact F20 signature ("omits the required per-fact
+    # retrieval dates and confidence scores, lacks a dedicated top 'Changes since last
+    # week' diff section"), i.e. graded against a spec it was never shown. The
+    # work-only-from-supplied-material rule below is what keeps this safe: the prompt
+    # already instructs the model to report an absent item as a data gap rather than
+    # invent it, so stating the requirements cannot license fabrication.
+    requirements = deliverable_requirements(mission)
+    requirements_block = (
+        "\n\nREQUIRED SHAPE OF THE DELIVERABLE — a reviewer checks your output against "
+        "exactly these points, and a missing one is a FAIL even when the analysis itself "
+        "is sound. Where the supplied material cannot support one of them, say so "
+        f"explicitly as a data gap rather than inventing it:\n{requirements}"
+        if requirements else "")
     prompt = (
         f"You are a research analyst. Objective: {mission_objective(mission)}\n\n"
-        f"YOUR TASK (one task only):\n{row['spec']}{baseline_note}\n\n"
+        f"YOUR TASK (one task only):\n{row['spec']}{requirements_block}{baseline_note}\n\n"
         "Work ONLY from the material below — this week's research briefs and the fact ledger "
         "(current + prior week). Cite the source URLs already present in the material. Do NOT "
         "invent facts or sources that are not in the material. If a requested item is absent "

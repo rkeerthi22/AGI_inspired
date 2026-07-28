@@ -36,7 +36,13 @@ MAX_BYTES = 400_000
 DEAD_FRAC_HARD_FAIL = 0.34   # >1/3 of checked citations unreachable -> mechanical fail
 MIN_CHECKED_FOR_HARD_FAIL = 3  # don't hard-fail on a tiny, noisy sample
 
-_URL_RE = re.compile(r'https?://[^\s\)\]\}>"\']+')
+# F23c (docs/HARDENING.md): `<` must be excluded or an inline HTML tag is swallowed into
+# the URL. Workers emit markdown containing `<br>`, so `...fun-3d-icons<br>` extracted as
+# `https://...fun-3d-icons<br`, which of course 404s. Measured 2026-07-28: 4 of the 6
+# "unreachable" citations that MECHANICALLY hard-failed task 27 were this corruption --
+# dead_frac 0.40 (over the 0.34 line) instead of the true ~0.13. A hard fail needs no LLM
+# call, so a regex bug alone was rejecting deliverables outright.
+_URL_RE = re.compile(r'https?://[^\s\)\]\}<>"\']+')
 _NUM_RE = re.compile(r'\$?\d[\d,]*\.?\d*%?')
 _PROPER_RE = re.compile(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b')
 
