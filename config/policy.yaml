@@ -20,7 +20,15 @@ workspace_confinement:
 cost_caps:
   usd_per_task_target: 0.50
   usd_per_day_hard_stop: 5.00     # orchestrator halts + escalates on breach (paid providers)
-  tokens_per_day_hard_stop: 12000000  # F8 (docs/HARDENING.md): Ollama reports no $, cost_usd
+  tokens_per_day_hard_stop: 20000000  # F8 (docs/HARDENING.md): Ollama reports no $, cost_usd
+                                      # RAISED 12M -> 20M 2026-07-28 on explicit operator
+                                      # authorisation ("the budget, i got em covered") so the
+                                      # last W31 seed (task 26, est. 8.5M) could run on top of
+                                      # the night's 7.2M. Raised rather than bypassed on
+                                      # purpose: F24's admission control is only worth having
+                                      # if the cap it reads reflects real operator intent, and
+                                      # a one-off override would have taught the guard nothing.
+                                      # Revisit once a full week's real consumption is known.
                                       # is always 0.0 -- token count is the real consumption
                                       # signal until a paid key exists.
                                       # RAISED 3M -> 12M on 2026-07-27 against measured data,
