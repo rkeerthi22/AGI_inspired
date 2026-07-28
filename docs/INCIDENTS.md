@@ -1,5 +1,45 @@
 # Incidents
 
+## 2026-07-28 — The citation checker failed correct work, and the harness recorded it as the analyst's failure
+
+**What happened:** the F20 proof run completed (tasks 24, 25 — 813s and 685s, no timeout) and both
+FAILED review. The critic's reason was damning and specific: *"multiple high-confidence facts are
+cited to URLs that do not contain the claimed values"* — the signature of a fabricating worker.
+Before accepting that, the newly-persisted critic reasoning trace (its first real use) was read in
+full, and it contained the critic second-guessing its own evidence: *"the mechanical checker
+fetches pages directly, which may also fail to render JS. So the absence of values on rendered
+pages could be a shared limitation."* That doubt was worth a free probe. Fetching the two flagged
+pages showed both were server-rendered and **did** contain the claimed values.
+
+Root cause was two defects in `citecheck.py`, built in Phase 1 as the answer to F3:
+`MAX_BYTES = 20_000` meant only a prefix of each page was searched (`promptbase.com/apps` is
+232,645 chars; the claimed "4.9" is at char 85,999 — 9% of the page was read), and the literal test
+was a bare substring match that broke on meaningless presentation differences (`$14` when markup
+separates symbol from number; `42,000` vs `42000`).
+
+**Impact:** re-running the corrected checker against the **unchanged** deliverables: 14 of 15
+citations verify, `dead_frac` 0.07. Re-judged on corrected evidence, both deliverables **PASS**.
+A full mission day had been scored 0% for a bug in the grader. The W31 fitness record went
+0.0 → 0.286 completion, F 0.35 → 0.45, purely by correcting the judgement — no work was redone.
+Verdicts were corrected in place with an audit note appended (F18 convention), token accounting and
+`finished_at` preserved.
+
+**Also found the same night:** `policy.tokens_used_today()` filtered on `created_at`, so it measured
+tokens *belonging to tasks created today* rather than tokens *spent today*. The 02:15 run burned
+7,219,268 tokens on tasks created the previous day and the guard reported 0 — blind to the entire
+night's spend, and willing to authorise a second full budget on top. Fixed to `finished_at`
+(F22). That is the third independent defect in the same budget guard (F8, F21, F22).
+
+**Lesson:** a verification mechanism that errs in the *accusatory* direction is worse than none,
+because its output is indistinguishable from the failure it claims to detect — "cited value not
+found on page" reads exactly like fabrication, and there is no way to tell the difference without
+going and looking. Two things saved it here, both cheap: the reasoning trace preserved the critic's
+own doubt instead of discarding it with the rest of the deliberation (the one-sentence summary
+would have read as a confident, closed case), and the flagged claim was checkable for free with a
+single fetch. When a grader reports systematic failure across many independent items, suspect the
+grader before the work — and note this one had never been tested against a page larger than its own
+read cap.
+
 ## 2026-07-27 — W31's first real run scored 0/3 because the worker was graded on a spec it never received
 
 **What happened:** The Monday 04:00 `AGI_M1_shopify` cron fired correctly (`Last Result: 0`, log

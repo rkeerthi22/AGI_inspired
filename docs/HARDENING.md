@@ -394,6 +394,53 @@ at 1500s a worker legitimately running 1800s would be declared crash-orphaned by
 `LOCAL_FALLBACK_TIMEOUT_S` (3600s) already exceeds even the raised lease, so a failed-over local
 run can still outlive it — the next instance of this same coupling.
 
+### F22 — The daily token cap measured the wrong day · **P1 · PROVEN, found + fixed 2026-07-28**
+`policy.tokens_used_today()` filtered on `created_at >= datetime('now','start of day')`, which
+measures *tokens belonging to tasks created today* — not *tokens spent today*. Those differ in
+exactly the workflow this harness is built around: park on quota and resume the next day, retry a
+stale row, work a backlog. Measured live: the 02:15 run burned **7,219,268** tokens on tasks 24/25
+(created 07-27, finished 07-28) and `tokens_used_today()` returned **0**. The guard was blind to
+the entire night's spend and would have authorised a second full 12M budget on top of it.
+
+**Fixed**: filter on `finished_at`, the point at which spend is known and recorded. Verified live —
+the same query now returns 7,219,268 with 4.78M headroom. Note this is the *third* independent
+defect found in the same guard (F8 declared-but-unread, F21 erased-by-retry, F22 wrong-clock);
+the in-flight overshoot remains open, so it is still a gate, not a limiter.
+
+### F23 — The citation checker falsely accused correct work of fabrication · **P0 · PROVEN, found + fixed 2026-07-28**
+The mechanical truth signal built in Phase 1 (H4, fixes F3) had two defects that together made its
+literal check unreliable on real pages, and it reported the results as *the claimed value is not on
+the cited page* — which reads to a critic as fabrication.
+
+1. **Truncation.** `MAX_BYTES = 20_000` and the checker read only that prefix.
+   `promptbase.com/apps` is 232,645 chars; the claimed "4.9" sits at char 85,999. The checker saw
+   9% of the page, missed the value, and reported it absent.
+2. **Format intolerance.** A bare `literal.lower() in body.lower()` fails on presentation
+   differences carrying no meaning: the worker claims `$14`, the page renders the symbol and number
+   in separate markup; `42,000` vs `42000`.
+
+**Impact, measured not estimated.** Tasks 24 and 25 were FAILED on this evidence, with the critic
+writing that "multiple high-confidence facts are cited to URLs that do not contain the claimed
+values". Re-running the corrected checker against the **unchanged** deliverables: **14 of 15
+citations verify**, `dead_frac` 0.07, no hard fail. Re-judged on that corrected evidence, both
+deliverables **PASS**. The research was sound the whole time; the harness failed it and then
+recorded the failure as the analyst's.
+
+**Fixed**: `MAX_BYTES` 20_000 → 400_000, and `_literal_present()` retries after normalising
+whitespace/commas/currency symbols on both sides. Deliberately still a substring test, so it
+remains advisory evidence — `is_hard_fail()` keys only on unreachable citations, so the literal
+signal informs the critic and never fails a deliverable alone. Verified: 9 assertions (format
+tolerance, exact-match preserved, genuinely-absent values still report False) plus the two live
+URLs that produced the original false negatives.
+
+**Lesson — the expensive one.** A verification mechanism that is wrong in the *accusatory*
+direction is far more damaging than no mechanism, because its output is indistinguishable from the
+failure it claims to detect: "cited value not found on page" looks exactly like a fabricating
+worker. It cost a full mission day scored at 0% and nearly had three fabricated "lessons" promoted
+into permanent skill notes (see the F20 lesson-pool retraction). H4's own build note said the
+mechanical check is "a genuinely independent signal" — independent is not the same as correct, and
+this one was never tested against a page larger than its own read cap.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,

@@ -126,10 +126,22 @@ def compliance_prompt_block(pol: dict | None = None) -> str:
 def tokens_used_today() -> int:
     # F17 lesson (docs/HARDENING.md): never mix Python-local date math with the
     # DB's UTC clock domain -- compute "today" entirely in SQLite's own clock.
+    #
+    # F22 (docs/HARDENING.md): this filtered on created_at, i.e. it measured "tokens
+    # belonging to tasks CREATED today" rather than "tokens SPENT today" -- and those
+    # differ precisely in the workflow this harness is built around: park on quota,
+    # resume the next day; retry a stale row; work a backlog. Measured live 2026-07-28:
+    # the 02:15 run burned 7,219,268 tokens on tasks 24/25 (created 07-27, finished
+    # 07-28) and tokens_used_today() returned 0, so the daily cap was blind to the
+    # entire night's spend and would have authorised a full second budget on top.
+    # finished_at is when the spend is known and recorded, so it is the honest clock
+    # for a consumption guard. A still-running task contributes nothing either way --
+    # its usage is not known until it returns (the in-flight overshoot noted in
+    # policy.yaml is a separate, still-open gap).
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         row = c.execute(
             "SELECT COALESCE(SUM(tokens_in),0)+COALESCE(SUM(tokens_out),0) FROM tasks "
-            "WHERE created_at >= datetime('now','start of day')").fetchone()
+            "WHERE finished_at >= datetime('now','start of day')").fetchone()
     return row[0] or 0
 
 

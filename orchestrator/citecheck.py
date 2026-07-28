@@ -25,7 +25,14 @@ from urllib.parse import urlparse
 MAX_CITATIONS = 15
 FETCH_TIMEOUT_S = 8
 MAX_WORKERS = 4
-MAX_BYTES = 20_000
+# F23 (docs/HARDENING.md): 20_000 silently made the literal check a coin flip on any
+# real page. Measured 2026-07-28 against the pages this harness actually cites:
+# promptbase.com/apps is 232,645 chars and the claimed "4.9" sits at char 85,999 --
+# the old cap read 9% of the page, missed it, and reported the fact as unsupported.
+# That false evidence went to the critic as "claimed value not found on page", which
+# reads as fabrication, and helped FAIL tasks 24 and 25. Cost of the raise is bounded
+# memory per citation (<=15 citations x 400KB worst case) on a text-only scan.
+MAX_BYTES = 400_000
 DEAD_FRAC_HARD_FAIL = 0.34   # >1/3 of checked citations unreachable -> mechanical fail
 MIN_CHECKED_FOR_HARD_FAIL = 3  # don't hard-fail on a tiny, noisy sample
 
@@ -71,6 +78,34 @@ def extract_citations(text: str) -> list[dict]:
     return out[:MAX_CITATIONS]
 
 
+_NORM_RE = re.compile(r"[\s,$ ]+")
+
+
+def _literal_present(literal: str, body: str) -> bool:
+    """Is the claimed value actually on the page? Exact match first, then a
+    format-tolerant retry.
+
+    F23 (docs/HARDENING.md): the old check was a bare `literal.lower() in body.lower()`,
+    which fails on presentation differences that carry no meaning. Measured live
+    2026-07-28: the worker claimed "$14" and the page contains the price, but not as
+    the contiguous string "$14" -- markup routinely separates a currency symbol from
+    its number (`<span>$</span>14`), and thousands separators differ ("42,000" vs
+    "42000"). Every such mismatch was reported to the critic as the claimed value being
+    absent from its own source, which reads as fabrication rather than as formatting.
+    Normalising away whitespace, commas, currency symbols and NBSP on BOTH sides keeps
+    the check meaningful while removing that whole class of false accusation.
+
+    Deliberately still a substring test, so it stays advisory evidence rather than
+    proof: a bare number can coincidentally appear elsewhere on a page. That is
+    acceptable because is_hard_fail() keys on unreachable citations only -- the literal
+    signal informs the critic's judgment, it never fails a deliverable by itself."""
+    low, lit = body.lower(), literal.lower().strip()
+    if lit in low:
+        return True
+    norm_lit = _NORM_RE.sub("", lit)
+    return bool(norm_lit) and norm_lit in _NORM_RE.sub("", low)
+
+
 def _resolve_safety(hostname: str) -> str | None:
     """Returns None if the host is safe to fetch, else a short reason string.
     Kept distinct from a plain bool so callers can tell a genuinely dead/
@@ -111,7 +146,7 @@ def _fetch_one(cite: dict) -> dict:
             result["reachable"] = 200 <= resp.status < 400
             if cite["literal"] and result["reachable"]:
                 body = resp.read(MAX_BYTES).decode("utf-8", errors="replace")
-                result["literal_found"] = cite["literal"].lower() in body.lower()
+                result["literal_found"] = _literal_present(cite["literal"], body)
     except urllib.error.HTTPError as e:
         result["http_status"] = e.code
         result["reachable"] = False
