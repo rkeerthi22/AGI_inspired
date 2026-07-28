@@ -151,6 +151,44 @@ def token_budget_breached(pol: dict | None = None) -> bool:
     return bool(cap) and tokens_used_today() >= cap
 
 
+def estimated_tokens_for(task_id: int, mission_id: str) -> int | None:
+    """Best evidence of what this task will cost, or None if there is none.
+
+    Prefers the task's OWN recorded spend from a previous attempt -- the single most
+    accurate predictor, and it only exists because F21 stopped retries from zeroing it.
+    Falls back to the largest recent completed task in the same mission (largest, not
+    mean: the point is to avoid admitting something that will not fit, and mission 001's
+    seeds range 0.5M-8.5M, so a mean would wave the expensive ones through)."""
+    with sqlite3.connect(LEDGER_DB, timeout=30) as c:
+        own = c.execute("SELECT tokens_in + tokens_out FROM tasks WHERE task_id=?",
+                        (task_id,)).fetchone()
+        if own and own[0]:
+            return int(own[0])
+        peer = c.execute(
+            "SELECT MAX(tokens_in + tokens_out) FROM tasks WHERE mission_id=? "
+            "AND status IN ('done','failed') AND finished_at >= datetime('now','-21 days')",
+            (mission_id,)).fetchone()
+    return int(peer[0]) if peer and peer[0] else None
+
+
+def budget_insufficient_for(estimate: int | None, pol: dict | None = None) -> bool:
+    """Admission control (F24, docs/HARDENING.md): would starting this task exceed the
+    daily cap, given what we already spent today?
+
+    token_budget_breached() is a pure GATE -- it stops the NEXT task once the cap is
+    already blown, but cannot stop one in flight. That is how 2026-07-27 reached 360% of
+    cap: a single seed spent 8,517,508 against a 3M cap in one uninterruptible call.
+    There is no way to interrupt a hermes subprocess mid-research, so the honest fix is
+    to refuse ADMISSION to work we can already predict will not fit, rather than to
+    pretend we can stop it later. Unknown estimate (no history) admits the task -- the
+    guard never blocks on ignorance, it only acts on evidence."""
+    if not estimate:
+        return False
+    pol = pol or load()
+    cap = pol["cost_caps"].get("tokens_per_day_hard_stop")
+    return bool(cap) and (tokens_used_today() + estimate) > cap
+
+
 # ── manager-call budget (cost_caps.manager_calls_per_day) ─────────────────────
 def _today_key() -> str:
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:

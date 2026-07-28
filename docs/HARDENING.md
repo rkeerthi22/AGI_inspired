@@ -441,6 +441,45 @@ into permanent skill notes (see the F20 lesson-pool retraction). H4's own build 
 mechanical check is "a genuinely independent signal" — independent is not the same as correct, and
 this one was never tested against a page larger than its own read cap.
 
+### F24 — The cap could gate but never refuse; admission control · **P1 · IMPLEMENTED + PROVEN 2026-07-28**
+`token_budget_breached()` is a pure gate: it stops the *next* task once the cap is already blown,
+and cannot stop one in flight. A hermes subprocess is not interruptible mid-research, so that gap
+is not closeable by monitoring — on 2026-07-27 a single seed spent 8,517,508 tokens against a 3M
+cap in one uninterruptible call, reaching 360% of cap.
+
+The honest fix is to refuse **admission** to work already predictable as too large, rather than
+pretend it can be halted later. `policy.estimated_tokens_for()` prefers the task's own recorded
+spend from a previous attempt — the most accurate predictor available, and one that exists *only*
+because F21 stopped retries from zeroing it — falling back to the largest recent completed task in
+the same mission (largest, not mean: mission 001's seeds span 0.5M–8.5M, and a mean waves the
+expensive ones through). An unknown estimate admits the task; the guard acts on evidence, never on
+ignorance.
+
+**Proven end-to-end, zero tokens spent:** with 7,219,268 of 12M used, task 26 (estimate 8,524,468)
+was refused before any worker call — `status=quota_wait`, escalation raised, spend unchanged.
+Tasks 24/25 (4.5M/2.7M) correctly still admit.
+
+### F22b — Two correct fixes composed into a wrong one · **P1 · PROVEN, found + fixed 2026-07-28**
+Found by *running* F24, minutes after shipping F21 and F22 together. F21 made `finish_task()`
+preserve a prior attempt's token accounting; F22 made `tokens_used_today()` sum on `finished_at`.
+Individually both are right. Composed, they were not: parking a task re-stamped `finished_at` to
+now, so the 8,517,508 tokens task 26 had carried since 2026-07-27 were **re-attributed to tonight**.
+The counter jumped 7,219,268 → 15,743,736 with nothing executed, past the 12M cap — the guard would
+then have refused all further work on entirely fictional consumption, and every subsequent park
+would have inflated it further.
+
+Root cause is a semantic one: `finished_at` was being written on any resolution, but parking or
+re-queueing is not an ending. **Fixed**: only a status in `TERMINAL_STATUSES` stamps it; others
+preserve the existing value via `COALESCE`. Verified with 5 assertions (park and interrupted do not
+re-date or inflate; a terminal status still stamps and still counts) plus a live re-run.
+
+**Lesson:** the first attempt at this fix changed the SQL to `COALESCE(?, finished_at)` but left the
+parameter tuple still passing `datetime.now()`, so it coalesced to a non-NULL value every time and
+did nothing. It looked correct in review and failed on the first probe. Two lessons compound here:
+composing individually-verified changes needs its own test, because neither change's test covers
+the interaction; and a fix to a data-integrity bug must be run, never eyeballed — the code read
+exactly like a working fix.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,

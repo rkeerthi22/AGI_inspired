@@ -993,6 +993,23 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         escalate(f"task {tid}: daily token budget exhausted, parked", trigger="cost_cap_breach")
         log(f"task {tid}: quota_wait (token budget)")
         return "quota_wait"
+    # F24 (docs/HARDENING.md): admission control. The check above is a pure gate -- it
+    # stops the next task only AFTER the cap is blown, which is how 2026-07-27 hit 360%
+    # of cap on one uninterruptible 8.5M call. A hermes subprocess cannot be stopped
+    # mid-research, so refuse work we can already predict will not fit instead of
+    # pretending we can halt it later. Evidence comes from this task's own prior spend
+    # (preserved only because F21 stopped retries zeroing it).
+    est = policy.estimated_tokens_for(tid, mission["id"])
+    if policy.budget_insufficient_for(est):
+        ledger.finish_task(tid, artifacts=[], status="quota_wait",
+                           critic_notes=f"parked by admission control: estimated {est:,} "
+                                        f"tokens will not fit today's remaining budget",
+                           append_note=True)
+        escalate(f"task {tid}: estimated {est:,} tokens exceeds remaining daily budget "
+                f"({policy.tokens_used_today():,} already spent) -- parked before starting",
+                trigger="cost_cap_breach")
+        log(f"task {tid}: quota_wait (token budget)")
+        return "quota_wait"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = RUNS / f"task{tid}_worker.usage.json"
     snapshot = db_integrity_snapshot()

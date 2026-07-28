@@ -124,16 +124,27 @@ def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, token
     have a new verdict still pass one and still overwrite. Infra paths should pass
     append_note=True so their marker is added to the review history rather than
     replacing it."""
+    # F22b (docs/HARDENING.md): only a TERMINAL status finishes a task. Parking
+    # (quota_wait) or re-queueing is not an ending, and stamping finished_at for one
+    # silently re-dates the spend it already carries. Found immediately after shipping
+    # F22 + F21 together, by running them: parking task 26 (which holds 8,517,508 tokens
+    # from its 2026-07-27 run) re-stamped finished_at to today, and because F22 makes
+    # tokens_used_today() sum on finished_at, last Monday's spend was re-attributed to
+    # tonight -- the counter jumped 7,219,268 -> 15,743,736 with nothing executed, past a
+    # 12M cap. Two individually-correct fixes composed into a wrong one; the guard would
+    # then refuse all further work on entirely fictional consumption.
+    stamp = (datetime.now().isoformat(timespec="seconds")
+             if status in TERMINAL_STATUSES else None)
     with _conn() as c:
         c.execute(
-            "UPDATE tasks SET status=?, finished_at=?, artifacts=?, "
+            "UPDATE tasks SET status=?, finished_at=COALESCE(?, finished_at), artifacts=?, "
             "cost_usd=COALESCE(?, cost_usd), tokens_in=COALESCE(?, tokens_in), "
             "tokens_out=COALESCE(?, tokens_out), "
             "critic_verdict=COALESCE(?, critic_verdict), "
             "critic_notes=CASE WHEN ?=1 THEN TRIM(COALESCE(critic_notes,'') || ' | ' || ?) "
             "             ELSE COALESCE(?, critic_notes) END, "
             "interventions=?, intervention_types=? WHERE task_id=?",
-            (status, datetime.now().isoformat(timespec="seconds"),
+            (status, stamp,
              json.dumps(artifacts), cost_usd, tokens_in, tokens_out,
              critic_verdict,
              1 if append_note else 0, critic_notes or "", critic_notes,
