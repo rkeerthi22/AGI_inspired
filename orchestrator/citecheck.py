@@ -15,6 +15,7 @@ straight into a future prompt" as an indirect prompt-injection path; this keeps
 that surface closed while still getting real, non-LLM-judged truth signal.
 """
 import ipaddress
+import json
 import re
 import socket
 import urllib.error
@@ -45,6 +46,8 @@ MIN_CHECKED_FOR_HARD_FAIL = 3  # don't hard-fail on a tiny, noisy sample
 _URL_RE = re.compile(r'https?://[^\s\)\]\}<>"\']+')
 _NUM_RE = re.compile(r'\$?\d[\d,]*\.?\d*%?')
 _PROPER_RE = re.compile(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b')
+_JSONLD_RE = re.compile(
+    r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', re.I | re.S)
 
 _PRIVATE_NETS = [ipaddress.ip_network(n) for n in (
     "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
@@ -129,6 +132,54 @@ def _literal_present(literal: str, body: str) -> bool:
     return bool(core) and core in _NORM_RE.sub("", low)
 
 
+def _flatten_jsonld(obj) -> list[str]:
+    """Every leaf scalar in a parsed JSON-LD structure, as strings. Keys are dropped
+    (they're schema.org field names like 'price'/'ratingValue', not claim content);
+    dicts and lists are walked generically so `@graph` arrays and nested `offers`/
+    `aggregateRating` blocks are covered without knowing the schema in advance."""
+    if isinstance(obj, dict):
+        out = []
+        for v in obj.values():
+            out.extend(_flatten_jsonld(v))
+        return out
+    if isinstance(obj, list):
+        out = []
+        for v in obj:
+            out.extend(_flatten_jsonld(v))
+        return out
+    if isinstance(obj, (str, int, float)) and not isinstance(obj, bool):
+        return [str(obj)]
+    return []
+
+
+def _jsonld_text(body: str) -> str:
+    """F26 (docs/HARDENING.md): many real prices/ratings are never in a page's visible
+    text at all -- they arrive via client-side rendering from structured data the server
+    DOES send. Measured live 2026-07-28: notion.com/templates/ultimate-brain's rendered
+    text has no '129' anywhere, but its `<script type="application/ld+json">` block
+    contains `"offers":{"...","price":129}` verbatim. The prior citecheck treated that
+    page as not supporting a real, true, worker-verified $129 claim -- indistinguishable
+    from an actual fabrication in the evidence table.
+
+    Best-effort by design: many real pages ship JSON-LD that isn't quite valid JSON
+    (trailing commas, unescaped quotes); a block that fails to parse is skipped, never
+    raised, so one malformed block can't take down the whole citation check. Values only,
+    joined with spaces -- safe to concatenate onto body text before the existing
+    _literal_present() token-boundary check without risking two numbers gluing together
+    (F25)."""
+    values = []
+    for m in _JSONLD_RE.finditer(body):
+        raw = m.group(1).strip()
+        if not raw:
+            continue
+        try:
+            data = json.loads(raw)
+        except (json.JSONDecodeError, ValueError):
+            continue
+        values.extend(_flatten_jsonld(data))
+    return " ".join(values)
+
+
 def _resolve_safety(hostname: str) -> str | None:
     """Returns None if the host is safe to fetch, else a short reason string.
     Kept distinct from a plain bool so callers can tell a genuinely dead/
@@ -169,7 +220,11 @@ def _fetch_one(cite: dict) -> dict:
             result["reachable"] = 200 <= resp.status < 400
             if cite["literal"] and result["reachable"]:
                 body = resp.read(MAX_BYTES).decode("utf-8", errors="replace")
-                result["literal_found"] = _literal_present(cite["literal"], body)
+                # F26: search visible/raw text AND structured JSON-LD data together, so
+                # a value that only exists in a page's <script type="application/ld+json">
+                # block (client-rendered, never in the HTML text) still counts as support.
+                result["literal_found"] = _literal_present(
+                    cite["literal"], body + " " + _jsonld_text(body))
     except urllib.error.HTTPError as e:
         result["http_status"] = e.code
         result["reachable"] = False

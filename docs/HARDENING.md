@@ -507,6 +507,62 @@ mechanical check can only ever answer the first. Confirming a literal means a cl
 critic — it is the only layer that reads claim against source, and it caught what every automated
 layer passed.
 
+### F26 — Structured (JSON-LD) values were invisible to the literal check · **P2 · IMPLEMENTED + PROVEN 2026-07-28**
+Some page values live only in a `<script type="application/ld+json">` block — e.g.
+`notion.com/templates/ultimate-brain` carries `"offers":{"price":129}` and `"ratingValue":4.87` in
+structured data. `_literal_present()` only ever searched raw response text.
+
+**Fixed**: `_jsonld_text()` extracts every `application/ld+json` block, parses it, and flattens all
+leaf scalars (keys dropped — they're schema field names, not claim content) into a search string
+merged with the raw body before the existing check runs. Malformed JSON-LD (common on real pages)
+is skipped, never raised. 11 assertions: value-only-in-JSON-LD found, absent values still absent,
+malformed blocks don't crash, pages with no JSON-LD are unaffected, `@graph` arrays and multiple
+script blocks both parsed, bool/null leaves excluded.
+
+**Honest correction to how this was first framed**: it does *not* retroactively explain why task 26
+passed. Fresh live re-fetch, tested empirically rather than assumed: notion.com's JSON-LD sits at
+char 10,732, well inside F23's already-raised 400,000-byte window, so raw-body search alone already
+found `$129` and `4.9` — this feature changed nothing for that specific page today. Its real value
+is pages where relevant JSON-LD falls outside whatever the byte cap is (this module reads JSON-LD
+from the SAME truncated buffer as everything else — no separate wider fetch — so it does not protect
+against JSON-LD past `MAX_BYTES` on very large pages), and giving a clean, schema-typed signal that
+doesn't depend on markup rendering. A claim that "seemed obviously true" turned out to need the same
+verify-before-stating discipline as everything else in this file.
+
+### F27 — Raw substring matching can confirm the right digits for the wrong reason · **P2 · FOUND, NOT FIXED 2026-07-28**
+Found while verifying F26, not sought. On the same live `notion.com` page, the token-boundary-aware
+search for `"129"` (F25) matches **4 separate, unrelated locations** — SVG icon path coordinates, an
+analytics score field, pixel dimensions — none of them the price. `literal_found=True` was correct
+on this page only because the JSON-LD price also happens to be 129; a page where the real price
+were absent but an SVG path or tracking pixel coincidentally contained the same digits would report
+identical, confidently-wrong evidence to the critic.
+
+**Not fixed this pass.** No live case has yet produced an actual wrong pass/fail from this — every
+other finding tonight met that bar before a fix was designed, and a rushed mitigation risks the
+exact false-negative/false-positive trade-off mistake F25 already made once. Recorded so it isn't
+silently lost: a plausible bounded fix (require a numeric match to sit in prose-like context, not
+inside long digit/coordinate runs or a `<script>`/`<path>` payload) exists but is unbuilt and
+untested against real failure evidence.
+
+### F28 — A spot-check performed by the assistant is schema-identical to an operator's · **P1 · IMPLEMENTED + PROVEN 2026-07-28**
+`human_verdict` exists specifically to be *independent* of the system it's grading — spotcheck.py's
+own docstring calls it "the missing input for the fitness accuracy term." On 2026-07-28 the assistant
+fetched real sources, compared claims against them, and recorded three verdicts through that exact
+CLI. The tool cannot tell an operator's keystroke from an assistant acting on the operator's behalf;
+both write the identical `human_verdict`/`critic_notes` columns. This is the same failure shape as
+the 2026-07-18 rogue-write incident and the F5 manager==critic note — a check that's supposed to be
+independent, quietly not being independent — one layer up.
+
+**Fixed, without touching the locked formula.** `weekly_fitness()` gained `spot_checked_ai`, counting
+rows whose `critic_notes` contain the literal marker `"AI-PERFORMED CHECK"` — now a documented
+convention in spotcheck.py's own docstring, not an ad hoc note. `accuracy`/`fitness`/`W` are
+unchanged (§3.2 locks them for 8 weeks; discounting these rows would itself be a formula change this
+session has no standing to make). Instead, both `scorecard.render_md()` and `telegram_line()` now
+surface the count as a visible caveat — "Accuracy (spot-checked 3, 3 AI-performed pending operator
+confirmation): 33%" — so the number can never be read as more independent than it actually is.
+Verified live: current W31 state correctly reports `spot_checked_ai: 3` (all three of tonight's
+checks), rendering into both the markdown scorecard and the Telegram line.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,
