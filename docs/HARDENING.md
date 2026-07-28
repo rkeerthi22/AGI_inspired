@@ -354,6 +354,46 @@ not protecting quota, it was parking honest work. The in-flight overshoot remain
 open**: a single runaway task can still exceed the daily cap several times over before anything
 notices.
 
+### F21 — A retry erased the previous attempt's accounting AND its review history · **P1 · PROVEN, found + fixed 2026-07-28**
+Found by running the F20 proof, which is the only reason it surfaced: `finish_task()`'s
+consumption and verdict columns defaulted to `0`/`0.0`/`NULL` and were written unconditionally,
+but **every** infra path (timeout, quota park, infra_failed, short-output) omits them. So retrying
+a task overwrote whatever the first attempt had recorded.
+
+Measured live, not reasoned: task 24 held `tokens_in=1,781,395` from its 04:00 run; tonight's
+retry timed out and reset it to `0`, and `policy.tokens_used_today()` — which SUMs that column —
+fell `10,786,463 → 9,001,225`, exactly the erased amount. The direction is the dangerous one: every
+retry made the daily budget guard protect **less**, and a timed-out run's real spend (tokens are
+burned even when no usage file comes back) vanished from the record entirely.
+
+The worse half was `critic_verdict`. An infra failure says nothing about content, yet writing
+`NULL` erased the prior review — and `run_task()`'s retry-with-feedback block is gated on
+`critic_verdict == 'fail'`. Task 24's timeout turned `fail` + 337 chars of specific objections
+into `NULL` + `'worker timeout'`, so the retry the whole exercise existed to perform would have
+run **without the reviewer's objections**, silently. A mechanism built to make the loop learn was
+disabled by an unrelated timeout.
+
+**Fixed**: consumption columns and `critic_verdict` now write through `COALESCE(?, col)`, so
+omitting preserves; `finish_task(..., append_note=True)` appends to `critic_notes` instead of
+replacing, and all 11 infra/quota call sites pass it. `cost_usd` was fixed in the same line
+despite being inert under Ollama's `$0` reporting — it is the identical defect and would start
+erasing real money the day a paid key is added (the F17→F19 lesson: fix the class, not the
+instance you happened to measure). Verified on DB copies: 13 assertions across two scripts,
+covering preservation on infra failure, append-not-replace on notes, and that a genuine new
+verdict still overwrites cleanly with no append leakage.
+
+**Related, same night — `WORKER_TIMEOUT_S` 900 → 1800 with `LEASE_SECONDS` 1500 → 2400.** The
+first post-F20 run of mission 001 seed 1 hit the 900s ceiling with zero output. Leading hypothesis
+is that F20 itself caused it: 900s was calibrated on tasks that never saw the done-definition and
+therefore did far less work (~4.6 min / 35 api_calls); handing the worker the real spec multiplies
+the browser work. **Causation is unconfirmed** — no usage file, session dump, or partial output
+survived the kill, so a hermes hang or cloud slowness remain live alternatives, and the raise is
+deliberately framed as the discriminating test rather than a fix. The lease had to move with it:
+at 1500s a worker legitimately running 1800s would be declared crash-orphaned by
+`reconcile_interrupted_tasks()` and burn one of its 3 `MAX_TASK_ATTEMPTS`. **Still open:** gemma's
+`LOCAL_FALLBACK_TIMEOUT_S` (3600s) already exceeds even the raised lease, so a failed-over local
+run can still outlive it — the next instance of this same coupling.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,

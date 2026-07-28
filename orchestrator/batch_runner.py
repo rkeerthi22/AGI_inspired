@@ -33,7 +33,19 @@ RUNS = ROOT / "runs"
 MISSIONS = ROOT / "missions"
 ESCALATIONS = ROOT / "workspace" / "ESCALATIONS.md"
 MAX_WORKER_CALLS_PER_RUN = 12          # policy cost cap proxy (Ollama returns no $)
-WORKER_TIMEOUT_S = 900
+# Raised 900 -> 1800 on 2026-07-28. 900s was calibrated against UNDER-SPECIFIED tasks: before
+# F20 the worker never received the mission's done-definition, so it did far less research
+# than it was graded on (mission 001 seed 1 finished in ~4.6 min / 35 api_calls that way).
+# Handing it the real spec -- >=2 product URLs per competitor, NEW-vs-last-week flags, promo
+# check, review sentiment with rating AND recurring theme, plus a diff section, plus "address
+# each prior objection" -- multiplies the browser work, and the first post-F20 run of that
+# same seed hit the 900s ceiling with zero output (task 24, infra_failed, no usage file).
+# CAUSATION IS UNCONFIRMED: no usage file, session dump, or partial output survived the kill,
+# so a hermes hang or cloud slowness are still live alternatives. This raise is the cheap
+# discriminating test -- if a task now completes in 15-25 min the size hypothesis holds; if it
+# still dies at 1800s the cause is elsewhere and the ceiling is not the problem.
+# COUPLED: ledger.LEASE_SECONDS must stay > this + ~360s (raised to 2400 in the same commit).
+WORKER_TIMEOUT_S = 1800
 
 _log_file = None
 
@@ -761,7 +773,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         "Reply with ONLY the deliverable markdown.")
     if policy.token_budget_breached():
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                           critic_notes="policy.yaml tokens_per_day_hard_stop reached — parked")
+                           critic_notes="policy.yaml tokens_per_day_hard_stop reached — parked",
+                           append_note=True)
         escalate(f"task {tid}: daily token budget exhausted, parked (synthesis)",
                 trigger="cost_cap_breach")
         log(f"task {tid}: quota_wait (token budget)"); return "quota_wait"
@@ -777,17 +790,20 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
             prompt, worker_cfg, log_prefix=f"task {tid} (synthesis)")
     except urllib.error.HTTPError as e:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes=f"synthesis HTTP {e.code}")
+                           critic_notes=f"synthesis HTTP {e.code}",
+                           append_note=True)
         log(f"task {tid}: infra_failed (HTTP {e.code})"); return "infra_failed"
     except Exception as e:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes=f"synthesis call failed: {e}")
+                           critic_notes=f"synthesis call failed: {e}",
+                           append_note=True)
         log(f"task {tid}: infra_failed ({e})"); return "infra_failed"
 
     if exhausted:
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
                            critic_notes="quota/usage limit on every model in the "
-                                        "fallback chain — parked (§1.6, F9)")
+                                        "fallback chain — parked (§1.6, F9)",
+                           append_note=True)
         log(f"task {tid}: quota_wait (fallback chain exhausted)"); return "quota_wait"
     if model_used_cfg != worker_cfg:
         ledger.update_model_used(
@@ -957,7 +973,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     if policy.token_budget_breached():
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
                            critic_notes="policy.yaml tokens_per_day_hard_stop reached "
-                                        "-- parked, retry once the day rolls over")
+                                        "-- parked, retry once the day rolls over",
+                           append_note=True)
         escalate(f"task {tid}: daily token budget exhausted, parked", trigger="cost_cap_breach")
         log(f"task {tid}: quota_wait (token budget)")
         return "quota_wait"
@@ -970,7 +987,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
             prompt, worker_cfg, usage_path, log_prefix=f"task {tid}")
     except subprocess.TimeoutExpired:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes="worker timeout")
+                           critic_notes="worker timeout",
+                           append_note=True)
         log(f"task {tid}: infra_failed (timeout)")
         return "infra_failed"
 
@@ -986,7 +1004,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         # F9: every model in the chain hit quota -- park exactly as before this fix.
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
                            critic_notes="quota/usage limit on every model in the "
-                                        "fallback chain — parked (§1.6, F9)")
+                                        "fallback chain — parked (§1.6, F9)",
+                           append_note=True)
         log(f"task {tid}: quota_wait (fallback chain exhausted)")
         return "quota_wait"
     if model_used_cfg != worker_cfg:
@@ -1000,7 +1019,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     if worker_failed(out, usage):
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"worker API failure (full text in "
-                                       f"runs/task{tid}_worker_raw.txt): {out[:200]}")
+                                       f"runs/task{tid}_worker_raw.txt): {out[:200]}",
+                           append_note=True)
         log(f"task {tid}: infra_failed ({out[:80]})")
         return "infra_failed"
     if len(out) < 200:
@@ -1122,7 +1142,8 @@ def run_canaries(roles: dict) -> None:
         # F8/F13: canaries draw from the same daily token budget as mission work.
         if policy.token_budget_breached():
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                               critic_notes="policy.yaml tokens_per_day_hard_stop reached")
+                               critic_notes="policy.yaml tokens_per_day_hard_stop reached",
+                           append_note=True)
             escalate(f"canary {name}: daily token budget exhausted, parked",
                     trigger="cost_cap_breach")
             log(f"{name}: quota_wait (token budget)"); continue
@@ -1134,14 +1155,16 @@ def run_canaries(roles: dict) -> None:
                 prompt, worker_cfg, RUNS / f"canary_{name}.usage.json", log_prefix=f"canary {name}")
         except subprocess.TimeoutExpired:
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                               critic_notes="canary timeout")
+                               critic_notes="canary timeout",
+                           append_note=True)
             log(f"{name}: infra_failed (timeout)"); continue
         db_integrity_check(snapshot, context=f"canary {name}")
         fs_integrity_check(fs_snapshot, context=f"canary {name}")
         if exhausted:
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
                                critic_notes="quota on every model in the fallback chain "
-                                            "— canary parked (F9)")
+                                            "— canary parked (F9)",
+                           append_note=True)
             log(f"{name}: quota_wait (fallback chain exhausted)"); continue
         if model_used_cfg != worker_cfg:
             ledger.update_model_used(tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']}")

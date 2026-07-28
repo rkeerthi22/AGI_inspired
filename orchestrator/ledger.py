@@ -61,12 +61,21 @@ def queue_task(mission_id: str, spec: str, pass_criteria: str) -> int:
 
 
 # H3 (docs/HARDENING.md, fixes F2): worst-case legitimate single-task duration is the
-# worker subprocess timeout (900s) + critic call (≤300s) + fact extraction (~60s) + margin.
+# worker subprocess timeout + critic call (≤300s) + fact extraction (~60s) + margin.
 # A task still 'running' past its lease on the NEXT process startup means the owning
 # process crashed/was killed — start_task() sets the lease once; there is no periodic
 # refresh because a task is one blocking call, never a long-running loop that could benefit
 # from one.
-LEASE_SECONDS = 1500  # 25 min
+#
+# COUPLED CONSTANT — must stay > batch_runner.WORKER_TIMEOUT_S + ~360s. Raised 1500 -> 2400
+# on 2026-07-28 together with WORKER_TIMEOUT_S 900 -> 1800. Leaving it at 1500 while the
+# worker may legitimately run 1800s would let reconcile_interrupted_tasks() declare a task
+# that is STILL RUNNING to be crash-orphaned, reset it to 'interrupted', and burn one of its
+# 3 MAX_TASK_ATTEMPTS — a self-inflicted failure that looks exactly like a real crash.
+# Note gemma's LOCAL_FALLBACK_TIMEOUT_S (3600s) already exceeds even this; a failed-over
+# local run can therefore still outlive its lease. Accepted for now (failover is rare and
+# escalates), but it is the next instance of this same coupling to fix.
+LEASE_SECONDS = 2400  # 40 min
 MAX_TASK_ATTEMPTS = 3  # crash-loop cap: after this many interruptions, give up honestly
 
 
@@ -87,18 +96,48 @@ def start_task(task_id: int, model_used: str) -> None:
         )
 
 
-def finish_task(task_id: int, *, artifacts, cost_usd=0.0, tokens_in=0, tokens_out=0,
+def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, tokens_out=None,
                 critic_verdict=None, critic_notes=None, status="done",
-                interventions=0, intervention_types=None) -> None:
+                interventions=0, intervention_types=None, append_note=False) -> None:
+    """F21 (docs/HARDENING.md): consumption columns default to None and are written
+    via COALESCE, so OMITTING them preserves whatever a previous attempt recorded.
+
+    They used to default to 0/0.0 and overwrite unconditionally. Every failure path
+    here (timeout, quota park, infra_failed, short-output) omits them, so RETRYING a
+    task silently erased the original run's accounting. Measured live 2026-07-28:
+    task 24 held tokens_in=1,781,395 from its first run; a retry that timed out reset
+    it to 0 and the daily counter fell 10,786,463 -> 9,001,225 -- exactly that amount.
+    The consequence is backwards from safe: policy.tokens_used_today() sums this
+    column, so every retry made the daily budget guard protect LESS, and real spend
+    from a timed-out run (which burns tokens without returning a usage file) vanished
+    from the record entirely. cost_usd carries the identical defect and is fixed in
+    the same line -- it is inert only while Ollama reports $0, and would start
+    silently erasing real money the day a paid key is added (F17->F19's lesson: fix
+    the bug class, not the one instance you happened to measure).
+
+    critic_verdict is COALESCEd for the same reason, and it is the part that actually
+    broke the loop: an INFRA failure says nothing about content, but by writing NULL it
+    erased the previous review verdict -- and run_task()'s retry-with-feedback block is
+    gated on `critic_verdict == 'fail'`, so the next attempt silently lost the reviewer's
+    objections. Measured live 2026-07-28: task 24's timeout turned verdict 'fail' +337
+    chars of specific objections into NULL + 'worker timeout'. Callers that genuinely
+    have a new verdict still pass one and still overwrite. Infra paths should pass
+    append_note=True so their marker is added to the review history rather than
+    replacing it."""
     with _conn() as c:
         c.execute(
-            "UPDATE tasks SET status=?, finished_at=?, artifacts=?, cost_usd=?, "
-            "tokens_in=?, tokens_out=?, critic_verdict=?, critic_notes=?, "
+            "UPDATE tasks SET status=?, finished_at=?, artifacts=?, "
+            "cost_usd=COALESCE(?, cost_usd), tokens_in=COALESCE(?, tokens_in), "
+            "tokens_out=COALESCE(?, tokens_out), "
+            "critic_verdict=COALESCE(?, critic_verdict), "
+            "critic_notes=CASE WHEN ?=1 THEN TRIM(COALESCE(critic_notes,'') || ' | ' || ?) "
+            "             ELSE COALESCE(?, critic_notes) END, "
             "interventions=?, intervention_types=? WHERE task_id=?",
             (status, datetime.now().isoformat(timespec="seconds"),
              json.dumps(artifacts), cost_usd, tokens_in, tokens_out,
-             critic_verdict, critic_notes, interventions,
-             json.dumps(intervention_types or []), task_id),
+             critic_verdict,
+             1 if append_note else 0, critic_notes or "", critic_notes,
+             interventions, json.dumps(intervention_types or []), task_id),
         )
 
 
