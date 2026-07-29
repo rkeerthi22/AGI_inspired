@@ -14,8 +14,10 @@ Built around what the live runs exposed (HARNESS_DESIGN.md §1.6 + ledgerbook):
 - policy caps enforced: max worker calls per run, escalations to workspace/ESCALATIONS.md.
 Stdlib + PyYAML only."""
 import argparse
+import hashlib
 import json
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -374,43 +376,111 @@ PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
                    "CLAUDE.md", "HARNESS_DESIGN.md", "docs", "skills_analyst"]
 
 
-def fs_integrity_snapshot() -> set:
-    """Call immediately BEFORE a worker subprocess runs."""
+def _tracked_hashes() -> dict:
+    """sha256 of every TRACKED file under PROTECTED_PATHS. 31 files / ~510KB measured
+    2026-07-29, so this costs milliseconds per worker call."""
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", *PROTECTED_PATHS],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
+    hashes = {}
+    for rel in out.stdout.splitlines():
+        rel = rel.strip()
+        if not rel:
+            continue
+        p = ROOT / rel
+        try:
+            hashes[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except FileNotFoundError:
+            hashes[rel] = "<missing>"      # worker deleted it -- still a violation
+        except Exception:
+            hashes[rel] = "<unreadable>"
+    return hashes
+
+
+def fs_integrity_snapshot() -> dict:
+    """Call immediately BEFORE a worker subprocess runs.
+
+    F36 (docs/HARDENING.md): this used to return only the `git status --porcelain` line
+    set, which cannot see a file that was ALREADY dirty and then modified AGAIN by the
+    worker -- porcelain prints an identical ' M path' line both times, so the set
+    difference is empty and the tamper is invisible. Content hashes close that hole, and
+    are what make it safe to scope the revert below to exactly the files that changed."""
     out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", *PROTECTED_PATHS],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return set(out.stdout.splitlines())
+    return {"porcelain": set(out.stdout.splitlines()), "hashes": _tracked_hashes()}
 
 
-def fs_integrity_check(before: set, context: str) -> None:
-    """Call immediately AFTER a worker subprocess returns. Any NEW dirty/untracked entry
-    under a protected path since the snapshot is unauthorized by construction -- the worker
-    is never told these paths exist (same containment principle as the DB guard) and the
-    orchestrator itself doesn't touch its own source during a task. Auto-reverts via git."""
+def fs_integrity_check(before: dict, context: str) -> None:
+    """Call immediately AFTER a worker subprocess returns. Any tracked file whose CONTENT
+    changed, or any new untracked file, under a protected path is unauthorized by
+    construction -- the worker is never told these paths exist (same containment principle
+    as the DB guard) and the orchestrator does not touch its own source during a task.
+
+    F36 (docs/HARDENING.md), 2026-07-29 -- two defects, fixed together:
+
+    1. BLAST RADIUS. Detection was precise (`after - before`) but remediation was not:
+       `git checkout -- *PROTECTED_PATHS` discarded every dirty tracked file under all
+       eight protected paths the moment ANY entry was flagged, including files the guard
+       never flagged and the worker never touched. Now reverts exactly the paths whose
+       content changed. This cannot weaken detection, because it does not touch detection.
+    2. UNRECOVERABLE. `git checkout` on a tracked file has no reflog -- discarded
+       uncommitted work is simply gone. Proven the hard way twice on 2026-07-29: once when
+       a worker call reverted this session's own uncommitted F35 fix, and again when the
+       cleanup block of THIS fix's own test did `git checkout -- config orchestrator` and
+       destroyed the fix itself. The pattern is genuinely easy to write by accident, which
+       is the argument for making it recoverable rather than merely careful. Flagged files
+       are now copied into `runs/reverted_<ts>/` BEFORE anything is discarded; `runs/` is
+       gitignored and outside PROTECTED_PATHS, so the copy is neither reverted nor
+       committed.
+
+    The scoping in (1) was only safe once hashing landed in the snapshot: with porcelain
+    alone, a file already dirty before the call and re-modified during it never appeared
+    in the diff, so a scoped revert would have missed it while the blanket one caught it
+    by accident."""
     after = fs_integrity_snapshot()
-    new_entries = after - before
-    if not new_entries:
+    changed = sorted(p for p in set(before["hashes"]) | set(after["hashes"])
+                     if before["hashes"].get(p) != after["hashes"].get(p))
+    new_untracked = [e[3:].strip().strip('"') for e in (after["porcelain"] - before["porcelain"])
+                     if e.startswith("?? ")]
+    if not changed and not new_untracked:
         return
-    log(f"FILESYSTEM INTEGRITY VIOLATION during {context}: {sorted(new_entries)}")
-    # Revert tracked-file modifications.
-    subprocess.run(["git", "-C", str(ROOT), "checkout", "--", *PROTECTED_PATHS],
-                   capture_output=True, text=True)
-    # Remove newly-appeared untracked files ('??' prefix) inside the protected set --
-    # checkout doesn't touch untracked files.
+    log(f"FILESYSTEM INTEGRITY VIOLATION during {context}: "
+        f"{len(changed)} tracked modified {changed[:5]}, "
+        f"{len(new_untracked)} new untracked {new_untracked[:5]}")
+
+    # Preserve before destroying -- see (2) above.
+    stash = RUNS / f"reverted_{datetime.now().strftime('%Y%m%d_%H%M%S')}"
+    saved = 0
+    for rel in changed + new_untracked:
+        src = ROOT / rel
+        if not src.is_file():
+            continue                       # deleted by the worker; nothing to preserve
+        try:
+            dst = stash / rel
+            dst.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, dst)
+            saved += 1
+        except Exception as e:
+            log(f"  could not preserve {rel} before revert: {e}")
+    if saved:
+        log(f"  preserved {saved} file(s) to {stash.relative_to(ROOT)} before reverting")
+
+    if changed:
+        subprocess.run(["git", "-C", str(ROOT), "checkout", "--", *changed],
+                       capture_output=True, text=True)
     removed = []
-    for entry in new_entries:
-        if entry.startswith("?? "):
-            rel = entry[3:].strip().strip('"')
-            target = ROOT / rel
-            try:
-                if target.is_file():
-                    target.unlink()
-                    removed.append(rel)
-            except Exception as e:
-                log(f"  could not remove untracked tampered file {rel}: {e}")
-    log(f"reverted tracked changes via git checkout; removed {len(removed)} untracked "
-       f"file(s): {removed}")
+    for rel in new_untracked:              # checkout does not touch untracked files
+        target = ROOT / rel
+        try:
+            if target.is_file():
+                target.unlink()
+                removed.append(rel)
+        except Exception as e:
+            log(f"  could not remove untracked tampered file {rel}: {e}")
+    log(f"reverted {len(changed)} tracked file(s) via git checkout; removed "
+        f"{len(removed)} untracked file(s): {removed}")
     escalate(f"worker modified protected harness files during {context} -- auto-reverted "
-            f"via git. F14 containment fired: {sorted(new_entries)[:5]}")
+            f"via git (originals preserved in {stash.name}). F14 containment fired: "
+            f"{(changed + new_untracked)[:5]}")
 
 
 def _strip_tool_chatter(text: str) -> str:

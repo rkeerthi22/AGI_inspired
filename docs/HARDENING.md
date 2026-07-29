@@ -711,7 +711,7 @@ and `critic_verdict='fail'`, i.e. it *was* attempted and re-queued — correctly
 `queued` and `quota_wait` survive untouched; `interrupted` survives; and the expired rows then
 register as `dropped` in `weekly_fitness()` rather than vanishing.
 
-### F36 — The filesystem guard cannot tell the worker from the operator, and destroys uncommitted work · **P1 · PROVEN, found 2026-07-29 · MITIGATED BY PROCESS, NOT YET BY CODE**
+### F36 — The filesystem guard cannot tell the worker from the operator, and destroys uncommitted work · **P1 · PROVEN 2026-07-29 · BLAST RADIUS + RECOVERABILITY FIXED; ATTRIBUTION DELIBERATELY NOT**
 Live during the task 18 fire. H9's `fs_integrity_check()` snapshots `git status` before the worker
 call and compares after; anything modified is attributed to the worker and reverted with
 `git checkout`. It fired correctly by its own logic — and the "tampering" it reverted was **this
@@ -741,9 +741,9 @@ named for. Candidate directions, none yet tested against real failure evidence: 
 around the worker call, snapshot file *hashes* attributable to a pre-call commit, or simply refuse to
 start a fire when the working tree is dirty (loudest, safest, and most annoying).
 
-**A second defect on a different axis, recorded 2026-07-29 for a later decision — NOT implemented.**
+**A second defect on a different axis — FIXED 2026-07-29, later the same day.**
 Everything above concerns **attribution**: the guard cannot tell *who* changed a file, and the
-rejected narrowings all try to infer that. Independently of attribution, the *remediation* is not
+rejected narrowings all try to infer that. Independently of attribution, the *remediation* was not
 scoped to the detection:
 
 ```python
@@ -772,6 +772,41 @@ A second, even smaller option in the same spirit: copy each file's bytes into
 outside the protected set, so this changes neither what is detected nor what is reverted — it only
 makes an unrecoverable `git checkout` recoverable. This is the cheap version of the
 "stash-and-restore" direction listed above.
+
+#### Both were implemented, and the porcelain cost turned out to be the wrong worry
+The reservation above — "a small amount of porcelain parsing in a security-relevant path" — was
+aimed at the wrong risk. Scoping the revert to the flagged entries is unsafe *while detection is
+porcelain-based*, for a reason neither the finding nor the rejection noticed: a file that was
+**already dirty before the call and modified again during it** produces an identical ` M path` line
+both times, so `after - before` is empty and the tamper is **invisible**. Today's blanket revert
+caught that case by accident, purely because it reverted everything. A scoped revert on top of blind
+detection would have silently stopped catching it.
+
+So detection was strengthened first: `fs_integrity_snapshot()` now also carries a **sha256 of every
+tracked file** under the protected paths (31 files / ~510KB measured, i.e. milliseconds per call),
+and `fs_integrity_check()` compares content rather than status lines. That makes detection *stronger*
+than before — it catches the re-modification case the old guard could not see — and only then makes
+scoping safe. The revert now targets exactly the changed paths, and flagged files are copied to
+`runs/reverted_<ts>/` before anything is discarded.
+
+Net effect on every axis: detection strictly stronger, blast radius strictly smaller, discards
+recoverable.
+
+**Proven against the real repo** (the guard's mechanism is `git status`/`git checkout`, so a
+sandboxed copy would prove nothing — with `escalate()` stubbed, per the 2026-07-24 lesson): an
+unrelated dirty file survives a violation in another file; the discarded content is recoverable from
+`runs/reverted_*`; a re-modified already-dirty file is caught (with the test asserting that porcelain
+alone is blind to it, so the regression would show up as a failure rather than a silent gap); planted
+untracked files are still removed; and a clean call creates no stash and no churn. 8/8, tree restored
+to baseline afterwards.
+
+**One more instance of the bug, in the fix's own test.** The first version of that test cleaned up
+with `git checkout -- config orchestrator` and destroyed the F36 implementation mid-run — the exact
+over-broad revert under test, reproduced in its own teardown, minutes after being diagnosed. That is
+the strongest available argument for the `runs/reverted_<ts>/` copy: the pattern is easy to write by
+accident even while concentrating on it, so the useful mitigation is making the discard recoverable
+rather than trusting anyone to be careful. The test's cleanup is now scoped to the two files it
+actually touches.
 
 Neither has been tested against real failure evidence, which is the same bar the other candidate
 directions have not cleared — they are recorded here to be decided deliberately, not adopted by
@@ -1248,8 +1283,10 @@ evidence yet to design a fix against), and left W31 at a real, honestly-reported
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
 safety and honesty rules unchanged. It fixed F29 through F35, closed **H7**, and implemented
-directives 1, 2 and 5 (all above); **F36** was found live and is mitigated by process, not yet by
-code. Task 30 was then re-run through the production batch path as a true
+directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
+uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
+along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file
+trades containment for convenience. Task 30 was then re-run through the production batch path as a true
 synthesis: it passes, cites 10/10 reachable URLs with 0 missing literals (was 4 falsely-dead, 4
 missing), covers the mission's two real channels instead of an invented one, and — the clearest
 evidence F31 works — reports an explicit **DATA GAP** for a third topic the supplied brief did not
