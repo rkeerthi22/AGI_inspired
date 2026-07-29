@@ -741,6 +741,42 @@ named for. Candidate directions, none yet tested against real failure evidence: 
 around the worker call, snapshot file *hashes* attributable to a pre-call commit, or simply refuse to
 start a fire when the working tree is dirty (loudest, safest, and most annoying).
 
+**A second defect on a different axis, recorded 2026-07-29 for a later decision — NOT implemented.**
+Everything above concerns **attribution**: the guard cannot tell *who* changed a file, and the
+rejected narrowings all try to infer that. Independently of attribution, the *remediation* is not
+scoped to the detection:
+
+```python
+new_entries = after - before                    # detection: precise, only what changed
+...
+subprocess.run(["git", "-C", str(ROOT), "checkout", "--", *PROTECTED_PATHS])   # revert: everything
+```
+
+Once **any** entry is flagged, the revert discards every dirty tracked file under *all* of
+`orchestrator/`, `config/`, `missions/`, `ledger/schema.sql`, `docs/`, `skills_analyst/`, `CLAUDE.md`
+and `HARNESS_DESIGN.md` — including files the guard did not flag and the worker never touched. A
+worker modifying one file therefore destroys unrelated uncommitted work across the entire protected
+set. This was invisible on 2026-07-29 only because both dirty files happened to be flagged ones; the
+blast radius was never exercised.
+
+Worth separating from the rejected fixes above because it is a different trade, not the same one:
+passing `*tracked` (the flagged entries) instead of `*PROTECTED_PATHS` ignores no path, infers
+nothing about who made a change, and reverts a strict **subset** of what is reverted today — every
+entry the guard flags is still reverted. It cannot weaken detection, because it does not touch
+detection. Its cost is a small amount of porcelain parsing (`entry[3:]`, plus the `old -> new` form
+for renames) in a security-relevant path, which is a real cost and the reason it is written down
+rather than applied.
+
+A second, even smaller option in the same spirit: copy each file's bytes into
+`runs/reverted_<timestamp>/` **before** discarding, and log the location. `runs/` is gitignored and
+outside the protected set, so this changes neither what is detected nor what is reverted — it only
+makes an unrecoverable `git checkout` recoverable. This is the cheap version of the
+"stash-and-restore" direction listed above.
+
+Neither has been tested against real failure evidence, which is the same bar the other candidate
+directions have not cleared — they are recorded here to be decided deliberately, not adopted by
+default because they sound safe.
+
 **Standing rule until then, which costs nothing:** commit before triggering a fire, and do not edit
 tracked files while one is running. `runs/`, `workspace/` and `ledger/` are gitignored, so agent
 output is unaffected — this is purely about the repo's own source and docs.
