@@ -1,5 +1,47 @@
 # Incidents
 
+## 2026-07-29 — The containment guard reverted the assistant's own uncommitted work
+
+**What happened:** a mission fire was triggered by hand to verify H7's new skill-injection log line
+emits in production. It did — `task 18: injecting 1 approved skill(s), 346/2000 chars: [...]` — and
+the task completed `done`/`pass` with 26 facts extracted. While it ran, the F35 fix and its
+documentation were being written in a separate process. Eleven minutes in:
+
+```
+[19:08:00] FILESYSTEM INTEGRITY VIOLATION during task 18 worker call:
+           [' M docs/HARDENING.md', ' M orchestrator/batch_runner.py']
+[19:08:00] reverted tracked changes via git checkout
+```
+
+H9's `fs_integrity_check()` snapshots `git status` before the worker call and compares afterwards,
+attributing any difference to the worker. It cannot distinguish *who* made a change. The "tampering"
+it detected and destroyed was legitimate uncommitted work by this session.
+
+**Impact:** the F35 code fix and all F35 documentation were discarded. `git checkout` on a tracked
+file is unrecoverable — there is no reflog for a working-tree discard. Both were rebuilt by hand from
+session context and re-verified (9/9 F35 assertions pass again). Nothing was permanently lost, which
+was luck rather than design: had the context been trimmed first, the work would simply be gone.
+
+**Why it never showed up before:** every previous F14/H9 test planted tampering deliberately
+(2026-07-24, both tamper tests). The failure mode requires a *legitimate* concurrent editor, which
+only exists when a human or assistant edits the repo while a fire is in flight. Hand-triggering a
+fire mid-session is exactly the scenario the tests never covered.
+
+**Not fixed in code, on purpose.** Narrowing the guard — ignoring "operator-ish" paths, or diffing
+only files the worker could plausibly reach — weakens the one real containment boundary for F14, to
+buy operator convenience rather than to close a security gap. That trade is easy to get wrong and the
+downside is silently re-opening the hole the 2026-07-18 rogue-write incident is named for. Recorded
+as **F36** with candidate directions (stash/restore around the call, hash-based attribution to a
+pre-call commit, or refusing to start a fire on a dirty tree) and no implementation, because none has
+been tested against real failure evidence yet.
+
+**Lesson, and it is the cheap one:** commit before triggering a fire, and do not edit tracked files
+while one is running. `runs/`, `workspace/` and `ledger/` are gitignored, so agent output is
+unaffected — this is purely about the repo's own source and docs. Note also that the guard **worked**:
+it detected an unexpected modification to protected harness files during a worker call and reverted it
+within seconds, which is precisely the behaviour F14 demanded. A guard that fires on the wrong culprit
+is a precision problem, not a broken guard.
+
 ## 2026-07-29 — A synthesis task had been researching the wrong subject for three weeks, and nothing noticed
 
 **What happened:** asked to raise throughput, the first step was reading the ledger rather than the

@@ -680,6 +680,71 @@ an older better one; empty history → `(0, "none")`. The two live skills were r
 verified end-to-end: `week_green` 5/4/3 → no target, 2/0 → correctly selects one. Under the old
 baseline it selected nothing at any value.
 
+### F35 — Never-attempted work was unrunnable forever AND invisible to the score · **P1 · PROVEN, found + fixed 2026-07-29**
+`expire_stale_parked()` covered `quota_wait` only. The omission of `queued` stranded
+never-attempted work permanently: **no code path could reach such a row.**
+`queue_mission_tasks()` matches only specs carrying the CURRENT week, `--resume` selects only
+`quota_wait`/`interrupted`, `reconcile_interrupted_tasks()` touches only `running`, and this
+function skipped it. Five rows were in exactly that state — tasks 4, 13, 14, 17, 19 (W29/W30 seeds,
+four of them `started_at` NULL with zero tokens).
+
+**The honesty cost was the worse half.** `weekly_fitness()` reports a `queued` row as `pending` only
+while it sits inside the 7-day window; once it ages out it is counted nowhere at all, and `dropped`
+read **0** despite five abandoned seeds. That is the same vanishing-work failure H5/F7 was written to
+close — *"a week that drops most of its scheduled work must show that plainly"* — recurring at a
+boundary that fix did not reach.
+
+**Found by failing, not by reading.** A hand-run fire could not pick task 18 up at all; setting it to
+`quota_wait` so `--resume` would see it caused *this very function* to expire it to `stale` seconds
+later, because its spec was not the current week. The dead end was the symptom that exposed the class.
+
+**Fixed** by expiring previous-week `queued` rows alongside `quota_wait`, so they land in `stale`,
+which `weekly_fitness()` already counts as `dropped`. Never-attempted rows get a distinct
+`NEVER ATTEMPTED` note and their own count in the log line — `started_at IS NULL` means the seed was
+starved before it ever reached a worker (the F6 signature), a different operational signal from work
+that ran and then parked. `interrupted` is deliberately left alone: `--resume` can still reach it, so
+it is not stranded, and expiring it would break H3's crash-recovery path.
+
+Proven on a copy of the live ledger against the five real rows: all five expire; nothing is left in
+`queued`; the four never-attempted ones are labelled as such and task 4 — which carries `started_at`
+and `critic_verdict='fail'`, i.e. it *was* attempted and re-queued — correctly is not; current-week
+`queued` and `quota_wait` survive untouched; `interrupted` survives; and the expired rows then
+register as `dropped` in `weekly_fitness()` rather than vanishing.
+
+### F36 — The filesystem guard cannot tell the worker from the operator, and destroys uncommitted work · **P1 · PROVEN, found 2026-07-29 · MITIGATED BY PROCESS, NOT YET BY CODE**
+Live during the task 18 fire. H9's `fs_integrity_check()` snapshots `git status` before the worker
+call and compares after; anything modified is attributed to the worker and reverted with
+`git checkout`. It fired correctly by its own logic — and the "tampering" it reverted was **this
+session's own uncommitted F35 fix and documentation**, edited in a separate process while the worker
+happened to be running:
+
+```
+[19:08:00] FILESYSTEM INTEGRITY VIOLATION during task 18 worker call:
+           [' M docs/HARDENING.md', ' M orchestrator/batch_runner.py']
+[19:08:00] reverted tracked changes via git checkout
+```
+
+The guard has no notion of *who* made a change — only that the working tree differs from its
+pre-call snapshot. Every earlier F14 test planted tampering deliberately, so this failure mode never
+appeared: it needs a legitimate concurrent editor, which only exists when a human or assistant works
+on the repo while a fire is in flight. `git checkout` on a tracked file is **unrecoverable** for
+uncommitted work — there is no reflog for a working-tree discard.
+
+Both files were restored by hand from session context and re-verified (9/9 F35 assertions), so
+nothing was permanently lost this time. That was luck, not design.
+
+**Not fixed in code, deliberately.** The obvious narrowing — ignore paths the worker "shouldn't"
+touch, or diff only files the worker could plausibly reach — weakens the exact guard that is the real
+containment boundary for F14, and does so to accommodate operator convenience rather than a security
+need. Getting that trade wrong silently re-opens the hole the 2026-07-18 rogue-write incident is
+named for. Candidate directions, none yet tested against real failure evidence: stash-and-restore
+around the worker call, snapshot file *hashes* attributable to a pre-call commit, or simply refuse to
+start a fire when the working tree is dirty (loudest, safest, and most annoying).
+
+**Standing rule until then, which costs nothing:** commit before triggering a fire, and do not edit
+tracked files while one is running. `runs/`, `workspace/` and `ledger/` are gitignored, so agent
+output is unaffected — this is purely about the repo's own source and docs.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1146,8 +1211,9 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29, F30, F31, F32, F33 and F34 and implemented
-directives 1, 2 and 5 (all above). Task 30 was then re-run through the production batch path as a true
+safety and honesty rules unchanged. It fixed F29 through F35, closed **H7**, and implemented
+directives 1, 2 and 5 (all above); **F36** was found live and is mitigated by process, not yet by
+code. Task 30 was then re-run through the production batch path as a true
 synthesis: it passes, cites 10/10 reachable URLs with 0 missing literals (was 4 falsely-dead, 4
 missing), covers the mission's two real channels instead of an invented one, and — the clearest
 evidence F31 works — reports an explicit **DATA GAP** for a third topic the supplied brief did not

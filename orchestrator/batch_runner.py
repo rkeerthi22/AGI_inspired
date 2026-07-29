@@ -957,16 +957,44 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
 
 
 def expire_stale_parked() -> None:
-    """quota_wait rows from a PREVIOUS ISO week are superseded by the new week's scan —
-    mark them 'stale' (excluded from fitness, which counts only done/failed)."""
+    """Previous-ISO-week rows that can never run again are marked 'stale', which
+    weekly_fitness() counts as `dropped` — the honest record of scheduled work that
+    did not happen.
+
+    F35 (docs/HARDENING.md), 2026-07-29: this used to cover `quota_wait` only, and the
+    omission of `queued` left NEVER-ATTEMPTED work permanently stranded. No code path
+    could reach such a row: queue_mission_tasks() matches only specs carrying the CURRENT
+    week, `--resume` selects only quota_wait/interrupted, reconcile_interrupted_tasks()
+    touches only `running`, and this function skipped it. Five rows sat in exactly that
+    state (tasks 4, 13, 14, 17, 19 -- W29/W30 seeds, four with started_at NULL and zero
+    tokens), unrunnable forever.
+
+    The honesty cost was the worse half. weekly_fitness() reports a `queued` row as
+    `pending` only while it is inside the 7-day window; once it ages out it is counted
+    nowhere, and `dropped` read 0 despite five abandoned seeds -- the same vanishing-work
+    failure H5/F7 was written to close, recurring at a boundary that fix did not reach.
+
+    Never-attempted rows get a distinct note and their own count in the log line:
+    `started_at IS NULL` means the seed was starved before it ever reached a worker (the
+    F6 signature), a different operational signal from work that ran and then parked.
+    `interrupted` is deliberately left alone -- `--resume` can still reach it, so it is
+    not stranded, and expiring it would break H3's crash-recovery path. Current-week rows
+    are untouched; they are still legitimately waiting for this week's fire."""
     import sqlite3
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
+        wk = f"[{week_key()}]%"
+        never = c.execute(
+            "SELECT count(*) FROM tasks WHERE status IN ('quota_wait','queued') "
+            "AND started_at IS NULL AND spec NOT LIKE ?", (wk,)).fetchone()[0]
         cur = c.execute(
-            "UPDATE tasks SET status='stale', critic_notes=COALESCE(critic_notes,'') || "
-            "' | expired: superseded by new week' WHERE status='quota_wait' AND spec NOT LIKE ?",
-            (f"[{week_key()}]%",))
+            "UPDATE tasks SET status='stale', critic_notes=TRIM(COALESCE(critic_notes,'') || "
+            "CASE WHEN started_at IS NULL "
+            "     THEN ' | expired: NEVER ATTEMPTED, superseded by the new week' "
+            "     ELSE ' | expired: superseded by new week' END) "
+            "WHERE status IN ('quota_wait','queued') AND spec NOT LIKE ?", (wk,))
         if cur.rowcount:
-            log(f"expired {cur.rowcount} stale parked task(s) from previous weeks")
+            log(f"expired {cur.rowcount} task(s) from previous weeks "
+                f"({never} never attempted) — they now count as dropped, not invisible")
 
 
 def reconcile_interrupted_tasks() -> int:
