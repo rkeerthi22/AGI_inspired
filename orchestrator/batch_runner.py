@@ -451,12 +451,69 @@ PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
 # drift-check this project relies on would silently pass on an inconsistency -- exactly the
 # failure mode F13 exists to prevent. A depth-0 scan states the actual intent instead: the
 # root itself accepts no new files, while its writable subdirectories are untouched.
-def _root_untracked() -> set:
-    """Untracked, non-ignored entries directly at the repo root (depth 0 only)."""
-    out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", "."],
+def _untracked_files() -> dict:
+    """F46: sha256 of every untracked, non-ignored file that policy.yaml does not declare
+    writable. Keyed by repo-relative path, so a NEW path and an in-place rewrite of an
+    existing one are both visible.
+
+    Replaces F42's `_root_untracked()`, which listed depth-0 root entries from
+    `git status --porcelain` in its DEFAULT untracked mode. That mode collapses an untracked
+    DIRECTORY into a single line (`?? .claude/`), so every file inside one was invisible:
+    measured 2026-07-30, planting `.claude/evil.py` left the entry set byte-identical
+    (`{'.claude/'}` before and after) and produced an EMPTY delta. The depth-0 filter then
+    guaranteed the collapse could never be undone, since any expanded path contains a
+    separator and was therefore dropped. `--untracked-files=all` lists the files themselves.
+
+    This mattered because of WHICH directory was untracked: `.claude/` is Claude Code's own
+    configuration tree — settings, hooks, skills, agent definitions. A payload written there
+    targets the SUPERVISING agent rather than the worker, which is the highest-value
+    prompt-injection target in the whole system and the one place F14's containment was blind.
+
+    Hashes rather than a bare path set, for the same reason F36 added them for tracked files:
+    rewriting an ALREADY-untracked file re-prints an identical `??` line, so a set difference
+    cannot see it. `.claude/HANDOFF.md` is exactly that case — the handoff the next session
+    reads — and it was equally undetectable (also measured, empty delta).
+
+    Policy-writable roots (`workspace/`, `memory/`, the ledger DB) are excluded because the
+    orchestrator itself legitimately creates untracked files there mid-run: a new
+    `memory/scorecards/*.md` is authorised work, not tampering. Sourced from policy.yaml via
+    `policy.is_path_writable()` rather than a second hardcoded list, per F13 — the policy file
+    must be a real, read source, not documentation. Loaded once here rather than per file.
+
+    Scope note: `-uall` is repo-wide, not root-only, because the gap is not specific to the
+    root — an untracked directory anywhere collapses the same way. Cost is bounded by
+    gitignore (`runs/`, `workspace/`, `inbox/*`, `__pycache__/`, `extensive_research.md` are
+    all excluded by git itself) and git does not recurse into the nested worktree under
+    `.claude/worktrees/`; the live set is 1 file, measured."""
+    pol = policy.load()
+    out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain",
+                          "--untracked-files=all"],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return {ln[3:].strip().strip('"') for ln in out.stdout.splitlines()
-            if ln.startswith("?? ") and "/" not in ln[3:].strip().strip('"').rstrip("/")}
+    hashes = {}
+    for ln in out.stdout.splitlines():
+        if not ln.startswith("?? "):
+            continue
+        rel = ln[3:].strip().strip('"')
+        if not rel:
+            continue
+        p = ROOT / rel
+        if policy.is_path_writable(p, pol):
+            continue
+        try:
+            hashes[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
+        except Exception:
+            hashes[rel] = "<unreadable>"
+    return hashes
+
+
+def _untracked_of(snap: dict) -> dict:
+    """The untracked bucket of a snapshot, as {path: hash}. Accepts a pre-F46 snapshot:
+    F42's key was `root` and held a bare set, which becomes {path: None} — new paths are
+    still detected, only in-place rewrites are not, which is exactly the pre-F46 behaviour
+    rather than a crash. Matters because a snapshot is taken before a worker call and read
+    after it, so a mid-run code change must not make the two halves incompatible."""
+    u = snap.get("untracked", snap.get("root", {}))
+    return {k: None for k in u} if isinstance(u, (set, frozenset)) else u
 
 
 def _tracked_hashes() -> dict:
@@ -490,7 +547,7 @@ def fs_integrity_snapshot() -> dict:
     out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", *PROTECTED_PATHS],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
     return {"porcelain": set(out.stdout.splitlines()), "hashes": _tracked_hashes(),
-            "root": _root_untracked()}          # F42
+            "untracked": _untracked_files()}   # F42, widened by F46 (key was "root")
 
 
 def fs_integrity_check(before: dict, context: str) -> None:
@@ -526,14 +583,18 @@ def fs_integrity_check(before: dict, context: str) -> None:
     new_untracked = [e[3:].strip().strip('"') for e in (after["porcelain"] - before["porcelain"])
                      if e.startswith("?? ")]
     # F42: a new file dropped at the repo root matches no PROTECTED_PATHS entry, so the
-    # porcelain diff above never sees it. `.get` keeps an older snapshot dict usable.
-    new_root = sorted(after.get("root", set()) - before.get("root", set()))
-    new_untracked = sorted(set(new_untracked) | set(new_root))
+    # porcelain diff above never sees it. F46 widened that from depth-0 root entries to every
+    # untracked non-ignored path, keyed by content hash, so a file planted INSIDE an untracked
+    # directory and an in-place rewrite of an already-untracked file are both caught.
+    u_before, u_after = _untracked_of(before), _untracked_of(after)
+    new_root = set(u_after) - set(u_before)
+    tampered = {p for p in set(u_after) & set(u_before) if u_after[p] != u_before[p]}
+    new_untracked = sorted(set(new_untracked) | new_root | tampered)
     if not changed and not new_untracked:
         return
     log(f"FILESYSTEM INTEGRITY VIOLATION during {context}: "
         f"{len(changed)} tracked modified {changed[:5]}, "
-        f"{len(new_untracked)} new untracked {new_untracked[:5]}")
+        f"{len(new_untracked)} untracked new/tampered {new_untracked[:5]}")
 
     # Preserve before destroying -- see (2) above.
     stash = RUNS / f"reverted_{datetime.now().strftime('%Y%m%d_%H%M%S')}"

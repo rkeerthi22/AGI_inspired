@@ -995,6 +995,70 @@ today of an over-broad revert destroying uncommitted work (see F36), and the thi
 the same: scope the operation, or restore by content rather than by git. The standing rule from F36 —
 commit before triggering a fire — now covers `.gitignore` edits too.
 
+### F43 — An `infra_failed` task could never be retried, and F37 turned that from harmless into blocking · **P1 · PROVEN, found + fixed 2026-07-30**
+The dedup/resume gate in `queue_mission_tasks()` and the equivalent one in `run_canaries()` both
+listed `("quota_wait", "queued", "interrupted")` as the statuses a **later** invocation may pick up
+again. `infra_failed` was missing from both.
+
+This was inert for as long as an API or model failure was mis-recorded as a content `fail` — F37's
+bug — because `fail` was skipped too. **F37 fixed that classification and in doing so activated this
+one.** Once a model that will not load is correctly booked as infrastructure rather than as a wrong
+answer, the row stops being a wrong answer that deserves to stand and becomes work that was never
+judged — and the gate deciding what may be re-attempted had no entry for it. A canary that failed
+because `gemma4:12b` could not load stayed failed for the rest of the ISO week, after the
+infrastructure had recovered.
+
+Found concretely rather than by inspection: cloud quota reset, the operator asked for a full canary
+re-run, and all five would have been skipped — three "already done", two "already infra_failed" — for
+zero tasks executed, with nothing in the log to say that anything had been suppressed.
+
+Fixed by introducing `RESUMABLE_STATUSES` as the single definition and pointing both gates at it,
+rather than editing two tuples in two files and trusting them to stay aligned.
+
+**This does not contradict the throughput directive's deliberate exclusion of `infra_failed` from
+`retry_failed_this_fire()`,** and the distinction is the part worth keeping: that exclusion governs a
+retry inside the SAME fire, where conditions have not changed and a re-attempt burns another 1800s
+timeout for the identical reason. This gate governs a later invocation, whose entire premise is that
+conditions may have changed. Same status, opposite correct answer, because the question is different.
+
+**One claim in the commit message is wrong, and is corrected here rather than left to be inherited.**
+It says the two tuples "had already drifted apart once." They had not — `git log -S` over
+`batch_runner.py` returns exactly two commits touching that tuple, and before H3 (`66985a1`) both
+sites carried `("quota_wait", "queued")` identically, widened together by it. The drift that really
+happened was between the dedup gates and `expire_stale_parked()`, which is F35. The
+single-definition fix is still the right one, for the ordinary reason, not for a history that did not
+occur.
+
+Worth recording what deliberately stays separate, since a naive "de-duplicate the status lists"
+cleanup would break two of these. Four sets are maintained by hand and they are **not** redundant:
+
+| site | set | question it answers |
+|---|---|---|
+| `RESUMABLE_STATUSES` | quota_wait, queued, interrupted, infra_failed | may a later fire pick this row up? |
+| `PARK_STATUSES` | quota_wait, budget_skip, chain_exhausted | did this fire stop early? |
+| `expire_stale_parked()` | quota_wait, queued | is a previous week's row stranded? |
+| `scorecard.canaries_green()` | quota_wait, queued, interrupted, infra_failed | did this row produce no judgement? (F45) |
+
+`expire_stale_parked()` omits `interrupted` on purpose — `--resume` still reaches it, so it is not
+stranded, and expiring it would break H3's crash recovery. It omits `infra_failed` because such a row
+needs no expiry: it resolved, it was counted in that week's fitness, and the next week's scan
+generates a fresh spec and therefore a fresh row. The last set coincides with `RESUMABLE_STATUSES`
+only by accident of today's status list — "may be retried" and "was never judged" are different
+properties, and `stale` is the case that separates them.
+
+Verified live against today's code (F44 and F45 landed after the F43 commit, so this is a re-run, not
+a quotation of it): `RESUMABLE_STATUSES` resolves at call time despite being defined *after* its
+first use at line 665 — `queue_mission_tasks --dry` runs clean with no `NameError`;
+infra_failed/quota_wait/queued/interrupted resume while done/failed/stale correctly do not; suites
+`f39_f40`, `f37`, `f35` and `throughput` re-run **green**, and `f42` re-run **red** on one assertion,
+which is finding F46 below.
+
+**Lesson, and it generalises past this bug:** a fix that changes how an outcome is *classified* is
+not finished until every path that *reads* that classification has been updated. F37 was correct and
+complete as a classification change and still shipped a regression, because correctness at the write
+site says nothing about the read sites. Third instance in two days of two individually correct
+changes composing into a wrong one — F22b, F44, now F43.
+
 ### F44 — The daily budget counted a UTC day against local timestamps · **P1 · PROVEN, found + fixed 2026-07-30**
 `tokens_used_today()` compared `finished_at` against `datetime('now','start of day')`. Its own comment
 cited F17's lesson correctly — *"compute 'today' entirely in SQLite's own clock"* — and applied it to
@@ -1059,6 +1123,77 @@ where nothing ran reads `0/5 (5 never produced a judgement)`.
 Worth noting *why* this was caught: the task was "update the docs", and regenerating would have been
 the obvious way to do it. Publishing a generated artifact without first checking what it will say is
 how a reporting bug becomes a committed claim.
+
+### F46 — An untracked *directory* reopened F42's hole one level deeper, aimed at the supervising agent · **P1 · PROVEN, found + fixed 2026-07-30**
+F42 brought the repo root inside the containment surface with `_root_untracked()`, listing depth-0
+untracked entries from `git status --porcelain`. In its **default** untracked mode git collapses an
+untracked directory into a single line — `?? .claude/` — and never names the files inside it. The
+depth-0 filter then guaranteed the collapse could not be undone, because any expanded path contains a
+separator and was dropped by the filter itself.
+
+Measured, not reasoned about — `_root_untracked()` before and after planting a file, and again after
+rewriting one:
+
+```
+before        : ['.claude/']
+after plant   : ['.claude/']          -> delta [] , UNDETECTED
+after tamper  :                          delta [] , UNDETECTED
+```
+
+Two distinct misses in one function. A file planted **inside** an untracked directory produced no
+delta because the collapsed entry never changed. And an in-place rewrite of an **already-untracked**
+file produced no delta either, because `??` re-prints identically regardless of content — the same
+blind spot F36 had already fixed for *tracked* files by hashing, left open for untracked ones.
+
+**What makes this P1 rather than tidiness is which directory it was.** `.claude/` is Claude Code's own
+configuration tree — settings, hooks, skills, agent definitions. A payload written there does not
+target the worker; it targets the **supervising agent**, i.e. the reviewer that is supposed to catch
+the worker. It is the highest-value prompt-injection target in the system, and it was the one place
+the F14 surface could not see. `.claude/HANDOFF.md` sharpens it: a rewrite of the handoff is a message
+injected directly into the next session's context, and that was the specific case detection missed.
+
+Fixed by replacing `_root_untracked()` with `_untracked_files()`: `--untracked-files=all` so
+directories expand into files, sha256 per file so rewrites are visible, and the depth-0 filter removed
+as the thing that was enforcing the bug. Untracked paths that `policy.yaml` declares writable
+(`workspace/`, `memory/`, the ledger DB) are excluded via `policy.is_path_writable()` — a new
+`memory/scorecards/*.md` written mid-run is authorised work, not tampering — read from the policy file
+rather than a second hardcoded list, per F13. Remediation needed no change: new and tampered untracked
+files both flow through F36's preserve-then-remove path, which is fail-closed and recoverable
+(`git checkout` cannot restore a file git never tracked, so removal after preserving is the only
+honest option).
+
+Scope is repo-wide rather than root-only, because the collapse is not a property of the root — an
+untracked directory anywhere behaves identically. Cost stays bounded by gitignore (`runs/`,
+`workspace/`, `inbox/*`, `__pycache__/`, `extensive_research.md`) and git does not recurse into the
+nested worktree under `.claude/worktrees/`; the live non-ignored untracked set is **1 file**.
+
+Verified by the probe that found it, now folded into the `f42` suite: a plant inside an untracked
+directory is detected; a hash-only rewrite is detected; a depth-0 root plant is still detected (F42
+preserved); a `memory/scorecards/` write is correctly ignored; and a pre-F46 snapshot whose
+`untracked` bucket is F42's bare set degrades to `{path: None}` without crashing — a snapshot is taken
+before a worker call and read after it, so a mid-run code change must not make the halves
+incompatible. All **10** suites green (`f35 f36 f37 f39_f40 f42 f44 h7 h7_gate baseline throughput`),
+zero `runs/quarantine_*.json`.
+
+**Two things worth recording beyond the fix.** First, `test_f42`'s failing assertion — *"root snapshot
+holds no path separators"* — was not merely stale, it **asserted the bug**: it could only pass while no
+untracked directory existed, and it encoded the depth-0 filter as the desired property. A test can
+pin a defect in place as firmly as it pins a behaviour.
+
+Second — and this needed two contradicting measurements to get right — the flaw and the *exposure*
+have different dates. The flawed code shipped with F42. But `.claude/` has existed since 2026-07-27
+(`.claude/worktrees/`) without ever appearing in `git status`, and the reason is a **second ignore
+source that is not in the repository at all**: `.git/info/exclude` contains `.claude/worktrees/`.
+With only excluded content inside it, `.claude/` had nothing non-ignored to report; creating
+`.claude/HANDOFF.md` at 01:28 gave it its first visible entry and with it the first directory the
+collapse could hide anything behind. So: latent in the code from F42, exploitable only from today.
+
+That second ignore source deserves its own line, because the containment surface silently inherits it.
+`git status` honours `.git/info/exclude`, which is **not version-controlled, not visible in any diff,
+and outside `PROTECTED_PATHS`** — so appending a path to it removes that path from the guard's view
+permanently, leaving no trace in git history. Everything the fs-guard can see is defined partly by a
+file the audit trail does not cover. Not fixed here; recorded as the next thing to look at, since it
+undercuts every "the guard would catch it" claim in this document by exactly one file.
 
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
