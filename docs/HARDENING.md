@@ -995,6 +995,49 @@ today of an over-broad revert destroying uncommitted work (see F36), and the thi
 the same: scope the operation, or restore by content rather than by git. The standing rule from F36 —
 commit before triggering a fire — now covers `.gitignore` edits too.
 
+### F44 — The daily budget counted a UTC day against local timestamps · **P1 · PROVEN, found + fixed 2026-07-30**
+`tokens_used_today()` compared `finished_at` against `datetime('now','start of day')`. Its own comment
+cited F17's lesson correctly — *"compute 'today' entirely in SQLite's own clock"* — and applied it to
+the wrong reference column.
+
+`ledger.window_start_sql()` is right to stay in UTC, because it compares against `created_at`, which
+SQLite itself writes via `datetime('now')`: UTC, space-separated. **`finished_at` is different.**
+`ledger.finish_task()` writes it with Python's `datetime.now().isoformat()` — **local** time with a
+**`T`** separator. Comparing that to a UTC boundary is the F17/F19 mismatch in *both* of its
+dimensions at once.
+
+Measured live at 01:12 local / 23:12 UTC the previous day:
+
+| | value |
+|---|---|
+| `finished_at` format | `2026-07-30T01:12:38` (local, `T`) |
+| old boundary | `2026-07-29 00:00:00` (**UTC**, space) |
+| correct boundary | `2026-07-30T00:00:00` |
+
+The counter reported **11,390,219 tokens spent on a day that had spent nothing** — four of the
+previous day's tasks, swallowed whole. Both directions do damage: an inflated counter makes admission
+control (F24) refuse work that would comfortably fit, and at 02:00 local the counter drops to
+today-only *mid-flight*, so a run spanning that instant sees the budget reset and can exceed the real
+cap. Worst-case window width is 26 hours.
+
+**Third recurrence of this class** — F17 (leases), F19 (the fitness window), now the budget guard —
+and **F22 introduced it**: switching `created_at` → `finished_at` was the right fix to a real bug, but
+carried the old boundary along. Same compose-two-correct-changes-into-a-wrong-one shape as F22b.
+Fixed with `replace(datetime('now','localtime','start of day'), ' ', 'T')`, which matches the
+**format** as well as the clock, and exposed as `policy.today_start()` so it is directly assertable.
+
+**The test is written to fail at any hour, which took deciding.** Row-inclusion assertions alone are
+insufficient: the UTC and local day boundaries only disagree between local midnight and UTC midnight
+(two hours at UTC+2), so a purely behavioural test would have passed on the broken build for 22 hours
+out of 24 and looked green. The suite therefore asserts the **boundary expression itself** — clock
+domain, `T` separator, and that it is not the UTC value — alongside row attribution either side of
+local midnight. 10/10.
+
+And the regression test was itself validated against the defect rather than assumed to catch it:
+planting a row one minute before local midnight, the pre-F44 boundary pulls **5,000,000 tokens** into
+today and the fixed one returns 0. A regression test that passes on both the fixed and broken code is
+decoration.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1461,7 +1504,7 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F42**, closed **H7**, and implemented
+safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F44**, closed **H7**, and implemented
 directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
 uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
 along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file

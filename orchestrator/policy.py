@@ -141,8 +141,40 @@ def tokens_used_today() -> int:
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         row = c.execute(
             "SELECT COALESCE(SUM(tokens_in),0)+COALESCE(SUM(tokens_out),0) FROM tasks "
-            "WHERE finished_at >= datetime('now','start of day')").fetchone()
+            "WHERE finished_at >= " + _TODAY_START_SQL).fetchone()
     return row[0] or 0
+
+
+# F44 (docs/HARDENING.md), 2026-07-30. The boundary above used to be
+# `datetime('now','start of day')`, and the comment cited F17's lesson correctly while
+# applying it to the wrong reference column.
+#
+# ledger.window_start_sql() is right to stay in SQLite's UTC domain, because it compares
+# against `created_at`, which SQLite itself writes via datetime('now') -- UTC, space
+# separated. `finished_at` is a different animal: ledger.finish_task() writes it with
+# Python's datetime.now().isoformat(), i.e. LOCAL time with a 'T' separator. Comparing it
+# to a UTC boundary is the F17/F19 mismatch in BOTH of its dimensions at once.
+#
+# Measured live 2026-07-30 at 01:12 local (23:12 UTC the previous day): the UTC boundary
+# resolved to 2026-07-29 00:00:00, so "today" swallowed four of yesterday's tasks and the
+# guard reported 11,390,219 tokens spent on a day that had spent nothing. Both directions
+# hurt -- an inflated counter makes admission control (F24) refuse work that would fit,
+# and at 02:00 local the counter drops to today-only mid-flight, so a run spanning that
+# instant sees the budget reset and can exceed the real cap.
+#
+# Third recurrence of this class (F17 leases, F19 fitness window, now the budget guard),
+# and F22 introduced it: switching created_at -> finished_at was the right fix to the right
+# bug, but carried the old boundary along -- the same compose-two-correct-changes-into-a-
+# wrong-one shape as F22b. The replace() keeps the FORMAT matched too, not just the clock.
+_TODAY_START_SQL = "replace(datetime('now','localtime','start of day'), ' ', 'T')"
+
+
+def today_start() -> str:
+    """The boundary tokens_used_today() compares against, in finished_at's own domain
+    and format. Exposed so a test can assert the clock domain directly rather than
+    inferring it from row counts, which only diverge during part of the day."""
+    with sqlite3.connect(LEDGER_DB, timeout=30) as c:
+        return c.execute("SELECT " + _TODAY_START_SQL).fetchone()[0]
 
 
 def token_budget_breached(pol: dict | None = None) -> bool:
