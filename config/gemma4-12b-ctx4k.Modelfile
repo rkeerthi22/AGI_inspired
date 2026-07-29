@@ -1,0 +1,29 @@
+# gemma4:12b-ctx4k — the fallback chain's last rung, made loadable.
+#
+# WHY THIS EXISTS (measured 2026-07-29, docs/HARDENING.md F38):
+# The local rung had never once completed a task in production. Every attempt died with
+# "llama-server reported out-of-memory during startup", and the obvious reading — a 7.6GB
+# model on a 4GB RTX 3050 — was wrong. The allocation that actually fails is the KV CACHE,
+# sized from the model's DEFAULT context window, not the weights. llama3.1 (4.9GB) failed
+# the same way while asking for a 16,642,998,272-byte (15.5GB) buffer, which no amount of
+# free VRAM on this machine was ever going to satisfy.
+#
+# Neither the hermes CLI nor orchestrator's ollama_chat() passes `num_ctx`, so Ollama used
+# each model's full default context every time. Baking the cap into a model VARIANT fixes
+# both callers at once and keeps the choice in config rather than code, which is the
+# model-agnostic constraint in CLAUDE.md ("swapping a model = editing models.yaml, never
+# code").
+#
+# WHY 4096 AND NOT 8192: both load, measured on this box —
+#     num_ctx=4096 -> loads in  75s, 1.5 tok/s
+#     num_ctx=8192 -> loads in 201s, 1.1 tok/s
+# This rung's entire job is to COMPLETE work when cloud quota is exhausted rather than park
+# it, so loading reliably beats context headroom. Free RAM here swung between 2.8GB and
+# 7.9GB during a single hour of testing; the smaller cache is far likelier to fit whenever
+# it is actually needed, and a rung that OOMs under memory pressure is decorative again.
+#
+# REBUILD:  ollama create gemma4:12b-ctx4k -f config/gemma4-12b-ctx4k.Modelfile
+
+FROM gemma4:12b
+
+PARAMETER num_ctx 4096

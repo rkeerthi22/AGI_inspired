@@ -42,4 +42,12 @@ fallback_chain:
   - { provider: ollama, model: glm-5.2:cloud }
   - { provider: ollama, model: kimi-k2.7-code:cloud }
   # - { provider: anthropic, model: claude-sonnet-5 }   # uncomment when key added
-  - { provider: ollama, model: gemma4:12b }             # last resort, slow
+  # F38 (docs/HARDENING.md), 2026-07-29: was plain `gemma4:12b`, which had NEVER once
+  # completed a task -- every attempt died with llama-server OOM at startup. The cause was
+  # not the 7.6GB weights on a 4GB GPU but the KV CACHE, sized from this model's default
+  # 262,144-token context. Neither the hermes CLI nor ollama_chat() passes num_ctx, so the
+  # full cache was allocated every time. The -ctx4k variant bakes num_ctx=4096 in, which
+  # fixes BOTH callers without code changes. Proven with no caller options, the way hermes
+  # actually calls it: `gemma4:12b` FAILS, `gemma4:12b-ctx4k` loads in 103s at 1.5 tok/s.
+  # Rebuild: ollama create gemma4:12b-ctx4k -f config/gemma4-12b-ctx4k.Modelfile
+  - { provider: ollama, model: gemma4:12b-ctx4k }       # last resort, slow (~1.5 tok/s)

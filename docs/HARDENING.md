@@ -859,6 +859,59 @@ the fix does **not** disarm the mechanism — 4 genuine content failures still s
 — and quota parks still block judgement exactly as before. 11/11. The two live rows were reclassified
 to `infra_failed` with an audit note; W31 canaries now read 3 green / 2 infra, gate shut.
 
+### F38 — The failover chain's last rung had never once worked · **P1 · PROVEN, found + fixed 2026-07-29**
+F9 built a cross-provider chain terminating in local `gemma4:12b` so that quota exhaustion would
+**complete** work rather than park it. Measured tonight, that rung had never completed anything:
+every attempt died with `llama-server reported out-of-memory during startup`.
+
+**The obvious diagnosis was wrong.** A 7.6GB model on a 4GB RTX 3050 reads like a weights-vs-VRAM
+problem, and that reading survives right up until you test a smaller model. `llama3.1:latest` (4.9GB)
+failed identically, and its error named the real allocation:
+
+```
+failed to allocate CPU buffer of size 16642998272      <- 15.5 GB
+llama_init_from_model: failed to allocate buffer for kv cache
+```
+
+It is the **KV cache**, sized from the model's default context window — 262,144 tokens for
+`gemma4:12b` — not the weights. No amount of free VRAM on this machine was ever going to satisfy it.
+Neither the hermes CLI nor `orchestrator.ollama_chat()` passes `num_ctx`, so the full default cache
+was allocated on every single call.
+
+Confirmed by sweeping the parameter directly (both models load fine once it is capped):
+
+| model | `num_ctx` | result |
+|---|---|---|
+| llama3.1 | default | **FAIL** — OOM on kv cache |
+| llama3.1 | 8192 / 4096 | OK, 4.2 / 4.5 tok/s |
+| gemma4:12b | default | **FAIL** — CUDA OOM |
+| gemma4:12b | 8192 / 4096 | OK, 1.1 / 1.5 tok/s |
+
+**Fixed as a model variant, not in code.** `config/gemma4-12b-ctx4k.Modelfile` bakes
+`num_ctx 4096` into `gemma4:12b-ctx4k`, and `models.yaml`'s last rung points at it. A variant fixes
+the hermes CLI and `ollama_chat()` simultaneously and keeps model choice in config, per CLAUDE.md's
+model-agnostic constraint. 4096 over 8192 deliberately: this rung exists to load *reliably* under
+memory pressure (free RAM swung between 2.8GB and 7.9GB within one hour of testing), and headroom is
+worth less than starting at all. Proven with **no caller options**, the way hermes actually calls it:
+`gemma4:12b` FAILS, `gemma4:12b-ctx4k` loads in 103s at 1.5 tok/s. Verified the orchestrator reads
+the new chain and still classifies the variant as LOCAL, so it gets `LOCAL_FALLBACK_TIMEOUT_S`
+(3600s) rather than the 1800s cloud timeout.
+
+**What this does NOT fix, and it matters.** Asked the C1 canary question tool-free (Shopify's founding
+year, truly 2006, which the cloud model got right tonight), llama3.1 answered **2004** and gemma
+answered **2013**. Today those attempts became `infra_failed` — unjudged, rollback gate shut, skills
+safe (F37). A rung that loads turns them into *genuine content failures*: judged, green count drops,
+and auto-rollback deletes an operator-approved skill. Fixing the load therefore **increases**
+skill-deletion risk unless the local rung is kept out of graded work. Caveat held honestly: that test
+was tool-free, so it is direct evidence about the **synthesis** path (`ollama_chat`) and only
+suggestive about the tool-driven canary/research path, where the A3 probe did once get 2006 by
+looking it up.
+
+Also worth stating plainly, since it comes up: **`glm-5.2:cloud` cannot serve as the quota fallback.**
+It is already rung 1 of the chain and returned 429 for both canaries tonight — 429 is account-level
+(§1.6), so a second Ollama Cloud model shares the exhausted quota, and it is the manager/critic model
+besides. The only genuine fix for account-level exhaustion is the commented-out second provider.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1325,7 +1378,7 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29 through F35 and **F37**, closed **H7**, and implemented
+safety and honesty rules unchanged. It fixed F29 through F35, **F37** and **F38**, closed **H7**, and implemented
 directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
 uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
 along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file
