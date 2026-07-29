@@ -33,18 +33,28 @@ def _week_start() -> str:
     return ledger.window_start_sql(7)
 
 
-def canaries_green(since: str) -> tuple[int, int]:
-    """(passed, ran) canary tasks in the window. `since` must already be in SQLite's
-    datetime() string domain (see _week_start()). A canary passes on human verdict if
-    present, else critic verdict."""
+def canaries_green(since: str) -> tuple[int, int, int]:
+    """(passed, ran, unjudged) canary tasks in the window. `since` must already be in
+    SQLite's datetime() string domain (see _week_start()). A canary passes on human
+    verdict if present, else critic verdict.
+
+    F45 (docs/HARDENING.md), 2026-07-30: this selected `status='done'` only and returned
+    just (passed, ran), so the renderers divided by the number that RAN. On 2026-07-30
+    that would have published **"Canaries green: 3/3"** for a week where 3 passed and 2
+    were quota-parked out of a fixed set of 5 -- a perfect-looking score whose denominator
+    silently shrank to hide the missing work. Exactly the vanishing-denominator dishonesty
+    H5/F7 fixed for mission tasks, still live in the canary line, and the reason F37 bothered
+    to separate "answered incorrectly" from "never produced a judgement" at all."""
     with sqlite3.connect(LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
         rows = c.execute(
-            "SELECT critic_verdict, human_verdict FROM tasks "
-            "WHERE mission_id='canaries' AND status='done' AND created_at>=?",
-            (since,)).fetchall()
-    passed = sum(1 for r in rows if (r["human_verdict"] or r["critic_verdict"]) == "pass")
-    return passed, len(rows)
+            "SELECT status, critic_verdict, human_verdict FROM tasks "
+            "WHERE mission_id='canaries' AND created_at>=?", (since,)).fetchall()
+    done = [r for r in rows if r["status"] == "done"]
+    passed = sum(1 for r in done if (r["human_verdict"] or r["critic_verdict"]) == "pass")
+    unjudged = sum(1 for r in rows if r["status"] in
+                   ("quota_wait", "queued", "interrupted", "infra_failed"))
+    return passed, len(done), unjudged
 
 
 def _fmt(v, pct=False):
@@ -80,7 +90,16 @@ def _ai_check_suffix(fit: dict) -> str:
     return f", {n} AI-performed pending operator confirmation" if n else ""
 
 
-def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, gave_up: int = 0) -> str:
+def _canary_line(green: int, unjudged: int) -> str:
+    """F45: denominator is the FIXED canary set, never the number that happened to run.
+    A week where 3 passed and 2 parked is 3/5 with the gap stated, not 3/3."""
+    tail = (f" ({unjudged} never produced a judgement — parked/infra, retry pending)"
+            if unjudged else "")
+    return f"{green}/{CANARY_TOTAL}{tail}"
+
+
+def render_md(week: str, fit: dict, green: int, ran: int, unjudged: int = 0,
+              recovered: int = 0, gave_up: int = 0) -> str:
     crash_line = (f"- Crash recovery: {recovered} task(s) recovered, {gave_up} gave up "
                   f"after repeated interruption\n" if (recovered or gave_up) else "")
     # H5/F7 (docs/HARDENING.md): dropped/pending are first-class, always-shown lines,
@@ -99,7 +118,7 @@ def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, ga
         f"{_ai_check_suffix(fit)}): {_fmt(fit.get('accuracy'), pct=True)}\n"
         f"- Intervention rate: {_fmt(fit.get('intervention_rate'), pct=True)}\n"
         f"- Avg cost/task: ${fit.get('avg_cost_usd', 0) or 0}\n"
-        f"- Canaries green: {green}/{ran or CANARY_TOTAL}\n"
+        f"- Canaries green: {_canary_line(green, unjudged)}\n"
         f"{crash_line}"
         f"- Note: {fit.get('note', '')}\n\n"
         f"_Generated {datetime.now().isoformat(timespec='seconds')}. Completion is measured "
@@ -108,7 +127,8 @@ def render_md(week: str, fit: dict, green: int, ran: int, recovered: int = 0, ga
     )
 
 
-def telegram_line(week: str, fit: dict, green: int, ran: int, recovered: int = 0, gave_up: int = 0) -> str:
+def telegram_line(week: str, fit: dict, green: int, ran: int, unjudged: int = 0,
+                  recovered: int = 0, gave_up: int = 0) -> str:
     f = fit.get("fitness")
     crash_suffix = f" · ⚠ {recovered} recovered/{gave_up} gave up (crash)" if (recovered or gave_up) else ""
     if fit.get("tasks_attempted", 0) == 0:
@@ -120,7 +140,8 @@ def telegram_line(week: str, fit: dict, green: int, ran: int, recovered: int = 0
     return (f"📊 {week} · F={_fmt(f)} · {fit.get('tasks_scheduled', fit['tasks_attempted'])} scheduled · "
             f"done {_fmt(fit.get('completion_rate'), pct=True)} · "
             f"acc {_fmt(fit.get('accuracy'), pct=True)} · "
-            f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{ran or CANARY_TOTAL}"
+            f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{CANARY_TOTAL}"
+            f"{f' ({unjudged} unjudged)' if unjudged else ''}"
             f"{drop_suffix}{crash_suffix}{ai_suffix}")
 
 
@@ -148,7 +169,7 @@ def deliver_telegram(line: str) -> bool:
 def build(deliver: bool = False) -> tuple[str, str]:
     since = _week_start()
     fit = ledger.weekly_fitness()
-    green, ran = canaries_green(since)
+    green, ran, unjudged = canaries_green(since)
     recovered, gave_up = crash_recovery_counts(since)
     week = datetime.now().strftime("%Y-W%V")
 
@@ -162,9 +183,9 @@ def build(deliver: bool = False) -> tuple[str, str]:
              fit.get("avg_cost_usd"), fit.get("fitness"), green, fit.get("note", "")))
 
     VIEW_DIR.mkdir(parents=True, exist_ok=True)
-    md = render_md(week, fit, green, ran, recovered, gave_up)
+    md = render_md(week, fit, green, ran, unjudged, recovered, gave_up)
     (VIEW_DIR / f"{week}.md").write_text(md, encoding="utf-8")
-    line = telegram_line(week, fit, green, ran, recovered, gave_up)
+    line = telegram_line(week, fit, green, ran, unjudged, recovered, gave_up)
     if deliver:
         deliver_telegram(line)
     return md, line

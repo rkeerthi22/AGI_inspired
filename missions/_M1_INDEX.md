@@ -186,6 +186,49 @@ cleaned first. Rollback is `python orchestrator/promote.py rollback <mission>/<f
 
 **Operator standing rule (F36):** commit before triggering a fire, and don't edit tracked files while
 one is running. `runs/`, `workspace/` and `ledger/` are gitignored, so agent output is unaffected.
+Extended 2026-07-30: this now includes `.gitignore` itself (F42 protects it), so an **uncommitted**
+ignore rule cannot survive a run — the guard reverts the file to HEAD and takes the rule with it.
+
+## W31 canaries — first canary data since W29, and what it cost to get
+
+Ran manually 2026-07-29/30 rather than waiting for Sunday. **3 green, 2 quota-parked** out of 5;
+the rollback gate is therefore **SHUT** on partial data and both promoted skills are safe. The
+baseline-of-3 test still has not concluded, correctly.
+
+Three attempts, and the failure mode changed each time as fixes landed:
+1. **2026-07-29 21:05** — C2/C5 failed over to local `gemma4:12b`, which never started (KV-cache OOM,
+   F38). Their error text was graded as a wrong answer and recorded `critic_verdict='fail'`, dropping
+   green to 3 against a baseline of 3. `3 < 3` is False, so auto-rollback missed deleting a skill by
+   **one canary** — for a VRAM problem (**F37**).
+2. **2026-07-30 01:08** — with F37/F40 in place, quota was still exhausted and C2/C5 **parked**
+   instead of degrading. No false regression escalation. Rows reclassified to `infra_failed` first.
+3. **2026-07-30 01:13** — re-run "first thing before any mission fire" per operator instruction.
+   Identical result: instant 429s. **That answers the question — the Ollama quota window is not
+   local-midnight based, so running canaries early is not a lever.**
+
+The lesson recorded against my own reasoning: I justified attempt 3 on a probe that returned "OK" in
+1.0s. That probe spent **13 tokens**; a canary is a full hermes browser session. A trivial call
+succeeding proves the endpoint is reachable, not that there is headroom for real work.
+
+**Fixes 2026-07-30** (full write-ups in `docs/HARDENING.md`):
+- **F39** — `quota_group` makes "429 is account-level" machine-readable; a dead group's siblings are
+  skipped instead of called for a guaranteed refusal (~30s saved per task, visible in the logs above).
+- **F40** — canaries never run on a local model. The distinction that matters is not "graded" but
+  "grades an automated self-modification decision".
+- **F41** — locality was inferred from the model NAME, so `anthropic/claude-sonnet-5` counted as
+  local. Found by a test that simulated adding that rung; F40 would have excluded your second
+  provider from canaries, exactly backwards.
+- **F42** — the repo root was outside the containment surface. `.gitignore` and `IDENTITY.md` are now
+  protected (a worker could have appended to `.gitignore` to hide its own output from the guard), plus
+  a depth-0 scan for new root files.
+- **F43** — `infra_failed` was not a resumable status, so F37's correct reclassification made those
+  canaries permanently un-retryable. All five would have been skipped on attempt 3.
+- **F44** — the daily budget compared `finished_at` (local, `T`-separated) against a **UTC** day
+  boundary, reporting **11,390,219 tokens spent on a day that had spent nothing**. Third recurrence of
+  the F17/F19 clock-domain class, and F22 introduced it.
+- **F45** — the scorecard's canary line divided by the number that RAN, so this week would have
+  published "Canaries green: **3/3**" — a perfect-looking score with a silently shrinking denominator.
+  Now `3/5 (2 never produced a judgement)`. Same dishonesty H5/F7 fixed for mission tasks.
 
 **Lesson-pool note (2026-07-27):** lesson_candidates #5/#6/#7 (mission 001) were retracted — they
 recorded the three F20 failures, i.e. a harness defect, not an analyst technique. Left in the pool
@@ -204,14 +247,26 @@ Zero `runs/quarantine_*.json` files at any point (containment guard) remains the
 signal — anything else is a normal operating variance.
 
 **Next two events, and what each actually tests.** **Sun 2026-08-02 03:30/04:00** is the first
-unattended run under everything from F20 through F36 and H7. It matters more than a routine Sunday
-for three reasons: the canaries produce the first real green count since W29, which is the number the
-two live skills' rollback baseline of 3 is finally judged against; the scorecard exercises the
-Telegram spot-check push without anyone watching; and the promotion review runs through the H7
-sanitiser for the first time. **Mon 2026-08-03 04:00** is then W32's first mission fire, and the
-first time the same-fire retry path (directive 2) can trigger on its own. Any new
-`runs/reverted_*` directory after either is the F36 preservation working — check it before assuming
-nothing was discarded.
+unattended run under everything from F20 through F45 and H7. The canary green count is already
+partially in (3/5 above), so Sunday's job is to retry the two parked ones — and it can only settle
+the baseline-of-3 question if Ollama quota happens to be available then, which the three attempts
+above show is not something the schedule controls. The scorecard exercises the Telegram spot-check
+push without anyone watching, and the promotion review runs through the H7 sanitiser for the first
+time. **Mon 2026-08-03 04:00** is W32's first mission fire, and the first time the same-fire retry
+path (directive 2) can trigger on its own.
+
+Two things to check *before* concluding a run went cleanly:
+- Any new `runs/reverted_*` directory means F36's preservation caught something — open it rather
+  than assuming nothing was discarded.
+- **The canary green count only judges skills when nothing is unjudged.** `3/5 (2 unjudged)` leaves
+  the gate shut by design (F37/F40/F45). A week that reports `N/5` with no suffix is the only kind
+  that can trigger an auto-rollback.
+
+**The real bottleneck is not throughput.** W31 sits at completion 100% with fitness capped at 0.80
+purely by accuracy — 33%, over three spot-checks that the assistant performed, not you (F28). Ten
+minutes of `python orchestrator/spotcheck.py list` and a few `pass|fail` verdicts moves fitness more
+than any further engineering. Seven deliverables are queued for a first read (tasks 30, 29, 28, 27,
+18, 5, 1) and three carry AI-performed verdicts awaiting confirmation (26, 25, 24).
 
 ## M1 acceptance (all must hold — HARNESS_DESIGN.md §7)
 - ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks ·

@@ -1038,6 +1038,28 @@ planting a row one minute before local midnight, the pre-F44 boundary pulls **5,
 today and the fixed one returns 0. A regression test that passes on both the fixed and broken code is
 decoration.
 
+### F45 — The scorecard's canary line divided by the number that RAN · **P1 · PROVEN, found + fixed 2026-07-30**
+Found while updating the committed scorecard view, by checking what it *would* print before publishing
+it. `canaries_green()` selected `status='done'` only and returned `(passed, ran)`; both renderers then
+divided by `ran or CANARY_TOTAL`. For W31 — 3 passed, 2 quota-parked, out of a fixed set of 5 — that
+renders **`Canaries green: 3/3`**: a perfect-looking score whose denominator silently shrank to hide
+the two canaries that never ran.
+
+This is precisely the vanishing-denominator dishonesty **H5/F7** fixed for mission tasks
+(*"a week that drops most of its scheduled work must show that plainly"*), still live in the canary
+line, and the whole reason **F37** bothered to separate *"answered incorrectly"* from *"never produced
+a judgement"*. It would have been published to a committed markdown view and pushed to Telegram.
+
+**Fixed:** `canaries_green()` now returns `(passed, ran, unjudged)` counting parked/queued/interrupted/
+infra rows, and the denominator is always `CANARY_TOTAL`. Renders as
+`3/5 (2 never produced a judgement — parked/infra, retry pending)`, and the Telegram line as
+`canaries 3/5 (2 unjudged)`. Verified a fully green week gains no spurious suffix (`5/5`) and a week
+where nothing ran reads `0/5 (5 never produced a judgement)`.
+
+Worth noting *why* this was caught: the task was "update the docs", and regenerating would have been
+the obvious way to do it. Publishing a generated artifact without first checking what it will say is
+how a reporting bug becomes a committed claim.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1504,7 +1526,7 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F44**, closed **H7**, and implemented
+safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F45**, closed **H7**, and implemented
 directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
 uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
 along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file
