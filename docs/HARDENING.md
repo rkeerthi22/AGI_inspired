@@ -649,6 +649,37 @@ daily counter **4,640,719 → 4,655,381 (+14,662)** while the task row went `863
 `870,795/12,635` — a row delta of exactly 14,662, matching the counter, with the prior 863k total
 preserved rather than overwritten.
 
+### F34 — Approving a skill in a week with no canaries silently disarmed its rollback · **P1 · PROVEN, found + fixed 2026-07-29**
+`_current_canary_green()` counted passes in the **current** ISO week and returned a bare `0` when
+that week had no canary rows — unable to distinguish *"the canaries ran and none passed"* (a real 0)
+from *"the canaries have not run yet"* (no data at all). Those are opposite situations and only one
+of them is a baseline.
+
+The consequence is a safety net that reads as armed and is not.
+`newest_skill_below_baseline()` rolls back when `week_green < canary_baseline`, so a baseline of 0
+**can never trigger** — no green count is below zero. Caught at the moment it happened: both skills
+approved on 2026-07-29 were stamped `canary_baseline: 0`, because W30's canaries were refused by the
+battery bug and W31's Sunday cron had not fired yet, leaving W29 as the last week that actually ran.
+Auto-rollback was permanently disabled for both, silently, as a side effect of *when* approval was
+issued.
+
+**Fixed** by falling back to the most recent week that genuinely ran canaries. A week counts as
+having run if it holds rows in a resolved state (`done`/`failed`); `stale` and quota-parked rows are
+ignored, so a parked week cannot masquerade as a real observation. A returned 0 now means what it
+says. The function also returns the source week, which `cmd_approve()` records as
+`canary_baseline_week` in the skill file and in the promotion commit message — a baseline carried
+over from an earlier week is a materially different claim from one measured this week, and the file
+is the only place that distinction survives. A baseline of 0 now also logs an explicit warning that
+rollback cannot fire.
+
+Proven on a ledger copy across six states, including the two the old code could not tell apart:
+current week with 5 green → `(5, W31)`; current week that ran and passed none → `(0, W31)` *not* a
+stale fallback; stale-only week ignored → falls back to `(3, W29)`; most recent real week wins over
+an older better one; empty history → `(0, "none")`. The two live skills were re-stamped to
+`canary_baseline: 3` (W29's real count) with a note recording why, and rollback selection was
+verified end-to-end: `week_green` 5/4/3 → no target, 2/0 → correctly selects one. Under the old
+baseline it selected nothing at any value.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1069,8 +1100,8 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29, F30, F31, F32 and F33 and implemented directives
-1, 2 and 5 (all above). Task 30 was then re-run through the production batch path as a true
+safety and honesty rules unchanged. It fixed F29, F30, F31, F32, F33 and F34 and implemented
+directives 1, 2 and 5 (all above). Task 30 was then re-run through the production batch path as a true
 synthesis: it passes, cites 10/10 reachable URLs with 0 missing literals (was 4 falsely-dead, 4
 missing), covers the mission's two real channels instead of an invented one, and — the clearest
 evidence F31 works — reports an explicit **DATA GAP** for a third topic the supplied brief did not
@@ -1085,9 +1116,16 @@ bugs that no longer exist. W31 was corrected to completion **86%**, fitness **0.
 fixing our own defects; no deliverable was edited and task 30 was deliberately left FAILED, since
 its content really is wrong even though the recorded reason was ours.
 
+**The promotion gate fired for the first time on 2026-07-29**: both candidates were operator-approved
+and are live in `skills_analyst/`, injecting into their missions' worker prompts (346 and 430 chars).
+That immediately surfaced F34 above — the approval stamped a rollback baseline of 0 and disarmed its
+own safety net. Worth noting as a pattern: the gate's first real use found a defect in the gate,
+exactly as the first real use of the reasoning trace found F23.
+
 Still open: **H7** (candidate-note injection hardening — the roadmap's own stated precondition for
-enabling the promotion gate; **two candidates now sit in `skills_analyst/_candidates/` awaiting the
-operator's approve/reject, so this is no longer hypothetical**), the USD half of F8, **F27** (raw
+enabling the promotion gate, and **two skills are now active without it**, so this is no longer
+hypothetical: the notes were model-drafted from model-written critic text, and nothing constrains
+their shape before they enter a prompt), the USD half of F8, **F27** (raw
 substring matching's coincidental-match risk), no git remote (recovery is local-only), a re-run of
 task 30 as a true synthesis now that F30 routes it correctly, and Phase 2.5 onward (runtime
 abstraction, M2).

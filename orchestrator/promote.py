@@ -53,13 +53,44 @@ def _lesson_pool() -> dict[str, list[dict]]:
     return pool
 
 
-def _current_canary_green() -> int:
-    """This week's canary green count — recorded at approval as the skill's baseline."""
+def _current_canary_green() -> tuple[int, str]:
+    """(green_count, source_week) to stamp as a newly-approved skill's rollback baseline.
+
+    F34 (docs/HARDENING.md), 2026-07-29. This counted passes in the CURRENT ISO week and
+    returned a bare 0 when that week had no canary rows -- unable to distinguish "the
+    canaries ran and none passed" (a real 0) from "the canaries have not run yet" (no
+    data at all). Those are opposite situations and only one of them is a baseline.
+
+    The consequence was a safety net that reads as armed and is not:
+    newest_skill_below_baseline() rolls back when `week_green < canary_baseline`, so a
+    baseline of 0 can never trigger -- no green count is below zero. Measured live
+    2026-07-29: both skills approved that day were stamped `canary_baseline: 0`, because
+    W30's canaries were refused by the battery bug and W31's Sunday cron had not fired
+    yet, leaving W29 as the last week that actually ran. Auto-rollback was permanently
+    disarmed for both, silently, at the moment of approval.
+
+    Now falls back to the most recent week that genuinely RAN canaries. A week counts as
+    having run if it has rows in a resolved state (`done`/`failed`); `stale` and parked
+    rows are ignored, so a quota-parked week does not masquerade as a real observation.
+    That makes a returned 0 mean what it says -- canaries ran, none passed -- and keeps
+    the baseline an honest floor ("at least N were observed green") rather than an
+    artefact of when approval happened to be issued.
+    """
     wk = datetime.now().strftime("%Y-W%V")
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
-        return c.execute(
-            "SELECT count(*) FROM tasks WHERE mission_id='canaries' AND spec LIKE ? "
-            "AND status='done' AND critic_verdict='pass'", (f"[{wk}]%",)).fetchone()[0]
+        c.row_factory = sqlite3.Row
+        rows = c.execute(
+            "SELECT substr(spec,2,8) AS wk, "
+            "  SUM(status='done' AND critic_verdict='pass') AS green "
+            "FROM tasks WHERE mission_id='canaries' AND status IN ('done','failed') "
+            "GROUP BY wk ORDER BY wk").fetchall()
+    if not rows:
+        return 0, "none"
+    for r in rows:
+        if r["wk"] == wk:
+            return int(r["green"] or 0), wk
+    last = rows[-1]                       # lexical order is chronological: 2026-W52 < 2027-W01
+    return int(last["green"] or 0), last["wk"]
 
 
 def cmd_review(notify: bool, dry: bool) -> int:
@@ -159,10 +190,14 @@ def cmd_approve(name: str) -> int:
     if not mission_m:
         _log("candidate has no mission: field"); return 1
     mission = mission_m.group(1)
-    baseline = _current_canary_green()
+    baseline, baseline_week = _current_canary_green()
+    # F34: record WHICH week the baseline came from. A baseline carried over from an
+    # earlier week is a materially different claim than one measured this week, and the
+    # file is the only place that distinction survives.
     text = text.replace("status: pending",
                         f"status: active\napproved: {datetime.now().date()}\n"
-                        f"canary_baseline: {baseline}")
+                        f"canary_baseline: {baseline}\n"
+                        f"canary_baseline_week: {baseline_week}")
     dest = SKILLS / mission / src.name
     dest.parent.mkdir(parents=True, exist_ok=True)
     dest.write_text(text, encoding="utf-8")
@@ -197,9 +232,13 @@ def cmd_approve(name: str) -> int:
     # also closes.
     relp = str(dest.relative_to(ROOT))
     _git("add", relp)
-    _git("commit", "-m", f"Promote skill: {mission}/{src.name} (canary baseline {baseline})",
-         "--", relp)
-    _log(f"APPROVED -> {dest.relative_to(ROOT)} (canary baseline {baseline}, committed)")
+    _git("commit", "-m", f"Promote skill: {mission}/{src.name} "
+         f"(canary baseline {baseline} from {baseline_week})", "--", relp)
+    _log(f"APPROVED -> {dest.relative_to(ROOT)} (canary baseline {baseline} "
+         f"from {baseline_week}, committed)")
+    if baseline == 0:
+        _log("  WARNING: baseline 0 -- auto-rollback cannot trigger for this skill "
+             "(no green count is below zero). Re-stamp once canaries produce a green week.")
     return 0
 
 
