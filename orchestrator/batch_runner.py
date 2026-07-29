@@ -107,7 +107,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
 
 
 def ollama_chat(model: str, prompt: str, timeout: int = 300,
-                trace_path: Path | None = None) -> str:
+                trace_path: Path | None = None,
+                usage_out: dict | None = None) -> str:
     """Tool-free call for the critic (no web needed, cheaper than a hermes session).
 
     glm-5.2:cloud returns its full chain-of-thought in `message.thinking` on EVERY
@@ -123,6 +124,13 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300,
     was dropped is an unfalsifiable assertion. Deliberately a FILE ONLY -- the trace is
     never read back into any prompt, because it is model text derived from fetched web
     content and F10 (docs/HARDENING.md) treats that as an injection path.
+
+    F33 (docs/HARDENING.md): Ollama reports consumption as `prompt_eval_count` /
+    `eval_count` at the TOP LEVEL of the reply, and this function read only `message`,
+    so every token it spent was discarded at the source. Pass a dict as `usage_out` to
+    receive `{"input_tokens", "output_tokens"}` -- an optional out-param rather than a
+    changed return type, so the four other call sites keep working unmodified (same
+    shape as `trace_path` above).
     """
     import urllib.request
     body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
@@ -130,7 +138,11 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300,
     req = urllib.request.Request("http://127.0.0.1:11434/api/chat", data=body,
                                  headers={"Content-Type": "application/json"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
-        msg = json.loads(r.read()).get("message", {})
+        payload = json.loads(r.read())
+    msg = payload.get("message", {})
+    if usage_out is not None:
+        usage_out["input_tokens"] = int(payload.get("prompt_eval_count") or 0)
+        usage_out["output_tokens"] = int(payload.get("eval_count") or 0)
     if trace_path is not None:
         thinking = (msg.get("thinking") or "").strip()
         if thinking:
@@ -221,8 +233,9 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
     return out, usage, cfg_used, True
 
 
-def synthesis_with_failover(prompt: str, worker_cfg: dict,
-                            log_prefix: str) -> tuple[str | None, dict, bool]:
+def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
+                            usage_out: dict | None = None
+                            ) -> tuple[str | None, dict, bool]:
     """ollama_chat() with the same F9 failover, for synthesis's tool-free HTTP call
     (urllib, not the hermes CLI subprocess) -- quota shows up as HTTPError code 429
     here, not as text in a subprocess reply, so the detection differs from
@@ -236,7 +249,8 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict,
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else 600
         cfg_used = cfg
         try:
-            out = ollama_chat(cfg["model"], prompt, timeout=timeout)
+            out = ollama_chat(cfg["model"], prompt, timeout=timeout,
+                              usage_out=usage_out)   # F33: carry consumption out
             if i > 0:
                 log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
                    f"(rung {i+1}/{len(candidates)})")
@@ -871,8 +885,10 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         # candidate) and only ever re-raises a NON-429 HTTPError, so the branch below
         # no longer needs its own e.code==429 case -- that path is handled before it
         # could reach here.
+        syn_usage: dict = {}
         out, model_used_cfg, exhausted = synthesis_with_failover(
-            prompt, worker_cfg, log_prefix=f"task {tid} (synthesis)")
+            prompt, worker_cfg, log_prefix=f"task {tid} (synthesis)",
+            usage_out=syn_usage)
     except urllib.error.HTTPError as e:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis HTTP {e.code}",
@@ -923,7 +939,16 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     status = "done" if verdict == "pass" else "failed"
     # No fact extraction for synthesis — it derives from facts already in the ledger;
     # re-extracting would duplicate them.
-    ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], critic_verdict=verdict,
+    # F33 (docs/HARDENING.md): this call used to omit tokens entirely, so no synthesis
+    # in the project's history ever recorded what it spent and policy.tokens_used_today()
+    # was structurally blind to the whole task type. Measured 2026-07-29 by re-running
+    # task 30: the daily counter sat at exactly 4,640,719 before AND after a real
+    # synthesis. Accumulated onto the row's prior total for the same reason as F32 --
+    # this path is retried like any other.
+    tok_in = int(syn_usage.get("input_tokens") or 0) + int(row.get("tokens_in") or 0)
+    tok_out = int(syn_usage.get("output_tokens") or 0) + int(row.get("tokens_out") or 0)
+    ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], cost_usd=0.0,
+                       tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status=status)
     if verdict == "fail":
         ledger.add_lesson(tid, f"[{mission['id']}] {verdict_text[:300]}", kind="failed")

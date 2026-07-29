@@ -103,9 +103,10 @@ in the machinery that JUDGES the work, none in the work itself — see `docs/HAR
   performs are now flagged `spot_checked_ai` in the scorecard, since they are not independent of
   the system they're checking, matching the theme running through every incident in this file.
 
-**W31 final state:** completion **86%**, accuracy 33% (3 spot-checks, all flagged AI-performed
-pending operator confirmation — F28), fitness **0.75**. Not fabricated-high, not silently corrected
-without a trail — every verdict change carries an audit note explaining why.
+**W31 final state:** completion **100%**, accuracy 33% (3 spot-checks, all flagged AI-performed
+pending operator confirmation — F28), fitness **0.80**. Not fabricated-high, not silently corrected
+without a trail — every verdict change carries an audit note explaining why, and the one task whose
+content was genuinely wrong (30) was re-run rather than re-graded.
 
 **THROUGHPUT PASS 2026-07-29 (operator instruction: "more throughput, not less caution").** Five
 directives, safety/honesty rules unchanged — full write-ups in `docs/HARDENING.md`, the story in
@@ -123,7 +124,11 @@ directives, safety/honesty rules unchanged — full write-ups in `docs/HARDENING
   `startswith("synthesis")` test vs a seed reading "Cross-channel synthesis: …" (F30). Task 27 was
   separately unpassable by construction, graded on research a tool-free task may not perform (F31);
   re-judged on unchanged bytes it now PASSES. Also fixed the URL-regex bug's third instance (F29,
-  now fixed as a class) and a retry-accounting hole (F32).
+  now fixed as a class) and two retry/accounting holes (F32, F33 — synthesis had **never** recorded
+  its token spend, so the daily budget guard was blind to the whole task type). Task 30 was then
+  re-run for real through the production path and passes as a true cross-channel synthesis:
+  10/10 citations reachable, 0 literals missing, both real channels, and an honest DATA GAP where
+  the source brief was short rather than an invented third topic.
 - **Two skill candidates drafted** (below) — the evidence bar was met and the pool was simply never
   reviewed. Three bug-artifact lessons were retracted first, on F20's precedent.
 - **Spot-checks now PUSH to Telegram** after any fire that produces deliverables, and separately

@@ -625,6 +625,30 @@ while building directive-2 below, which makes retries routine, so it had to be c
 **Fixed** by accumulating onto the row's prior total in `run_task()` (`row` is read before the attempt
 starts, so a first run adds zero — verified both directions in the regression test).
 
+### F33 — Synthesis token spend was never recorded, at all · **P1 · PROVEN, found + fixed 2026-07-29**
+Found while *verifying* F32 rather than while looking for it — the re-run of task 30 completed and the
+daily counter did not move by a single token. Three independent measurements agreed: `run_synthesis()`
+called `finish_task()` with **no** `tokens_in`/`tokens_out` argument; `ollama_chat()` returned
+`msg.get("content")` and discarded the rest of the reply; and `policy.tokens_used_today()` read
+exactly **4,640,719 before and after** a real synthesis run.
+
+Ollama reports consumption as `prompt_eval_count` / `eval_count` at the **top level** of the
+`/api/chat` reply, and this function only ever looked inside `message` — so the spend was thrown away
+at the source, before any accounting layer could have seen it. The consequence is the same direction
+of error as F21 and F22: **the daily budget guard protected less than it claimed**, and was
+structurally blind to an entire task type rather than to an edge case. It also means F32's fix, which
+was real, covered only the research path — worth stating plainly, because the commit message for that
+change could be read as broader than it was.
+
+**Fixed** with an optional `usage_out` dict on `ollama_chat()` (an out-param in the same shape as the
+existing `trace_path`, so the four other call sites are untouched), threaded through
+`synthesis_with_failover()`, and accumulated onto the row's prior total exactly as F32 does — this
+path is retried like any other. Proven twice: a live API probe captured real counts
+(`{'input_tokens': 17, 'output_tokens': 60}`), then a full production re-run of task 30 moved the
+daily counter **4,640,719 → 4,655,381 (+14,662)** while the task row went `863,372/5,396` →
+`870,795/12,635` — a row delta of exactly 14,662, matching the counter, with the prior 863k total
+preserved rather than overwritten.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1045,8 +1069,13 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29, F30, F31 and F32 and implemented directives 1, 2
-and 5 (all above). The theme is worth stating plainly, because it is now the third session running:
+safety and honesty rules unchanged. It fixed F29, F30, F31, F32 and F33 and implemented directives
+1, 2 and 5 (all above). Task 30 was then re-run through the production batch path as a true
+synthesis: it passes, cites 10/10 reachable URLs with 0 missing literals (was 4 falsely-dead, 4
+missing), covers the mission's two real channels instead of an invented one, and — the clearest
+evidence F31 works — reports an explicit **DATA GAP** for a third topic the supplied brief did not
+contain, rather than inventing one, with the critic passing it rather than failing it for the
+absence. The theme is worth stating plainly, because it is now the third session running:
 **every failure investigated this pass was in the machinery that JUDGES or SCHEDULES the work, not
 in the work itself.** Task 27 was unpassable by construction (F31); task 30 was researching the
 wrong thing entirely (F30) and then rejected for the wrong reason on top of that (F29). Three
