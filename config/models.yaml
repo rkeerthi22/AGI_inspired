@@ -10,6 +10,7 @@ roles:
     # CURRENT default until key added (WARNING: 429s under load — see §1.6):
     provider: ollama
     model: glm-5.2:cloud
+    quota_group: ollama-cloud      # F39: shares one account 429 — see fallback_chain
     max_calls_per_day: 40          # low volume by design; guards cost + quota
 
   critic:
@@ -17,18 +18,24 @@ roles:
     # (independent judge — see §2.4). Falls back to manager model if unset.
     provider: ollama
     model: glm-5.2:cloud
+    quota_group: ollama-cloud
 
   worker:
     # Bulk research/analysis. Shares Ollama Cloud account quota with manager
     # unless manager moves to Anthropic (recommended — decouples the pools).
     provider: ollama
     model: kimi-k2.7-code:cloud
+    quota_group: ollama-cloud
 
   fallback:
     # MEASURED 1.54 tok/s on this box (2026-07-17). Emergency / offline batch ONLY.
     # Never assign a live, latency-sensitive role here.
+    # F38: the capped variant, not plain gemma4:12b — the uncapped model cannot LOAD on
+    # this box at all (KV cache OOM at its 262k default context).
     provider: ollama
-    model: gemma4:12b
+    model: gemma4:12b-ctx4k
+    # No quota_group: local inference draws on no shared quota pool, so a cloud 429 must
+    # never cause this rung to be skipped.
 
   embeddings:
     # Deferred: FTS5 (Hermes built-in) first. Enable only if recall demands it.
@@ -38,10 +45,19 @@ roles:
 
 # Cross-PROVIDER fallback chain (429 is account-level, not per-model — §1.6).
 # A second Ollama model does NOT survive quota exhaustion; a second provider does.
+#
+# `quota_group` (F39, docs/HARDENING.md) makes that fact MACHINE-READABLE instead of a
+# comment nobody's code reads. Rungs sharing a group share one 429, so once any of them
+# returns a quota error the rest are skipped rather than tried and failed. Measured
+# 2026-07-29: every canary spent ~30s calling glm-5.2:cloud immediately after
+# kimi-k2.7-code:cloud had already 429'd, on the same account, for a guaranteed refusal.
+# A rung with NO quota_group is its own pool and is never skipped by inference.
 fallback_chain:
-  - { provider: ollama, model: glm-5.2:cloud }
-  - { provider: ollama, model: kimi-k2.7-code:cloud }
+  - { provider: ollama, model: glm-5.2:cloud,        quota_group: ollama-cloud }
+  - { provider: ollama, model: kimi-k2.7-code:cloud, quota_group: ollama-cloud }
   # - { provider: anthropic, model: claude-sonnet-5 }   # uncomment when key added
+  #   ^ note the ABSENT quota_group: a genuinely separate account is the whole point, and
+  #     is the only thing that makes this chain cross-PROVIDER rather than cross-model.
   # F38 (docs/HARDENING.md), 2026-07-29: was plain `gemma4:12b`, which had NEVER once
   # completed a task -- every attempt died with llama-server OOM at startup. The cause was
   # not the 7.6GB weights on a 4GB GPU but the KV CACHE, sized from this model's default

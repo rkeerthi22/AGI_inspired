@@ -178,10 +178,27 @@ LOCAL_FALLBACK_TIMEOUT_S = 3600  # gemma4:12b measured 1.54 tok/s (§1.6) drivin
                                   # (900s) would kill a real multi-fact brief mid-generation.
 
 
+LOCAL_PROVIDERS = {"ollama"}   # the only provider that can execute on this box
+
+
 def _is_local_model(model_cfg: dict) -> bool:
-    """Every cloud Ollama model in config/models.yaml is suffixed `:cloud`; anything
-    else runs on the local daemon and needs LOCAL_FALLBACK_TIMEOUT_S, not
-    WORKER_TIMEOUT_S -- confirmed convention, checked across the whole file."""
+    """Does this model run on THIS machine?
+
+    Ollama cloud models are suffixed `:cloud`; an Ollama model without that suffix runs
+    on the local daemon and needs LOCAL_FALLBACK_TIMEOUT_S rather than WORKER_TIMEOUT_S.
+
+    F41 (docs/HARDENING.md), 2026-07-29: this used to test the model NAME alone --
+    `":cloud" not in model` -- which makes locality a property of a naming convention
+    instead of where the model actually runs. Any non-Ollama model is therefore
+    misclassified as local, `anthropic/claude-sonnet-5` included: the exact rung
+    models.yaml keeps pre-wired and CLAUDE.md calls PREFERRED. Latent while that line
+    stayed commented (the only visible cost was a 3600s timeout on a fast API), and it
+    became a correctness bug the moment F40 started excluding local models from canaries
+    -- a genuinely separate provider would have been excluded too, which is precisely
+    backwards, since surviving an Ollama-account 429 is its entire purpose. Found by a
+    test that simulated adding that rung rather than by reading the line."""
+    if (model_cfg.get("provider") or "").lower() not in LOCAL_PROVIDERS:
+        return False
     return ":cloud" not in (model_cfg.get("model") or "")
 
 
@@ -190,22 +207,44 @@ def load_fallback_chain() -> list[dict]:
     return cfg.get("fallback_chain") or []
 
 
-def _failover_candidates(worker_cfg: dict) -> list[dict]:
+def _quota_group(cfg: dict) -> str | None:
+    """Which quota pool this model draws on, or None for "its own pool".
+
+    F39 (docs/HARDENING.md): 429 is ACCOUNT-level, and models.yaml said so only in a
+    comment. Declaring it as data lets the failover loops skip rungs that are guaranteed
+    to refuse. Absent by default on purpose -- an undeclared model is never skipped by
+    inference, so adding a genuinely separate provider needs no code change and a
+    mis-declared group can only ever cost a wasted call, never a skipped good rung."""
+    return cfg.get("quota_group")
+
+
+def _failover_candidates(worker_cfg: dict, allow_local: bool = True) -> list[dict]:
     """worker_cfg first, then fallback_chain entries not already equal to it, deduped
     by (provider, model) so a chain that happens to list the worker's own model again
-    doesn't retry it twice."""
-    candidates = [worker_cfg]
+    doesn't retry it twice.
+
+    allow_local=False drops local models entirely. Used for work whose GRADE drives an
+    automated decision about the system itself -- currently the canaries, whose green
+    count can delete an operator-approved skill (F40). Everything else keeps the local
+    rung: completing a deliverable on a slow model beats parking it, which was the
+    operator's explicit F9 decision, and a mission task's grade is reported rather than
+    acted on automatically."""
+    candidates = [worker_cfg] if (allow_local or not _is_local_model(worker_cfg)) else []
     seen = {(worker_cfg["provider"], worker_cfg["model"])}
     for c in load_fallback_chain():
         key = (c["provider"], c["model"])
-        if key not in seen:
-            candidates.append(c)
-            seen.add(key)
+        if key in seen:
+            continue
+        seen.add(key)
+        if not allow_local and _is_local_model(c):
+            continue
+        candidates.append(c)
     return candidates
 
 
 def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
-                         log_prefix: str) -> tuple[str, dict, dict, bool]:
+                         log_prefix: str,
+                         allow_local: bool = True) -> tuple[str, dict, dict, bool]:
     """hermes_worker() with failover on QUOTA ERRORS ONLY. A genuine subprocess timeout
     on any one candidate still raises subprocess.TimeoutExpired exactly as before --
     the caller's existing except-block handles it unchanged. This only widens what
@@ -215,9 +254,18 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
     Returns (out, usage, model_cfg_used, exhausted). exhausted=True means every
     candidate in the chain returned a quota error -- caller should park exactly as it
     did before this fix existed."""
-    candidates = _failover_candidates(worker_cfg)
+    candidates = _failover_candidates(worker_cfg, allow_local=allow_local)
+    if not candidates:
+        log(f"{log_prefix}: no eligible model (local excluded, no cloud rung) — parking")
+        return "", {}, worker_cfg, True
     out, usage, cfg_used = "", {}, candidates[0]
+    dead_groups: set[str] = set()          # F39: quota pools already known exhausted
     for i, cfg in enumerate(candidates):
+        grp = _quota_group(cfg)
+        if grp and grp in dead_groups:
+            log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
+                f"({i+1}/{len(candidates)}) — quota group '{grp}' already exhausted")
+            continue
         attempt_path = usage_path if i == 0 else usage_path.with_name(
             f"{usage_path.stem}_fallback{i}{usage_path.suffix}")
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else WORKER_TIMEOUT_S
@@ -228,6 +276,8 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
                 log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
                    f"(rung {i+1}/{len(candidates)})")
             return out, usage, cfg_used, False
+        if grp:
+            dead_groups.add(grp)
         more = i + 1 < len(candidates)
         log(f"{log_prefix}: quota error on {cfg['provider']}/{cfg['model']} "
            f"({i+1}/{len(candidates)})" +
@@ -247,7 +297,13 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
     import urllib.error
     candidates = _failover_candidates(worker_cfg)
     cfg_used = candidates[-1]
+    dead_groups: set[str] = set()          # F39: quota pools already known exhausted
     for i, cfg in enumerate(candidates):
+        grp = _quota_group(cfg)
+        if grp and grp in dead_groups:
+            log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
+                f"({i+1}/{len(candidates)}) — quota group '{grp}' already exhausted")
+            continue
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else 600
         cfg_used = cfg
         try:
@@ -260,6 +316,8 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
         except urllib.error.HTTPError as e:
             if e.code != 429:
                 raise
+            if grp:
+                dead_groups.add(grp)
             more = i + 1 < len(candidates)
             log(f"{log_prefix}: quota error (HTTP 429) on {cfg['provider']}/{cfg['model']} "
                f"({i+1}/{len(candidates)})" +
@@ -1487,8 +1545,19 @@ def run_canaries(roles: dict) -> None:
         snapshot = db_integrity_snapshot()
         fs_snapshot = fs_integrity_snapshot()
         try:
+            # F40 (docs/HARDENING.md): canaries NEVER run on a local model. Their green
+            # count is the only signal that automatically deletes an operator-approved
+            # skill, so it has to measure the analyst, not whichever model happened to be
+            # reachable. Measured 2026-07-29: the three canaries that ran on cloud all
+            # passed and the two that failed over to gemma both failed; asked tool-free,
+            # the local models answer C1's question 2004 and 2013 against a true 2006. With
+            # the F38 cap making that rung actually loadable, those would have become
+            # scoreable content failures and cost a skill. Excluded, a quota-exhausted
+            # canary parks instead — week_pending rises, the rollback gate stays shut
+            # (F37), and the skill survives to be judged on real data.
             out, usage, model_used_cfg, exhausted = worker_with_failover(
-                prompt, worker_cfg, RUNS / f"canary_{name}.usage.json", log_prefix=f"canary {name}")
+                prompt, worker_cfg, RUNS / f"canary_{name}.usage.json",
+                log_prefix=f"canary {name}", allow_local=False)
         except subprocess.TimeoutExpired:
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes="canary timeout",

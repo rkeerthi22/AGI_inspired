@@ -912,6 +912,51 @@ It is already rung 1 of the chain and returned 429 for both canaries tonight —
 (§1.6), so a second Ollama Cloud model shares the exhausted quota, and it is the manager/critic model
 besides. The only genuine fix for account-level exhaustion is the commented-out second provider.
 
+### F39 — "429 is account-level" was a comment no code could read · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
+`models.yaml` has always said it: *"A second Ollama model does NOT survive quota exhaustion."* Nothing
+enforced it, so the chain dutifully called every cloud rung in turn after the account was already
+refusing. Measured 2026-07-29: each canary spent **~30s** calling `glm-5.2:cloud` immediately after
+`kimi-k2.7-code:cloud` had 429'd — same account, guaranteed refusal, twice over.
+
+Fixed by making the fact **data**: an optional `quota_group` on each role and chain entry. Once any
+rung in a group returns a quota error, the rest of that group is skipped with a log line. Absent by
+default on purpose — an undeclared model is never skipped by inference, so adding a genuinely separate
+provider needs no code change, and a mis-declared group can only ever cost a wasted call, never a
+skipped good rung. The commented Anthropic rung deliberately carries **no** group, since a separate
+account is the entire point.
+
+### F40 — The local rung must not grade the system that can delete its own skills · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
+F38 made the local rung loadable, which created a new problem rather than only solving one. The canary
+green count is the only signal that **automatically deletes** an operator-approved skill, and it is
+scored from whichever model happened to be reachable. The correlation was stark: the three canaries
+that ran on cloud all passed; the two that failed over to gemma both failed. Asked tool-free, the
+local models answer C1's question **2004** and **2013** against a true **2006**. While the rung was
+broken those attempts were `infra_failed` — unjudged, gate shut, skills safe (F37). Once it loads they
+become *scoreable content failures*, and the next quota-exhausted Sunday costs a skill for a VRAM
+problem.
+
+Fixed with `allow_local=False` on the canary path only. A quota-exhausted canary now **parks** instead
+of degrading: `week_pending` rises, F37's gate stays shut, and the skill survives to be judged on real
+data. Everything else keeps the local rung — completing a deliverable slowly beats parking it, which
+was the operator's explicit F9 decision, and a mission task's grade is *reported* rather than acted on
+automatically. The distinction that matters is not "graded" but **"grades an automated
+self-modification decision."**
+
+### F41 — Locality was inferred from a naming convention, not from where the model runs · **P1 · PROVEN, found + fixed 2026-07-29**
+`_is_local_model()` tested `":cloud" not in model`, making locality a property of a **name**. Any
+non-Ollama model is therefore "local" — `anthropic/claude-sonnet-5` included, the exact rung
+`models.yaml` keeps pre-wired and CLAUDE.md calls PREFERRED. Latent while that line stayed commented,
+where the only visible cost was a 3600s timeout on a fast API. It became a **correctness** bug the
+instant F40 began excluding local models from canaries: a genuinely separate provider would have been
+excluded too — precisely backwards, since surviving an Ollama-account 429 is its whole purpose. Now
+keyed on `provider` (`LOCAL_PROVIDERS = {"ollama"}`) and then the `:cloud` suffix. Verified across
+`ollama` local/cloud, `anthropic`, and `openai`.
+
+Worth recording *how* this surfaced: not by reading the function, but because the F39/F40 test
+**simulated adding the Anthropic rung** and asserted a canary could still fail over to it. The
+assertion failed, and the failure was the bug. A test written only against today's config would have
+passed and shipped it.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1378,7 +1423,7 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29 through F35, **F37** and **F38**, closed **H7**, and implemented
+safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F41**, closed **H7**, and implemented
 directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
 uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
 along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file
@@ -1408,7 +1453,10 @@ approval gates, `list` supports informed approval, and injection is capped and l
 *after* the gate had already been used, which is the wrong order; both live skills were re-scanned
 under the new rules and pass.
 
-Still open: the USD half of F8, **F27** (raw
-substring matching's coincidental-match risk), no git remote (recovery is local-only), a re-run of
-task 30 as a true synthesis now that F30 routes it correctly, and Phase 2.5 onward (runtime
-abstraction, M2).
+Still open: the USD half of F8, **F27** (raw substring matching's coincidental-match risk), no git
+remote (recovery is local-only), and Phase 2.5 onward (runtime abstraction, M2).
+
+Task 30's re-run as a true synthesis is **done** and was removed from this list on 2026-07-29 — it
+completed at 18:02:46 with `status='done'`, `critic_verdict='pass'`, 10/10 citations reachable and an
+honest DATA GAP where the source brief was short. It is described as completed at F32 and F33 above,
+so this list had been contradicting the same document two sections earlier.
