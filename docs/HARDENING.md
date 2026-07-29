@@ -957,6 +957,44 @@ Worth recording *how* this surfaced: not by reading the function, but because th
 assertion failed, and the failure was the bug. A test written only against today's config would have
 passed and shipped it.
 
+### F42 — The repo root was outside the containment surface · **P1 · PROVEN, found + fixed 2026-07-30**
+Found because a 699-line `extensive_research.md` appeared at the repo root and **no guard noticed**.
+Benign in this instance — the operator put it there deliberately as reference material, and its
+timestamp predated the run — but the gap it exposed was not: `PROTECTED_PATHS` listed
+`orchestrator`, `config`, `ledger/schema.sql`, `missions`, `CLAUDE.md`, `HARNESS_DESIGN.md`, `docs`
+and `skills_analyst`, so anything written *directly to the root* matched nothing and was invisible.
+
+Two distinct holes:
+
+1. **Existing root files were unprotected** — `.gitignore` and `IDENTITY.md`. `.gitignore` is the
+   serious one: detection is `git status`, which **honours ignore rules**, so a worker that appended
+   its own output path to `.gitignore` would make itself invisible to this very guard. Both are now
+   in `PROTECTED_PATHS` and hashed like everything else.
+2. **New root files were undetectable** — `PROTECTED_PATHS` covers files that *exist*, and a diff
+   over those paths can never see a file that appears somewhere else. Closed with a depth-0 scan of
+   untracked, non-ignored root entries, folded into the same snapshot/compare pair.
+
+**Deliberately not fixed by adding `"."` to `PROTECTED_PATHS`, even though that tests clean today.**
+`memory/` and `workspace/` are policy.yaml **writable** roots living inside the repo root, so `"."`
+would declare the same subtree both writable and protected. `policy.validate_paths()` compares
+literal paths and would *not* catch that contradiction — the drift-check the project relies on would
+pass on a genuine inconsistency, which is precisely the failure mode F13 exists to prevent. A depth-0
+scan states the real intent: the root itself accepts no new files, its writable subdirectories are
+untouched.
+
+Verified against the real repo with `escalate()` stubbed: a planted root file is detected and removed;
+a tampered `.gitignore` is reverted; a legitimate `workspace/` deliverable is **not** flagged (it is
+gitignored, so it never enters the snapshot); the root scan holds no path separators, i.e. it does not
+recurse; `validate_paths()` stays consistent; and a clean call still creates no stash. 9/9.
+
+**A consequence worth knowing before it surprises someone:** now that `.gitignore` is protected, an
+**uncommitted** ignore rule cannot survive a worker run — the guard reverts the file to HEAD, taking
+the new rule with it. This was proven the annoying way, when the F42 test's own teardown did
+`git checkout -- .gitignore` and discarded this session's uncommitted rule. That is the third instance
+today of an over-broad revert destroying uncommitted work (see F36), and the third time the fix was
+the same: scope the operation, or restore by content rather than by git. The standing rule from F36 —
+commit before triggering a fire — now covers `.gitignore` edits too.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1423,7 +1461,7 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F41**, closed **H7**, and implemented
+safety and honesty rules unchanged. It fixed F29 through F35 and F37 through **F42**, closed **H7**, and implemented
 directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
 uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
 along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file

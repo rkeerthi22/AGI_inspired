@@ -22,6 +22,12 @@ inbox/*
 runs/
 *.log
 
+# Operator-supplied reference material for the assistant (created 2026-07-29): a live-verified
+# write-up of the local harness/Hermes/Ollama architecture. Reference, not a project artifact —
+# untracked so it never enters the audit trail, and named explicitly rather than by pattern so
+# a future root-level file is still surfaced by the F42 root guard instead of silently hidden.
+extensive_research.md
+
 # Python
 __pycache__/
 *.pyc

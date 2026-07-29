@@ -431,7 +431,32 @@ def db_integrity_check(before: dict, context: str) -> None:
 # (the harness silently loses its own integrity mid-run) without requiring an invasive
 # system change the operator hasn't approved.
 PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
-                   "CLAUDE.md", "HARNESS_DESIGN.md", "docs", "skills_analyst"]
+                   "CLAUDE.md", "HARNESS_DESIGN.md", "docs", "skills_analyst",
+                   # F42 (docs/HARDENING.md), 2026-07-30: root-level files were never in
+                   # this list. `.gitignore` is the worst omission -- rewriting it is how a
+                   # worker would make its own output invisible to this very guard, since
+                   # detection is `git status`, which honours ignore rules. IDENTITY.md was
+                   # simply missed.
+                   ".gitignore", "IDENTITY.md"]
+
+# F42: PROTECTED_PATHS covers files that EXIST. A brand-new file at the repo root matched
+# nothing in it and was therefore invisible -- found 2026-07-30 when a 699-line
+# `extensive_research.md` appeared at the root and no guard noticed (benign: the operator
+# put it there deliberately, and its timestamp predated the run).
+#
+# Deliberately NOT fixed by adding "." to PROTECTED_PATHS, even though that tests clean
+# today. `memory/` and `workspace/` are policy.yaml WRITABLE roots living inside the repo
+# root, so "." would declare the same subtree both writable and protected. policy.
+# validate_paths() compares literal paths and would not catch that contradiction, so the
+# drift-check this project relies on would silently pass on an inconsistency -- exactly the
+# failure mode F13 exists to prevent. A depth-0 scan states the actual intent instead: the
+# root itself accepts no new files, while its writable subdirectories are untouched.
+def _root_untracked() -> set:
+    """Untracked, non-ignored entries directly at the repo root (depth 0 only)."""
+    out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--", "."],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
+    return {ln[3:].strip().strip('"') for ln in out.stdout.splitlines()
+            if ln.startswith("?? ") and "/" not in ln[3:].strip().strip('"').rstrip("/")}
 
 
 def _tracked_hashes() -> dict:
@@ -464,7 +489,8 @@ def fs_integrity_snapshot() -> dict:
     are what make it safe to scope the revert below to exactly the files that changed."""
     out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", *PROTECTED_PATHS],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
-    return {"porcelain": set(out.stdout.splitlines()), "hashes": _tracked_hashes()}
+    return {"porcelain": set(out.stdout.splitlines()), "hashes": _tracked_hashes(),
+            "root": _root_untracked()}          # F42
 
 
 def fs_integrity_check(before: dict, context: str) -> None:
@@ -499,6 +525,10 @@ def fs_integrity_check(before: dict, context: str) -> None:
                      if before["hashes"].get(p) != after["hashes"].get(p))
     new_untracked = [e[3:].strip().strip('"') for e in (after["porcelain"] - before["porcelain"])
                      if e.startswith("?? ")]
+    # F42: a new file dropped at the repo root matches no PROTECTED_PATHS entry, so the
+    # porcelain diff above never sees it. `.get` keeps an older snapshot dict usable.
+    new_root = sorted(after.get("root", set()) - before.get("root", set()))
+    new_untracked = sorted(set(new_untracked) | set(new_root))
     if not changed and not new_untracked:
         return
     log(f"FILESYSTEM INTEGRITY VIOLATION during {context}: "
