@@ -816,6 +816,49 @@ default because they sound safe.
 tracked files while one is running. `runs/`, `workspace/` and `ledger/` are gitignored, so agent
 output is unaffected — this is purely about the repo's own source and docs.
 
+### F37 — Infrastructure failure was scored as the analyst being wrong, in the one path that deletes skills · **P0 · PROVEN, found + fixed 2026-07-29**
+Found by running the canaries manually rather than waiting for Sunday — i.e. by stressing the system,
+which is exactly what the run was for. Two defects chained, and the chain came within **one canary**
+of auto-deleting an operator-approved skill for a VRAM problem.
+
+**Link 1 — `run_canaries()` never classified infra failures.** `run_task()` has always called
+`worker_failed()` and recorded an API/model failure as `infra_failed`, excluded from scoring. The
+canary path went straight from the failover check to `grade(out)`. With cloud quota exhausted by the
+day's 11.4M tokens, C2 and C5 failed over to local `gemma4:12b`, which **never started**:
+
+```
+deterministic: MISS | API call failed after 3 retries: HTTP 500: llama-server startup fail
+```
+
+The grader searched that error string for a year/city, missed, and wrote `critic_verdict='fail'`.
+Infrastructure flakiness entered the ledger as the analyst answering incorrectly. Note the split:
+3/3 canaries on cloud models passed, 0/2 on gemma passed — the verdicts tracked the *model*, not the
+task.
+
+**Link 2 — F9 had silently voided the gate's data-quality precondition.** Auto-rollback is skipped
+when data is incomplete, originally `week_pending == 0`, on the sound principle that quota-starved
+canaries are not evidence about a skill. But F9's cross-provider failover means quota exhaustion no
+longer **parks** a canary — it **completes** one on a degraded model. So `week_pending` was 0, the
+gate opened, and it opened on data exactly as unrepresentative as a park. A fix built for one
+subsystem quietly disabled a safety property of another; neither change was wrong on its own.
+
+**The near miss:** green fell 5 → 3 against a baseline of 3. The trigger is `week_green < baseline`,
+and `3 < 3` is False. One more canary landing on gemma would have made it 2, and
+`promote.cmd_rollback()` would have `git rm`-ed a skill approved that same day.
+
+**Fixed on both links.** `worker_failed()` now classifies the canary path as it does the mission path,
+and the gate counts `infra_failed` as unjudged alongside parked (`week_unjudged == 0`), so partial
+data skips the judgement entirely — what the gate always meant to do. The regression escalation now
+distinguishes *"answered incorrectly"* from *"could not run"*, which tonight's alert conflated
+("canary regression: 3/5 green (2 failed)" — nothing had regressed).
+
+Proven on a ledger copy replaying tonight's exact states, with `cmd_rollback` stubbed so no skill
+could really be deleted: under the old rules the gate opens on 3/5 and misses by one; under the fix
+the same night leaves 3 green / 2 unjudged / **0 content failures** and the gate stays shut. Critically
+the fix does **not** disarm the mechanism — 4 genuine content failures still select a rollback target
+— and quota parks still block judgement exactly as before. 11/11. The two live rows were reclassified
+to `infra_failed` with an audit note; W31 canaries now read 3 green / 2 infra, gate shut.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
@@ -1282,7 +1325,7 @@ first reported fix did not verify and is documented as its own lesson). Phase 2 
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
 
 The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
-safety and honesty rules unchanged. It fixed F29 through F35, closed **H7**, and implemented
+safety and honesty rules unchanged. It fixed F29 through F35 and **F37**, closed **H7**, and implemented
 directives 1, 2 and 5 (all above). **F36** was found live when the guard reverted this session's own
 uncommitted work; its blast-radius and recoverability halves are fixed (and detection strengthened
 along the way), while the attribution half stays deliberately unfixed — inferring *who* edited a file

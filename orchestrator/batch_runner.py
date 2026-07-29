@@ -1507,6 +1507,20 @@ def run_canaries(roles: dict) -> None:
             escalate(f"canary {name}: completed via failover to {model_used_cfg['provider']}/"
                     f"{model_used_cfg['model']} after quota exhaustion on the primary worker",
                     trigger="model_failover")
+        # F37 (docs/HARDENING.md), 2026-07-29: run_task() has always classified an API/model
+        # failure as infra_failed before judging content; this path went straight to grade()
+        # and scored the error TEXT as a wrong answer. Measured live the same night: with
+        # cloud quota exhausted, canaries C2 and C5 failed over to local gemma4:12b, which
+        # never started ("API call failed after 3 retries: HTTP 500: llama-server startup
+        # fail"). The grader looked for a year/city in that string, missed, and recorded
+        # critic_verdict='fail' -- infrastructure flakiness written into the ledger as the
+        # analyst being wrong, in the one path that gates deletion of approved skills.
+        if worker_failed(out, usage):
+            ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               critic_notes=f"model/API failure, NOT a content miss "
+                                            f"(excluded from the green count): {out[:150]}",
+                               append_note=True)
+            log(f"{name}: infra_failed ({out[:80]})"); continue
         ok = bool(grade(out))
         green += ok
         ledger.finish_task(tid, artifacts=[], status="done",
@@ -1523,18 +1537,35 @@ def run_canaries(roles: dict) -> None:
                          "AND spec LIKE ?", (f"[{wk}]%",)).fetchall()
     week_green = sum(1 for s, v in rows if s == "done" and v == "pass")
     week_pending = sum(1 for s, _ in rows if s in ("quota_wait", "queued", "interrupted"))
+    # F37, second half: a canary that could not RUN is not a canary that answered wrongly.
+    # Both are "not green", but only one is evidence about a skill.
+    week_infra = sum(1 for s, _ in rows if s == "infra_failed")
+    week_unjudged = week_pending + week_infra
+    week_content_fail = len(CANARIES) - week_green - week_unjudged
     log(f"canaries this week: {week_green}/{len(CANARIES)} green"
-        f"{f', {week_pending} still quota-parked' if week_pending else ''}")
-    if week_green + week_pending < len(CANARIES):
+        f"{f', {week_pending} quota-parked' if week_pending else ''}"
+        f"{f', {week_infra} infra-failed (model/API, not content)' if week_infra else ''}")
+    if week_content_fail > 0:
         escalate(f"canary regression: {week_green}/{len(CANARIES)} green "
-                f"({len(CANARIES) - week_green - week_pending} failed) this week")
-    elif week_pending:
-        log(f"{week_pending} canary(ies) still quota-parked — not a regression, retry later")
+                f"({week_content_fail} answered incorrectly) this week")
+    elif week_unjudged:
+        log(f"{week_unjudged} canary(ies) never produced a content judgement "
+            f"({week_pending} parked, {week_infra} infra) — not a regression, retry later")
 
     # Promoted-skill protection (§2.4): if this week's green count fell below the baseline
-    # recorded when a skill was approved, auto-rollback the newest such skill. Only judged
-    # on COMPLETE data — never while canaries sit quota-parked (a park is not a regression).
-    if week_pending == 0:
+    # recorded when a skill was approved, auto-rollback the newest such skill.
+    #
+    # Gated on COMPLETE data. The original gate was `week_pending == 0`, on the sound
+    # principle that quota-starved data is not evidence about a skill -- but F9 quietly
+    # voided it: after cross-provider failover, quota exhaustion no longer PARKS a canary,
+    # it completes one on a degraded model, so week_pending is 0 and the gate opens on data
+    # that is exactly as unrepresentative as a park. Measured live 2026-07-29 (F37): cloud
+    # quota exhausted, C2 and C5 failed over to a gemma4:12b that would not start, both
+    # scored 'fail', green fell 5 -> 3 against a baseline of 3. `3 < 3` is False, so the
+    # rollback missed deleting an operator-approved skill by exactly one canary -- for a
+    # VRAM problem. Counting infra failures as unjudged closes that: partial data now skips
+    # the judgement entirely, which is what the gate was always meant to do.
+    if week_unjudged == 0:
         try:
             import promote
             culprit = promote.newest_skill_below_baseline(week_green)
