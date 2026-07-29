@@ -1,5 +1,52 @@
 # Incidents
 
+## 2026-07-29 — A synthesis task had been researching the wrong subject for three weeks, and nothing noticed
+
+**What happened:** asked to raise throughput, the first step was reading the ledger rather than the
+code. Every synthesis task in the project's history had failed or never run — mission 001's task 27,
+mission 002's tasks 14, 22 and 30. "Failed every attempt" is not a quality problem, it is a
+structural one, so the artifacts were opened instead of the verdicts being believed.
+
+Task 30's deliverable describes a channel called **"AI News Recap"**. Mission 002 tracks *The Story
+Engine* and an *AI-Productivity* channel. It is not one of them. The citations are corticallabs.com,
+bbc.com and a Google blog post about self-healing roads — generic AI news with no relationship to the
+operator's channels at all. A task written to combine two existing briefs had gone off and done fresh
+web research on an unrelated topic.
+
+**Root cause:** `seed_is_synthesis()` tested `startswith("synthesis")`. The seed reads *"Cross-channel
+synthesis: …"*. One word of prefix meant the tool-free synthesis path was never taken, and the seed
+ran through the full browser worker every week (F30).
+
+**Two more defects were sitting on top of it, each independently sufficient to fail the task:**
+
+- The recorded failure reason was `MECHANICAL FAIL: 4/8 cited URLs unreachable`. All 8 extracted URLs
+  ended in a backtick — the worker had written its citations inside markdown code spans and the URL
+  regex swallowed the closing delimiter. Measured after the fix: `dead_frac` **0.50 → 0.12**, no hard
+  fail. This is the **third** instance of that same regex bug (F23c was `<br>` tags), which is the
+  actual lesson: it was fixed one character at a time twice, and is now fixed as a class (F29).
+- Task 27, the *tool-free* synthesis, was being graded on "a review-sentiment signal … for each
+  tracked competitor" — live lookups it is forbidden to perform. **No output it could produce would
+  have passed.** Re-judged on its unchanged bytes with a scope note: `fail` → `pass` (F31).
+
+**Impact:** W31 went from completion 43% / F=0.60 to **86% / F=0.75**, with no deliverable edited and
+nothing re-run — the entire difference was harness defects being recorded as analyst failures. Three
+lesson-candidates derived from those bogus verdicts were retracted before the promotion review ran;
+left in the pool they would have drafted skills teaching the analyst to work around bugs that had
+just been fixed, then injected them into every future prompt for that mission.
+
+**Deliberately NOT laundered into a pass:** task 30 stays FAILED. Its mechanical reason was ours, but
+its content really is wrong — it researched the wrong subject. Only the recorded *reason* was
+corrected, with an audit note; the task needs a genuine re-run now that F30 routes it correctly. The
+F29 fix was also checked specifically against the two citations that *should* fail — a literal
+`watch?v=...` placeholder and a `/.../` elided path — to confirm it rescued neither.
+
+**Lesson:** "it fails every time" is a routing/spec signal, not a quality signal. Three weeks of
+weekly failures were read as an analyst that could not synthesise, when the analyst had never once
+been asked to. The ledger showed the pattern immediately; reading the deliverable rather than the
+verdict is what explained it. Also: a mechanical check that can hard-fail a deliverable **without any
+model call** is a high-privilege component — a regex in it issues verdicts, and it has now been the
+proximate cause of a false rejection three separate times.
+
 ## 2026-07-28 — The citation checker failed correct work, and the harness recorded it as the analyst's failure
 
 **What happened:** the F20 proof run completed (tasks 24, 25 — 813s and 685s, no timeout) and both

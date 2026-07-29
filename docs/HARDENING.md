@@ -563,6 +563,109 @@ confirmation): 33%" — so the number can never be read as more independent than
 Verified live: current W31 state correctly reports `spot_checked_ai: 3` (all three of tonight's
 checks), rendering into both the markdown scorecard and the Telegram line.
 
+### F29 — The URL regex bug, third instance: trailing backticks · **P0 · PROVEN, found + fixed 2026-07-29**
+Same defect as F23c, different character. Mission 002's task 30 wrote every citation inside a markdown
+code span, so `_URL_RE` swallowed the closing backtick and **all 8** extracted URLs were malformed.
+Four were reported unreachable — `dead_frac=0.50`, well over the 0.34 line — and `is_hard_fail()`
+rejected the deliverable **with no LLM call at all**. A regex bug was issuing verdicts.
+
+**Fixed as a class, not as a character.** Three separate incidents from patching one delimiter at a
+time is the actual lesson, so `_URL_RE` now excludes every structural markdown/HTML delimiter
+(`` ` ``, `*`, `|`, `\`, `^` alongside the existing set) and a single `_clean_url()` strips trailing
+sentence punctuation — replacing an inline `rstrip('.,;:)')` that had already drifted out of sync
+with the regex's own exclusion list. Measured on the live artifact: **`dead_frac` 0.50 → 0.12,
+`is_hard_fail` True → False**. Note what it deliberately does *not* rescue: task 30 also cited a
+literal `https://www.youtube.com/watch?v=...` placeholder and a `/.../` elided Google blog path.
+Both still fail, correctly — they are fabricated citations, and the fix was checked specifically to
+confirm it did not launder them into passes.
+
+### F30 — Synthesis seeds were silently routed to the browser worker · **P0 · PROVEN, found + fixed 2026-07-29**
+`seed_is_synthesis()` required the seed text to *start with* "synthesis". Mission 002's seed 3 reads
+**"Cross-channel synthesis: …"** — one word off — so every week it took the full `run_task()` path
+with browser tools instead of the tool-free `run_synthesis()` path. It therefore went and did fresh
+web research instead of combining the two channel briefs it exists to combine. Visible in task 30's
+own output: it invented a channel called "AI News Recap" (the mission tracks *The Story Engine* and
+an *AI-Productivity* channel, neither of which is that) and cited corticallabs.com, bbc.com and a
+Google blog post about self-healing roads. **Every 002 synthesis has failed since the mission went
+active — tasks 14, 22 and 30. This is why.**
+
+**Fixed** by matching `synthesi[sz]` anywhere in the seed's leading clause (to the first colon,
+capped at 80 chars, so a research seed that merely mentions synthesis in its body is not misrouted
+into a path that cannot do lookups). Verified across all three missions' seeds and the canary specs:
+exactly the three synthesis seeds route tool-free, everything else routes to research. It also
+caught mission **003**'s `"Synthesize keyword/angle ideas…"` seed — same bug, latent, before that
+mission ever goes active.
+
+### F31 — Every task was graded against the whole mission's spec · **P0 · PROVEN, found + fixed 2026-07-29**
+F20 was right that the worker must see the done-definition, and too blunt in how it delivered it: a
+done-definition describes the mission's **combined weekly brief**, while each task produces one seed's
+share of it. Both halves of that mismatch were live and both were unpassable:
+
+- **Task 27** is the *tool-free* synthesis, and was graded on "a review-sentiment signal: current
+  average rating + one recurring theme" **for each tracked competitor**. The critic failed it for
+  exactly that — "three of five tracked competitors are missing the required review-sentiment signal"
+  — on a task forbidden from performing the lookups that would produce one, working from three briefs
+  covering three competitors. **No possible output passes.**
+- The per-competitor seeds are each told they must deliver "one section per tracked competitor" and
+  "a top 'Changes since last week' diff section", neither of which a single-competitor task can do.
+
+**Fixed** with `task_scope_note()` — a role-aware statement of which slice of the spec this task owns,
+returned to the **worker and the critic from one function**. That sharing is deliberate: F20's root
+cause was the two being handed different specs, and re-deriving the note at each call site would
+rebuild that exact failure mode. **Proven by re-judging task 27's unchanged deliverable bytes with a
+live critic call: `fail` → `pass`.** The ledger row was corrected with an audit note recording that
+the deliverable never changed and why the verdict did.
+
+### F32 — A *successful* retry overwrote the failed attempt's token accounting · **P1 · PROVEN, found + fixed 2026-07-29**
+F21 made an **omitted** token count preserve whatever a prior attempt recorded. It does nothing for
+the opposite case: a retry that succeeds passes real numbers, which overwrite — so the failed
+attempt's spend disappears from `tokens_used_today()` and the daily guard again protects less than it
+should, the same direction of error F21 was written to stop. Latent while retries were rare; found
+while building directive-2 below, which makes retries routine, so it had to be closed first.
+**Fixed** by accumulating onto the row's prior total in `run_task()` (`row` is read before the attempt
+starts, so a first run adds zero — verified both directions in the regression test).
+
+### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
+The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
+materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
+predicted cost — a cheaper seed behind it may fit, and the check costs zero model calls. `quota_wait`
+means the daily cap is blown — every remaining seed will park too, but parking them is free and
+leaves an honest annotated row instead of a silent `queued`. Only `chain_exhausted` (every fallback
+model quota-limited) has a retry that costs anything real.
+
+Collapsing all three into a full stop was **F6's head-of-line blocking rebuilt one layer up**: on
+2026-07-28 task 26 alone estimated ~8.5M tokens while tasks 28 and 29 needed 2.4M and 1.4M — the
+expensive seed parked first and the two affordable ones behind it were never attempted. Now only a
+repeated `chain_exhausted` stops a pass. Proven on a ledger copy with `run_task()` stubbed: a
+`budget_skip` on seed 1 still attempts seeds 2–4; two consecutive `chain_exhausted` stops; a single
+success resets the streak.
+
+### Directive-2 — The Evaluate → next-attempt edge existed in code but nothing ever walked it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
+`run_task()` has built `prior_feedback` from the critic's objections all along, and no code path ever
+reached it. A critic-rejected task was left failed, and next week's fire does not pick it up either —
+`queue_mission_tasks()` dedups on a spec containing the ISO week, so a new week creates a **new** row
+and the rejected one is never revisited. `retry_failed_this_fire()` closes the loop inside the same
+fire, capped at `MAX_RETRIES_PER_FIRE=3`, with synthesis retried **last** so it rebuilds from briefs
+the research retries have just corrected. `infra_failed` is deliberately excluded: re-running a
+worker timeout costs another 1800s to most likely time out again, which is an operator's budget call,
+not an automatic one. Proven on a ledger copy: selects only content failures (not `done`, not
+`infra_failed`), orders synthesis last, honours the cap, and stops on an exhausted chain.
+
+### Directive-5 — Accuracy depended on the operator remembering to go looking · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
+Accuracy is 30% of fitness and the only term the system cannot produce for itself. The only way to
+learn there was anything to check was to remember to run `spotcheck.py list`. `notify_pending()` now
+pushes the queue to Telegram, and a batch fire that produced deliverables sends it without being
+asked (fail-soft — an undeliverable notification never fails a batch). It surfaces the **F28** rows
+separately, which the pull-based view could not: an AI-performed check already has `human_verdict`
+set, so it drops out of `list` entirely despite being the row that most needs a human.
+
+One correction found by reading the first real message rather than the code: it opened with W29
+canaries, burying this week's work under "…and 3 more". `weekly_fitness()` computes accuracy over
+`mission_id != 'canaries'` inside a 7-day window, so a canary spot-check contributes **nothing** to
+it and a three-week-old task contributes nothing to the current week — plain `ORDER BY task_id` had
+put exactly those two categories first. Now excludes canaries and sorts newest-first, so a 3–5 minute
+weekly budget lands on rows that move the number.
+
 ### H1 — Single-writer discipline (fixes F1, F11) · **IMPLEMENTED + PROVEN 2026-07-19**
 `orchestrator/runlock.py` + `main()`/`_run()` split in `batch_runner.py`. Verified: 5 unit
 properties (acquire/release, contention→`AlreadyRunning`, stale-lock reclaim after 3600s,
@@ -870,9 +973,12 @@ evidence yet). Finally, spot-checks the assistant performs on the operator's beh
 (`spot_checked_ai`) in the scorecard rather than read as indistinguishable from an independent
 check (**F28**) — the same failure shape as the 2026-07-18 rogue-write incident, one layer up.
 
-**W31 closed at:** completion 43%, accuracy 33% (3 spot-checks, all AI-performed pending operator
-confirmation), fitness 0.60 — honestly low, every correction carrying an audit trail, not a claim
-of a clean night.
+**W31 stood at, after this pass:** completion 43%, accuracy 33% (3 spot-checks, all AI-performed
+pending operator confirmation), fitness 0.60 — honestly low, every correction carrying an audit
+trail, not a claim of a clean night. *(Superseded 2026-07-29: the throughput pass found that two of
+those failures were also harness defects — F30/F31 — and W31 closed at completion 86% / F 0.75. The
+0.60 figure was the honest reading of the evidence available on 2026-07-28; it is left here as the
+record of that night rather than retconned.)*
 
 **Phase 2 — W31 promotion under hardened conditions.** H7 (still open — candidate-note template
 constraints / F10 injection-surface hardening was not part of this pass either) remains the one
@@ -937,7 +1043,22 @@ follow-on is now also closed (independently reverified — see the Phase 2 on-ra
 first reported fix did not verify and is documented as its own lesson). Phase 2 go-live
 (2026-07-28) fixed F20 through F26 and F28, found F27 without fixing it (no live wrong-verdict
 evidence yet to design a fix against), and left W31 at a real, honestly-reported fitness of 0.60.
+
+The **throughput pass (2026-07-29)** raised the loop's work rate on operator instruction, with the
+safety and honesty rules unchanged. It fixed F29, F30, F31 and F32 and implemented directives 1, 2
+and 5 (all above). The theme is worth stating plainly, because it is now the third session running:
+**every failure investigated this pass was in the machinery that JUDGES or SCHEDULES the work, not
+in the work itself.** Task 27 was unpassable by construction (F31); task 30 was researching the
+wrong thing entirely (F30) and then rejected for the wrong reason on top of that (F29). Three
+lesson-candidates derived from those bogus verdicts were retracted before drafting, on the same
+grounds as F20's retractions — left in the pool they would have taught the analyst to work around
+bugs that no longer exist. W31 was corrected to completion **86%**, fitness **0.75**, entirely by
+fixing our own defects; no deliverable was edited and task 30 was deliberately left FAILED, since
+its content really is wrong even though the recorded reason was ours.
+
 Still open: **H7** (candidate-note injection hardening — the roadmap's own stated precondition for
-enabling the promotion gate; no skill has been promoted yet, so this has not yet been forced), the
-USD half of F8, **F27** (raw substring matching's coincidental-match risk), no git remote (recovery
-is local-only), and Phase 2.5 onward (runtime abstraction, M2).
+enabling the promotion gate; **two candidates now sit in `skills_analyst/_candidates/` awaiting the
+operator's approve/reject, so this is no longer hypothetical**), the USD half of F8, **F27** (raw
+substring matching's coincidental-match risk), no git remote (recovery is local-only), a re-run of
+task 30 as a true synthesis now that F30 routes it correctly, and Phase 2.5 onward (runtime
+abstraction, M2).

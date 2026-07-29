@@ -555,6 +555,48 @@ def deliverable_requirements(mission: dict) -> str:
     return re.sub(r"^(\s*-)\s*\[[ x]\]\s*", r"\1 ", "\n".join(kept).strip(), flags=re.M)
 
 
+def task_scope_note(spec: str, mission: dict) -> str:
+    """Which slice of the mission's done-definition THIS task is answerable for.
+
+    F31 (docs/HARDENING.md), 2026-07-29. F20 was right that the worker must see the
+    done-definition, but it handed EVERY task the whole thing -- and a done-definition
+    describes the mission's COMBINED weekly brief, not one seed's share of it. The two
+    resulting impossibilities were both live:
+
+      * mission 001 seed 4 (task 27) is the TOOL-FREE synthesis, and was graded on "a
+        review-sentiment signal: current average rating + one recurring theme" for each
+        tracked competitor. The critic failed it for exactly that -- "three of five
+        tracked competitors are missing the required review-sentiment signal" -- on a
+        task forbidden from doing the lookups that would produce one, working from three
+        briefs. No possible output passes.
+      * the per-competitor seeds (1-3) are each told they must deliver "one section per
+        tracked competitor" and "a top 'Changes since last week' diff section", which a
+        single-competitor task cannot produce either.
+
+    Returned to the WORKER and to the CRITIC from one function on purpose: F20's root
+    cause was the two being given different specs, and re-deriving this note separately
+    at each site would rebuild that exact failure mode."""
+    n = len(mission["seeds"])
+    if seed_is_synthesis(spec):
+        return (
+            f"This mission's done-definition describes the COMBINED weekly brief, which "
+            f"{n} separate tasks produce between them. This task is the SYNTHESIS: it "
+            f"works only from briefs and ledger facts the other tasks already produced, "
+            f"and is forbidden from doing its own research. Per-subject requirements are "
+            f"therefore met by whatever the supplied material actually contains. Where "
+            f"the material does not cover one, the correct outcome is an explicit data "
+            f"gap naming the subject and the missing item -- not a fabricated value, and "
+            f"not a defect in this deliverable.")
+    return (
+        f"This mission's done-definition describes the COMBINED weekly brief, which {n} "
+        f"separate tasks produce between them. This task is ONE of them and covers only "
+        f"the single subject named in its spec. Every requirement that applies to that "
+        f"subject must be met here, in full. Requirements that exist only across the "
+        f"whole set -- a section for every tracked subject, or the combined cross-subject "
+        f"\"changes since last week\" diff -- belong to the synthesis task; their absence "
+        f"from a single-subject deliverable is expected and is not a defect.")
+
+
 def is_first_run_for_mission(mission_id: str) -> bool:
     """True if this mission has never completed a task in an earlier week. A mission's
     week-1 run structurally cannot satisfy a 'changes since last week' criterion -- there
@@ -672,10 +714,27 @@ def _recent_fact_lines(days: int = 14, cap: int = 120) -> str:
 
 
 def seed_is_synthesis(spec: str) -> bool:
-    return re.sub(r"^\[[^\]]*\]\[seed \d+\]\s*", "", spec).lower().startswith("synthesis")
+    """Does this seed describe a synthesis (tool-free, works only from material already
+    gathered) rather than fresh research?
+
+    F30 (docs/HARDENING.md), 2026-07-29: this used to require the seed to literally START
+    with "synthesis". Mission 002's seed 3 reads "Cross-channel synthesis: ..." -- one word
+    off -- so it was routed to the full browser worker every week and did fresh web
+    research instead of synthesising the two channel briefs it was written to combine.
+    Confirmed in task 30's deliverable: it invented a channel ("AI News Recap", not one of
+    the mission's two) and cited corticallabs.com, bbc.com and a Google blog post about
+    self-healing roads -- generic AI news, no connection to the operator's channels. Every
+    002 synthesis has failed since the mission went active (tasks 14, 22, 30); this is why.
+
+    Match on the seed's LEADING CLAUSE only (to the first colon, capped), so a research
+    seed that happens to mention synthesis in its body is not misrouted into the tool-free
+    path where it could not do the lookups it needs."""
+    body = re.sub(r"^\[[^\]]*\]\[seed \d+\]\s*", "", spec).lower()
+    return bool(re.search(r"synthesi[sz]", body.split(":", 1)[0][:80]))
 
 
-def run_critic(row: dict, out: str, roles: dict, baseline: bool) -> tuple[str, str]:
+def run_critic(row: dict, out: str, roles: dict, baseline: bool,
+               scope_note: str = "") -> tuple[str, str]:
     """Tool-free critic judging deliverable CONTENT, now backed by a mechanical,
     non-LLM truth signal (H4, docs/HARDENING.md — fixes F3, F4). Returns
     (verdict, text) where verdict is 'pass' | 'fail' | 'needs_review' — the third
@@ -719,6 +778,13 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool) -> tuple[str, s
             "-- they are not the analyst's job and are not present in the text by design. "
             "Judge ONLY the CONTENT: does it cover the required topics, is every fact backed "
             "by a real source URL + date, is it well-sourced and substantive."
+            # F31: the spec below is the mission's COMBINED brief; this deliverable is one
+            # task's share of it. Without this the critic demands work of a task that is
+            # structurally unable to do it (task 27, 2026-07-28) -- see task_scope_note().
+            + (f"\n\nSCOPE -- READ BEFORE JUDGING: {scope_note} Grade this deliverable ONLY "
+               f"on the share of the spec that is actually its own. Do NOT fail it for "
+               f"omitting work that belongs to a sibling task."
+               if scope_note else "")
             + ("\n\nThis is the mission's BASELINE (first-ever) run -- there is no prior week "
                "to diff against. Do NOT fail it for lacking a week-over-week diff or NEW-vs-"
                "last-week flags; correct behavior for a baseline run is marking everything as "
@@ -776,9 +842,13 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         "is sound. Where the supplied material cannot support one of them, say so "
         f"explicitly as a data gap rather than inventing it:\n{requirements}"
         if requirements else "")
+    # F31: same note the critic is given, from the same function -- see task_scope_note().
+    scope_note = task_scope_note(row["spec"], mission)
+    scope_block = f"\n\nSCOPE OF THIS TASK: {scope_note}"
     prompt = (
         f"You are a research analyst. Objective: {mission_objective(mission)}\n\n"
-        f"YOUR TASK (one task only):\n{row['spec']}{requirements_block}{baseline_note}\n\n"
+        f"YOUR TASK (one task only):\n{row['spec']}{requirements_block}{scope_block}"
+        f"{baseline_note}\n\n"
         "Work ONLY from the material below — this week's research briefs and the fact ledger "
         "(current + prior week). Cite the source URLs already present in the material. Do NOT "
         "invent facts or sources that are not in the material. If a requested item is absent "
@@ -819,7 +889,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                            critic_notes="quota/usage limit on every model in the "
                                         "fallback chain — parked (§1.6, F9)",
                            append_note=True)
-        log(f"task {tid}: quota_wait (fallback chain exhausted)"); return "quota_wait"
+        log(f"task {tid}: chain_exhausted (every fallback model quota-limited)")
+        return "chain_exhausted"
     if model_used_cfg != worker_cfg:
         ledger.update_model_used(
             tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']} (tool-free synthesis)")
@@ -840,7 +911,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     dest.write_text(out + f"\n\n---\n_task {tid} · {datetime.now().isoformat(timespec='seconds')}"
                           f" · {worker_cfg['model']} (synthesis, tool-free)_\n",
                     encoding="utf-8")
-    verdict, verdict_text = run_critic(row, out, roles, baseline)
+    verdict, verdict_text = run_critic(row, out, roles, baseline, scope_note=scope_note)
     if verdict == "needs_review":
         escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                 trigger="pass_criteria_ambiguous")
@@ -968,10 +1039,13 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         "\n\nREQUIRED SHAPE OF THE DELIVERABLE — a reviewer checks your output against "
         "exactly these points, and a missing one is a FAIL even when the research itself "
         f"is sound:\n{requirements}" if requirements else "")
+    # F31: same note the critic is given, from the same function -- see task_scope_note().
+    scope_note = task_scope_note(row["spec"], mission)
+    scope_block = f"\n\nSCOPE OF THIS TASK: {scope_note}"
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
         f"YOUR TASK THIS RUN (one task only):\n{row['spec']}"
-        f"{requirements_block}{baseline_note}{prior_feedback}{skills_block}\n\n"
+        f"{requirements_block}{scope_block}{baseline_note}{prior_feedback}{skills_block}\n\n"
         f"Use web search for every fact. RULES: every fact needs a source URL + retrieval date "
         f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
         f"are unverified — verify each is real before citing it. Write the deliverable as clean "
@@ -1026,8 +1100,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         escalate(f"task {tid}: estimated {est:,} tokens exceeds remaining daily budget "
                 f"({policy.tokens_used_today():,} already spent) -- parked before starting",
                 trigger="cost_cap_breach")
-        log(f"task {tid}: quota_wait (token budget)")
-        return "quota_wait"
+        log(f"task {tid}: budget_skip (estimated {est:,} won't fit) — trying the next seed")
+        return "budget_skip"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = RUNS / f"task{tid}_worker.usage.json"
     snapshot = db_integrity_snapshot()
@@ -1056,8 +1130,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
                            critic_notes="quota/usage limit on every model in the "
                                         "fallback chain — parked (§1.6, F9)",
                            append_note=True)
-        log(f"task {tid}: quota_wait (fallback chain exhausted)")
-        return "quota_wait"
+        log(f"task {tid}: chain_exhausted (every fallback model quota-limited)")
+        return "chain_exhausted"
     if model_used_cfg != worker_cfg:
         # F9: keep provenance truthful and flag the degraded-model deliverable for
         # spot-check priority -- a failover completion is not a free pass.
@@ -1099,7 +1173,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     dest.write_text(out + f"\n\n---\n_task {tid} · {datetime.now().isoformat(timespec='seconds')}"
                           f" · {worker_cfg['model']}_\n", encoding="utf-8")
 
-    verdict, verdict_text = run_critic(row, out, roles, baseline)
+    verdict, verdict_text = run_critic(row, out, roles, baseline, scope_note=scope_note)
     if verdict == "needs_review":
         escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                 trigger="pass_criteria_ambiguous")
@@ -1111,8 +1185,15 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     # unjudged deliverable must not silently count as complete either.
     status = "done" if verdict == "pass" else "failed"
 
-    tok_in = int(usage.get("input_tokens") or 0)
-    tok_out = int(usage.get("output_tokens") or 0)
+    # F32 (docs/HARDENING.md), 2026-07-29: accumulate, don't replace. F21 made an
+    # OMITTED token count preserve the prior attempt's; it does nothing for a retry that
+    # SUCCEEDS and passes real numbers, which overwrites them -- so the failed attempt's
+    # spend vanishes from tokens_used_today() and the daily guard again protects less
+    # than it should. Latent while retries were rare; directive-2 below makes retries
+    # routine, so it has to be closed first. `row` was read before this attempt started,
+    # so it holds exactly the prior total (0/NULL on a first run -- a no-op there).
+    tok_in = int(usage.get("input_tokens") or 0) + int(row.get("tokens_in") or 0)
+    tok_out = int(usage.get("output_tokens") or 0) + int(row.get("tokens_out") or 0)
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status=status)
@@ -1128,6 +1209,73 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     log(f"task {tid}: {status} verdict={verdict} facts+{facts_n} "
         f"({dest.name}, in={tok_in} out={tok_out})")
     return status
+
+
+# Directive-1 (2026-07-29): a task can park for three very different reasons, and the
+# batch loop used to treat all of them as "stop the whole fire". They are not the same:
+#
+#   budget_skip     -- admission control refused THIS task's predicted cost (F24). A
+#                      cheaper seed behind it may well fit. Costs zero model calls.
+#   quota_wait      -- the daily hard cap is blown. Every remaining task will park too,
+#                      but parking them is free and leaves an honest, annotated row
+#                      instead of a silent 'queued' with no explanation.
+#   chain_exhausted -- every model in the fallback chain returned a quota error. This is
+#                      the only one whose retry costs anything real, so it is the only
+#                      one that stops the pass, and only after repeating.
+#
+# Treating budget_skip as a full stop was F6's head-of-line blocking rebuilt one layer
+# up: on 2026-07-28 task 26 alone estimated ~8.5M tokens while tasks 28/29 needed 2.4M
+# and 1.4M -- the expensive seed parked first and the two affordable ones behind it were
+# never attempted.
+PARK_STATUSES = ("quota_wait", "budget_skip", "chain_exhausted")
+MAX_CONSECUTIVE_CHAIN_EXHAUSTED = 2
+
+MAX_RETRIES_PER_FIRE = 3
+
+
+def retry_failed_this_fire(ids: list[int], mission: dict, roles: dict) -> list[str]:
+    """Directive-2 (2026-07-29): re-attempt this fire's CONTENT failures immediately.
+
+    Until now a critic-rejected task was simply left failed. Next week's fire does not
+    pick it up either -- queue_mission_tasks() dedups on a spec containing the ISO week,
+    so a new week creates a NEW row and the rejected one is never revisited. The
+    Evaluate -> next-attempt edge of the loop (HARNESS_DESIGN §2.1) therefore existed in
+    code (run_task() has built prior_feedback from critic_notes all along) but had no
+    path that ever exercised it. This is that path.
+
+    Deliberately NOT retried: infra_failed. A worker timeout re-run costs another full
+    WORKER_TIMEOUT_S (1800s) to most likely time out again -- that is a budget decision
+    for the operator, not an automatic one. Content failures are what the critic's
+    objections can actually steer.
+
+    Synthesis retries go LAST so they rebuild from whatever briefs the research retries
+    have just corrected, rather than from the versions that failed."""
+    import sqlite3
+    if not ids:
+        return []
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
+        c.row_factory = sqlite3.Row
+        rows = c.execute(
+            f"SELECT task_id, spec FROM tasks WHERE task_id IN "
+            f"({','.join('?' * len(ids))}) AND status='failed' AND critic_verdict='fail'",
+            ids).fetchall()
+    if not rows:
+        return []
+    ordered = sorted(rows, key=lambda r: (seed_is_synthesis(r["spec"]), r["task_id"]))
+    picked = ordered[:MAX_RETRIES_PER_FIRE]
+    log(f"retry pass: {len(rows)} content failure(s) this fire, retrying "
+        f"{len(picked)} with the critic's objections attached"
+        + (f" ({len(rows) - len(picked)} over the {MAX_RETRIES_PER_FIRE}/fire cap)"
+           if len(rows) > len(picked) else ""))
+    out = []
+    for r in picked:
+        st = run_task(r["task_id"], mission, roles)
+        log(f"retry task {r['task_id']}: {st}")
+        out.append(st)
+        if st == "chain_exhausted":
+            log("fallback chain exhausted — ending retry pass")
+            break
+    return out
 
 
 REPEATED_FAILURE_THRESHOLD = 3
@@ -1346,14 +1494,22 @@ def _run(args) -> int:
                 "ORDER BY (started_at IS NOT NULL), task_id")]  # H3
         log(f"resume mode: {len(parked)} parked/interrupted non-canary task(s)")
         ran = 0
+        exhausted_streak = 0
         for tid in parked[:args.max_tasks]:
             with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
                 mid = c.execute("SELECT mission_id FROM tasks WHERE task_id=?",
                                 (tid,)).fetchone()[0]
             st = run_task(tid, parse_mission(mid), roles)
             ran += 1
-            if st == "quota_wait":
-                log("still quota-limited — stopping resume pass"); break
+            # Directive-1: same rule as the main loop -- a task that could not fit the
+            # budget must not cancel the resume attempt of every task behind it.
+            if st == "chain_exhausted":
+                exhausted_streak += 1
+                if exhausted_streak >= MAX_CONSECUTIVE_CHAIN_EXHAUSTED:
+                    log("every fallback model still quota-limited — stopping resume pass")
+                    break
+            else:
+                exhausted_streak = 0
         return 0
 
     if not args.mission:
@@ -1370,16 +1526,38 @@ def _run(args) -> int:
     if args.dry_run:
         return 0
 
+    # Directive-1: give EVERY seed its turn. Only a repeatedly-exhausted provider chain
+    # (the one park reason whose retry actually costs anything) stops the pass early --
+    # see PARK_STATUSES.
     statuses = []
+    exhausted_streak = 0
     for tid in ids[:args.max_tasks]:
         st = run_task(tid, mission, roles)
         statuses.append(st)
-        if st == "quota_wait":
-            log("quota-limited — parking remaining tasks for next fire")
-            break
+        if st == "chain_exhausted":
+            exhausted_streak += 1
+            if exhausted_streak >= MAX_CONSECUTIVE_CHAIN_EXHAUSTED:
+                log(f"every fallback model quota-limited on {exhausted_streak} consecutive "
+                    f"tasks — stopping this pass, remaining seeds stay queued")
+                break
+        else:
+            exhausted_streak = 0
+
+    statuses += retry_failed_this_fire(ids, mission, roles)
     done = statuses.count("done")
-    log(f"run complete: {done}/{len(statuses)} done, {statuses.count('quota_wait')} parked, "
+    parked = sum(statuses.count(s) for s in PARK_STATUSES)
+    log(f"run complete: {done}/{len(statuses)} done, {parked} parked, "
         f"{statuses.count('infra_failed')} infra, {statuses.count('failed')} failed")
+    # Directive-5: a fire that produced new deliverables pushes the spot-check queue
+    # instead of waiting for the operator to think of running `spotcheck.py list`.
+    # Fail-soft on purpose -- an undeliverable notification must never fail the batch.
+    if done:
+        try:
+            import spotcheck
+            if spotcheck.notify_pending():
+                log("spot-check queue pushed to Telegram")
+        except Exception as e:
+            log(f"spot-check notification skipped ({e})")
     print("FITNESS:", json.dumps(ledger.weekly_fitness(), indent=2))
     return 0
 

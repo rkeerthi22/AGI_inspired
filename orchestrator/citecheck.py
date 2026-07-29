@@ -43,7 +43,24 @@ MIN_CHECKED_FOR_HARD_FAIL = 3  # don't hard-fail on a tiny, noisy sample
 # "unreachable" citations that MECHANICALLY hard-failed task 27 were this corruption --
 # dead_frac 0.40 (over the 0.34 line) instead of the true ~0.13. A hard fail needs no LLM
 # call, so a regex bug alone was rejecting deliverables outright.
-_URL_RE = re.compile(r'https?://[^\s\)\]\}<>"\']+')
+#
+# F29 (docs/HARDENING.md), 2026-07-29: the SAME bug, third instance -- this time the
+# backtick. Task 30's deliverable wrote every citation inside a markdown code span, so
+# ALL 8 extracted URLs ended in '`' and 4 were reported unreachable (dead_frac=0.50),
+# mechanically failing a synthesis whose citations were fine. Fixing one character at a
+# time is what produced three separate incidents, so this is now handled as a class:
+# every structural markdown/HTML delimiter is excluded from the URL body, AND trailing
+# sentence punctuation is stripped afterwards (a URL is routinely the last thing before
+# a comma or full stop). Note what this deliberately does NOT rescue: task 30 also cited
+# a literal `https://www.youtube.com/watch?v=...` placeholder, which still fails after
+# the strip. That is a real fabricated citation, and it must keep failing.
+_URL_RE = re.compile(r'https?://[^\s\)\]\}<>"\'`*|\\^]+')
+_URL_TRAIL_RE = re.compile(r'[.,;:!?]+$')
+
+
+def _clean_url(u: str) -> str:
+    """Strip trailing sentence punctuation a URL never legitimately ends in."""
+    return _URL_TRAIL_RE.sub("", u)
 _NUM_RE = re.compile(r'\$?\d[\d,]*\.?\d*%?')
 _PROPER_RE = re.compile(r'\b[A-Z][a-zA-Z]+(?:\s+[A-Z][a-zA-Z]+)*\b')
 _JSONLD_RE = re.compile(
@@ -82,7 +99,9 @@ def extract_citations(text: str) -> list[dict]:
             continue
         claim_text = _URL_RE.sub(" ", line)  # strip URLs before literal-hunting
         for url in urls:
-            out.append({"url": url.rstrip('.,;:)'), "line": line.strip()[:200],
+            # F29: single definition of "trailing junk" (_clean_url) rather than an
+            # inline rstrip set that drifts out of sync with _URL_RE's exclusions.
+            out.append({"url": _clean_url(url), "line": line.strip()[:200],
                        "literal": _key_literal(claim_text)})
     return out[:MAX_CITATIONS]
 

@@ -103,9 +103,46 @@ in the machinery that JUDGES the work, none in the work itself — see `docs/HAR
   performs are now flagged `spot_checked_ai` in the scorecard, since they are not independent of
   the system they're checking, matching the theme running through every incident in this file.
 
-**W31 final state:** completion 43%, accuracy 33% (3 spot-checks, all flagged AI-performed pending
-operator confirmation — F28), fitness 0.60. Not fabricated-high, not silently corrected without a
-trail — every verdict change carries an audit note explaining why.
+**W31 final state:** completion **86%**, accuracy 33% (3 spot-checks, all flagged AI-performed
+pending operator confirmation — F28), fitness **0.75**. Not fabricated-high, not silently corrected
+without a trail — every verdict change carries an audit note explaining why.
+
+**THROUGHPUT PASS 2026-07-29 (operator instruction: "more throughput, not less caution").** Five
+directives, safety/honesty rules unchanged — full write-ups in `docs/HARDENING.md`, the story in
+`docs/INCIDENTS.md`:
+- **All seeds run per fire.** A task parks for three different reasons and only one of them
+  (`chain_exhausted`, repeated) now stops a pass. Treating an admission-control refusal as a full
+  stop was F6's head-of-line blocking rebuilt one layer up — on 2026-07-28 task 26's ~8.5M estimate
+  parked first and blocked tasks needing 2.4M and 1.4M behind it.
+- **Content failures retry in the same fire**, capped at 3, with the critic's objections attached and
+  synthesis retried last. `run_task()` had built that feedback all along and no code path reached it;
+  a rejected task was never revisited, because the next week's fire creates a new row rather than
+  picking up the old one.
+- **Synthesis fixed — it had never actually run as synthesis for mission 002.** Every 002 synthesis
+  since the mission went active (tasks 14, 22, 30) was misrouted to the browser worker over a
+  `startswith("synthesis")` test vs a seed reading "Cross-channel synthesis: …" (F30). Task 27 was
+  separately unpassable by construction, graded on research a tool-free task may not perform (F31);
+  re-judged on unchanged bytes it now PASSES. Also fixed the URL-regex bug's third instance (F29,
+  now fixed as a class) and a retry-accounting hole (F32).
+- **Two skill candidates drafted** (below) — the evidence bar was met and the pool was simply never
+  reviewed. Three bug-artifact lessons were retracted first, on F20's precedent.
+- **Spot-checks now PUSH to Telegram** after any fire that produces deliverables, and separately
+  flag the F28 AI-performed rows that the pull-based `list` view cannot show at all.
+
+**AWAITING YOUR DECISION — two candidate skills drafted 2026-07-29** (drafting is automatic;
+approval is deliberately not):
+```
+python orchestrator/promote.py list                  # read both in full
+python orchestrator/promote.py approve <filename>    # or: reject <filename>
+```
+- `001-…_verify-cited-values-exist-on-their-source-pages.md` — from lessons 9 & 10, both traceable
+  to the real fabrication found by hand-verifying tasks 24/25 against live sources.
+- `002-…_use-exact-spec-defined-evidence-types-for-validati.md` — from lessons 2, 3 & 4 (evidence-type
+  substitution: general news articles standing in for the API metrics the spec demands).
+
+Neither derives from a harness bug — that was checked explicitly before drafting, and is why the pool
+was cleaned first. Note `docs/HARDENING.md`'s **H7** (candidate-note injection hardening) is the
+roadmap's stated precondition for approving anything here, and it is still open.
 
 **Lesson-pool note (2026-07-27):** lesson_candidates #5/#6/#7 (mission 001) were retracted — they
 recorded the three F20 failures, i.e. a harness defect, not an analyst technique. Left in the pool
