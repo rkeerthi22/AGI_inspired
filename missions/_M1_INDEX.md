@@ -66,8 +66,9 @@ Telegram automatically every Sunday with no further action needed.
   drops below its approval baseline auto-rolls-back (only judged on complete, non-parked data).
   Machinery verified end-to-end 2026-07-27 (`review --dry` against the live pool, an isolated
   rehearsal of the auto-rollback path), then actually exercised in production 2026-07-28 during the
-  F20 proof — no skill has been promoted yet, `skills_analyst/` holds only its README, so the
-  promotion GATE itself remains a cold start; the mission tasks feeding its lesson pool are not.
+  F20 proof. **The gate is no longer a cold start: two skills were drafted and operator-approved
+  2026-07-29** and are injecting on every run — see "Skills now live" below, including the two
+  defects (F34, H7) that its first real use exposed in the gate itself.
 
 **Promotion workflow (starts mattering W31):**
 ```
@@ -106,7 +107,15 @@ in the machinery that JUDGES the work, none in the work itself — see `docs/HAR
 **W31 final state:** completion **100%**, accuracy 33% (3 spot-checks, all flagged AI-performed
 pending operator confirmation — F28), fitness **0.80**. Not fabricated-high, not silently corrected
 without a trail — every verdict change carries an audit note explaining why, and the one task whose
-content was genuinely wrong (30) was re-run rather than re-graded.
+content was genuinely wrong (30) was re-run rather than re-graded. The committed view is
+`memory/scorecards/2026-W31.md`; accuracy is the one term the system cannot produce for itself, and
+33% reflects three assistant-performed checks still awaiting your independent confirmation, not three
+of your reads.
+
+**Task 18 also ran 2026-07-29** — a W30 seed that had never once been attempted (one of the F6
+starvation victims). It completed `done`/`pass` with 26 facts on 6,729,178 tokens, and was the fire
+that verified H7's injection log in production. It does **not** appear in the numbers above: its
+`created_at` is 2026-07-20, outside the 7-day window, which is why W31 is unchanged at 0.80.
 
 **THROUGHPUT PASS 2026-07-29 (operator instruction: "more throughput, not less caution").** Five
 directives, safety/honesty rules unchanged — full write-ups in `docs/HARDENING.md`, the story in
@@ -129,25 +138,54 @@ directives, safety/honesty rules unchanged — full write-ups in `docs/HARDENING
   re-run for real through the production path and passes as a true cross-channel synthesis:
   10/10 citations reachable, 0 literals missing, both real channels, and an honest DATA GAP where
   the source brief was short rather than an invented third topic.
-- **Two skill candidates drafted** (below) — the evidence bar was met and the pool was simply never
-  reviewed. Three bug-artifact lessons were retracted first, on F20's precedent.
+- **Two skill candidates drafted, then operator-approved** — see "Skills now live" below. The
+  evidence bar had been met for weeks; the pool was simply never reviewed. Three bug-artifact
+  lessons were retracted first, on F20's precedent.
 - **Spot-checks now PUSH to Telegram** after any fire that produces deliverables, and separately
   flag the F28 AI-performed rows that the pull-based `list` view cannot show at all.
 
-**AWAITING YOUR DECISION — two candidate skills drafted 2026-07-29** (drafting is automatic;
-approval is deliberately not):
-```
-python orchestrator/promote.py list                  # read both in full
-python orchestrator/promote.py approve <filename>    # or: reject <filename>
-```
-- `001-…_verify-cited-values-exist-on-their-source-pages.md` — from lessons 9 & 10, both traceable
-  to the real fabrication found by hand-verifying tasks 24/25 against live sources.
-- `002-…_use-exact-spec-defined-evidence-types-for-validati.md` — from lessons 2, 3 & 4 (evidence-type
-  substitution: general news articles standing in for the API metrics the spec demands).
+## Skills now live (first promotions in the project's history, 2026-07-29)
 
-Neither derives from a harness bug — that was checked explicitly before drafting, and is why the pool
-was cleaned first. Note `docs/HARDENING.md`'s **H7** (candidate-note injection hardening) is the
-roadmap's stated precondition for approving anything here, and it is still open.
+The gate fired for the first time. Both notes are active and injected into their mission's worker
+prompts on every run (346 and 430 chars, logged per task since H7):
+
+| Skill | Mission | Evidence | Rollback baseline |
+|---|---|---|---|
+| Verify cited values exist on their source pages | 001 | lessons 9, 10 | 3 (from 2026-W29) |
+| Use exact spec-defined evidence types | 002 | lessons 2, 3, 4 | 3 (from 2026-W29) |
+
+Neither derives from a harness bug — checked explicitly before drafting, which is why the pool was
+cleaned first. Rollback is `python orchestrator/promote.py rollback <mission>/<file>`, any time.
+
+**The gate's first real use immediately found two defects in the gate itself:**
+- **F34** — approval stamped `canary_baseline: 0`, because no canaries had run since W29, and
+  `newest_skill_below_baseline()` triggers on `week_green < baseline`. A baseline of 0 can never
+  fire, so auto-rollback was silently disarmed for both skills at the moment of approval. Fixed to
+  fall back to the last week that genuinely ran canaries, and both were re-stamped to 3.
+- **H7** (candidate-note injection hardening, `docs/HARDENING.md`) was the roadmap's stated
+  precondition for opening this gate, and the gate was opened without it. **Now closed** — notes are
+  sanitised at BOTH draft and approval time (URLs/domains stripped, execution and instruction-override
+  constructs rejected outright), `promote.py list` shows the full note plus resolved evidence rows,
+  and injection is capped and logged. Both live skills were re-scanned under the new rules and pass.
+
+**Also fixed 2026-07-29, after the directives above:**
+- **F35** — five never-attempted tasks (4, 13, 14, 17, 19) were unreachable by *any* code path and
+  invisible to the score: `queued` rows from a past week aged out of the fitness window and were
+  counted nowhere, so `dropped` read 0 despite five abandoned seeds. Now expired to `stale`
+  (= dropped), with never-attempted rows labelled distinctly. All five resolved.
+- **F36** — the filesystem guard reverted this session's own uncommitted work during a live fire.
+  Its blast radius (reverted all eight protected paths on any single violation) and irrecoverability
+  (`git checkout` has no reflog) are fixed; detection was strengthened to content hashes along the
+  way, which also closes a case porcelain diffing was blind to. The *attribution* half — inferring
+  who edited a file — stays deliberately unfixed.
+- **`backup.py` offsite replication** — built, and left **unconfigured** by operator choice (the ask
+  was a second copy on the device, which `backups/` already provides and which is now restore-tested:
+  `RESTORE VERIFIED OK` for both databases). Measured while building it: **this machine has ONE
+  physical disk** — C: and S: are both partitions of Disk 0 — so no local path survives hardware
+  loss, and a same-disk destination is refused by default rather than quietly accepted.
+
+**Operator standing rule (F36):** commit before triggering a fire, and don't edit tracked files while
+one is running. `runs/`, `workspace/` and `ledger/` are gitignored, so agent output is unaffected.
 
 **Lesson-pool note (2026-07-27):** lesson_candidates #5/#6/#7 (mission 001) were retracted — they
 recorded the three F20 failures, i.e. a harness defect, not an analyst technique. Left in the pool
@@ -163,8 +201,17 @@ re-check `Principal.LogonType` first (`Get-ScheduledTask -TaskName AGI_M1_* | se
 @{n='LogonType';e={$_.Principal.LogonType}}`) since `Register-ScheduledTask` defaults new/re-created
 tasks back to `Interactive` — the standing rule noted above, not a regression in the fix itself.
 Zero `runs/quarantine_*.json` files at any point (containment guard) remains the one non-negotiable
-signal — anything else is a normal operating variance. Mon 2026-08-03 04:00 is W32's first real
-fire under all of F20-F28 — the first fully unattended run since tonight's manual proof.
+signal — anything else is a normal operating variance.
+
+**Next two events, and what each actually tests.** **Sun 2026-08-02 03:30/04:00** is the first
+unattended run under everything from F20 through F36 and H7. It matters more than a routine Sunday
+for three reasons: the canaries produce the first real green count since W29, which is the number the
+two live skills' rollback baseline of 3 is finally judged against; the scorecard exercises the
+Telegram spot-check push without anyone watching; and the promotion review runs through the H7
+sanitiser for the first time. **Mon 2026-08-03 04:00** is then W32's first mission fire, and the
+first time the same-fire retry path (directive 2) can trigger on its own. Any new
+`runs/reverted_*` directory after either is the F36 preservation working — check it before assuming
+nothing was discarded.
 
 ## M1 acceptance (all must hold — HARNESS_DESIGN.md §7)
 - ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks ·
