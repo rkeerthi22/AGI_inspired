@@ -33,6 +33,69 @@ def _log(msg: str) -> None:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}")
 
 
+# ── H7: constrain the skill-promotion surface (fixes F10) ───────────────────────
+# F10's chain is: hostile web page -> worker deliverable -> lesson_candidates ->
+# model-drafted note -> operator approves -> active_skills_for() appends it to EVERY
+# future worker prompt for that mission. Persistence is what makes it worse than a
+# single poisoned task, and the operator gate is prose review, which is skimmable.
+#
+# The rule chosen here is to ban concrete TARGETS and EXECUTION, not verbs. A keyword
+# ban on "open/visit/fetch" is the obvious design and it is wrong: this project's own
+# first approved skill legitimately says "open every cited URL and confirm the exact
+# claimed value", which such a ban rejects. What distinguishes a technique from an
+# injection is not the verb but whether it names a specific place to go or thing to
+# run. "Open every cited URL" carries no attacker-chosen target; "visit example.com"
+# does. So URLs/domains are STRIPPED (a technique never needs a literal address), and
+# execution/path/framing constructs are FATAL -- a note that needs them is not a
+# technique note, and unlike a URL there is no safe residue left after removing them.
+_NOTE_URL_RE = re.compile(
+    r'https?://\S+|\bwww\.[\w.-]+|\b[\w-]+\.(?:com|net|org|io|ai|co|dev|sh|xyz)\b(?:/\S*)?',
+    re.I)
+_NOTE_FATAL = [
+    (re.compile(r'```|~~~'), "code fence"),
+    (re.compile(r'`[^`]+`'), "inline code span"),
+    (re.compile(r'\b(?:curl|wget|bash|powershell|cmd\.exe|python|pip|npm|node|git|ssh|'
+                r'invoke-webrequest)\b\s', re.I), "shell/command invocation"),
+    (re.compile(r'\$\(|\|\s*\w+\s|>>\s*\S|\brm\s+-|\bsudo\b', re.I), "shell pipeline/redirect"),
+    (re.compile(r'[A-Za-z]:[\\/]|(?<![\w.])[\\/][\w.-]+[\\/]|'
+                r'\b[\w.-]+[\\/][\w.-]+\.(?:py|md|db|json|ya?ml|txt|sh|exe|ini|cfg)\b'),
+     "filesystem path"),
+    (re.compile(r'\b(?:ignore|disregard|forget|override)\b[^.]{0,40}\b'
+                r'(?:previous|prior|above|earlier|system)\b', re.I), "instruction-override framing"),
+    (re.compile(r'^\s*(?:system|assistant|user)\s*:', re.I | re.M), "role framing"),
+    (re.compile(r'\b(?:ledger\.db|ledgerbook|lesson_candidates|critic_verdict|'
+                r'workspace[/\\]|memory[/\\])', re.I), "internal schema/path"),
+]
+MAX_NOTE_CHARS = 700          # a technique note is a few sentences, not a document
+MAX_INJECTED_CHARS = 2000     # total across a mission's active skills (H7 cap)
+
+
+def sanitize_note(text: str) -> tuple[str, list[str], list[str]]:
+    """(cleaned_note, stripped_descriptions, fatal_reasons).
+
+    Non-empty `fatal` means the note must not become a skill. Applied at BOTH draft
+    time and approval time on purpose: a candidate sits on disk as an editable markdown
+    file between the two, so validating only at draft leaves the gap open to anything
+    that can write a file -- which, per F14, is the exact capability an errant worker has."""
+    # Strip URLs BEFORE the fatal scan, not after. Found by testing rather than by
+    # reading: `https://evil.example.com/feed` matched the filesystem-path rule (the
+    # `//` reads as a separator), so URLs came out FATAL when H7 specifies they be
+    # STRIPPED -- and the operator would have seen the misleading reason "filesystem
+    # path" for a plain link. Stripping first makes each rule judge only what it is for.
+    stripped: list[str] = []
+    found = _NOTE_URL_RE.findall(text)
+    if found:
+        stripped.append(f"{len(found)} URL/domain reference(s) removed: {found[:3]}")
+    clean = _NOTE_URL_RE.sub("[link removed]", text).strip()
+    fatal = [why for rx, why in _NOTE_FATAL if rx.search(clean)]
+    if len(clean) > MAX_NOTE_CHARS:
+        stripped.append(f"truncated {len(clean)} -> {MAX_NOTE_CHARS} chars")
+        clean = clean[:MAX_NOTE_CHARS].rsplit(" ", 1)[0] + " …"
+    if not clean:
+        fatal.append("note is empty after sanitisation")
+    return clean, stripped, fatal
+
+
 def _git(*args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True,
                           text=True, encoding="utf-8", errors="replace")
@@ -140,13 +203,27 @@ def cmd_review(notify: bool, dry: bool) -> int:
             (ROOT / "runs" / f"promote_review_raw_{mission}.txt").write_text(
                 out, encoding="utf-8")
             continue
+        # H7 gate 1 of 2 (draft time). The note is model prose derived from model prose
+        # derived from fetched web content -- F10's whole chain -- so it is constrained
+        # before it is ever written to disk.
+        note, stripped, fatal = sanitize_note(note_m.group(1).strip())
+        if fatal:
+            _log(f"{mission}: candidate REJECTED by H7 sanitiser {fatal} — not drafted "
+                 f"(raw kept in runs/ for inspection)")
+            (ROOT / "runs" / f"promote_rejected_{mission}.txt").write_text(
+                f"# H7 rejected {datetime.now().isoformat(timespec='seconds')}\n"
+                f"# reasons: {fatal}\n\n{out}", encoding="utf-8")
+            continue
+        for s in stripped:
+            _log(f"{mission}: sanitised — {s}")
         slug = re.sub(r"[^a-z0-9]+", "-", title_m.group(1).lower()).strip("-")[:50]
         fname = CANDIDATES / f"{datetime.now().strftime('%Y%m%d')}_{mission}_{slug}.md"
         fname.write_text(
             f"---\nmission: {mission}\ntitle: {title_m.group(1).strip()}\n"
             f"status: pending\ncreated: {datetime.now().date()}\n"
+            f"sanitised: {'; '.join(stripped) if stripped else 'no changes'}\n"
             f"evidence_lesson_ids: [{ev_m.group(1).strip() if ev_m else ''}]\n---\n\n"
-            f"{note_m.group(1).strip()}\n", encoding="utf-8")
+            f"{note}\n", encoding="utf-8")
         drafted.append(fname.name)
         _log(f"{mission}: drafted candidate -> {fname.name}")
 
@@ -163,21 +240,82 @@ def cmd_review(notify: bool, dry: bool) -> int:
     return 0
 
 
+def _lesson_provenance(ids: list[int]) -> list[str]:
+    """The actual lesson rows a candidate claims as evidence, with their source task.
+    H7: approval must be informed. A model-written note asserting `evidence: [9, 10]` is
+    unfalsifiable unless the operator can see rows 9 and 10 without going to SQL."""
+    if not ids:
+        return ["(none cited — treat the claim as unevidenced)"]
+    with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
+        c.row_factory = sqlite3.Row
+        rows = c.execute(
+            f"SELECT lc.id, lc.kind, lc.task_id, t.mission_id, lc.lesson "
+            f"FROM lesson_candidates lc LEFT JOIN tasks t ON t.task_id = lc.task_id "
+            f"WHERE lc.id IN ({','.join('?' * len(ids))})", ids).fetchall()
+    found = {r["id"]: r for r in rows}
+    out = []
+    for i in ids:
+        r = found.get(i)
+        if r is None:
+            out.append(f"#{i}: MISSING — cited as evidence but no such lesson row")
+            continue
+        lesson = " ".join((r["lesson"] or "").split())
+        out.append(f"#{i} [{r['kind']}] from task {r['task_id']} ({r['mission_id']}): "
+                   f"{lesson[:200]}")
+    return out
+
+
 def cmd_list() -> int:
-    print("PENDING CANDIDATES (approve/reject by filename):")
+    print("PENDING CANDIDATES — read in full before approving (H7):\n")
     pend = sorted(CANDIDATES.glob("*.md")) if CANDIDATES.exists() else []
     for f in pend:
-        print(f"  {f.name}")
-        print("    " + f.read_text(encoding="utf-8").split("---")[-1].strip()[:150])
+        text = f.read_text(encoding="utf-8")
+        body = re.sub(r"^---.*?---\s*", "", text, flags=re.S).strip()
+        mission = (re.search(r"mission:\s*(\S+)", text) or [None, "?"])[1]
+        san = (re.search(r"sanitised:\s*(.+)", text) or [None, "(pre-H7 draft)"])[1]
+        ids = [int(x) for x in re.findall(
+            r"\d+", (re.search(r"evidence_lesson_ids:\s*\[([\d,\s]*)\]", text)
+                     or [None, ""])[1])]
+        _, stripped, fatal = sanitize_note(body)
+        print(f"  ── {f.name}")
+        print(f"     mission:   {mission}")
+        print(f"     sanitiser: {'REJECTS: ' + str(fatal) if fatal else 'clean'}"
+              f"{' | ' + '; '.join(stripped) if stripped else ''}")
+        print(f"     recorded:  {san}")
+        print(f"     FULL NOTE (this text is appended to EVERY future {mission} "
+              f"worker prompt):")
+        for line in body.splitlines():
+            print(f"       {line}")
+        print(f"     EVIDENCE ({len(ids)} lesson row(s)):")
+        for line in _lesson_provenance(ids):
+            print(f"       {line}")
+        print()
     if not pend:
-        print("  (none)")
-    print("\nACTIVE SKILLS:")
+        print("  (none)\n")
+    print("ACTIVE SKILLS (already injecting):")
     active = [p for p in SKILLS.glob("*/*.md")
               if p.parent.name not in ("_candidates", "_rejected")]
     for f in sorted(active):
-        print(f"  {f.parent.name}/{f.name}")
+        text = f.read_text(encoding="utf-8")
+        body = re.sub(r"^---.*?---\s*", "", text, flags=re.S).strip()
+        base = (re.search(r"canary_baseline:\s*(\d+)", text) or [None, "?"])[1]
+        wk = (re.search(r"canary_baseline_week:\s*(\S+)", text) or [None, "?"])[1]
+        _, _, fatal = sanitize_note(body)
+        print(f"  ── {f.parent.name}/{f.name}")
+        print(f"     rollback baseline: {base} (from {wk})"
+              + ("  ⚠ 0 = auto-rollback cannot trigger" if base == "0" else ""))
+        print(f"     H7 sanitiser: {'⚠ WOULD REJECT: ' + str(fatal) if fatal else 'clean'}")
+        print(f"     {' '.join(body.split())[:220]}")
     if not active:
         print("  (none)")
+    per_mission = {}
+    for f in active:
+        per_mission.setdefault(f.parent.name, 0)
+        per_mission[f.parent.name] += len(
+            re.sub(r"^---.*?---\s*", "", f.read_text(encoding="utf-8"), flags=re.S).strip())
+    for m, n in sorted(per_mission.items()):
+        flag = "  ⚠ OVER CAP — will be truncated" if n > MAX_INJECTED_CHARS else ""
+        print(f"\n  injected into {m}: {n}/{MAX_INJECTED_CHARS} chars{flag}")
     return 0
 
 
@@ -190,6 +328,21 @@ def cmd_approve(name: str) -> int:
     if not mission_m:
         _log("candidate has no mission: field"); return 1
     mission = mission_m.group(1)
+    # H7 gate 2 of 2 (approval time). Re-validated rather than trusted from draft time:
+    # the candidate has been sitting on disk as an editable markdown file in between, and
+    # per F14 an errant or injected worker holds exactly the file-write capability needed
+    # to alter it. Validating only at draft would leave the persistent surface open.
+    body = re.sub(r"^---.*?---\s*", "", text, flags=re.S)
+    clean, stripped, fatal = sanitize_note(body)
+    if fatal:
+        _log(f"REFUSED: {name} fails the H7 sanitiser {fatal}")
+        _log("  the note was altered after drafting, or drafted before H7 existed — "
+             "reject it (promote.py reject) or fix the note and re-run approve")
+        return 1
+    if stripped:
+        for s in stripped:
+            _log(f"sanitised at approval — {s}")
+        text = text.replace(body.strip(), clean)
     baseline, baseline_week = _current_canary_green()
     # F34: record WHICH week the baseline came from. A baseline carried over from an
     # earlier week is a materially different claim than one measured this week, and the
@@ -277,7 +430,7 @@ def cmd_rollback(relpath: str, reason: str = "operator/canary rollback") -> int:
     return 0
 
 
-def active_skills_for(mission_id: str, cap: int = 2000) -> str:
+def active_skills_for(mission_id: str, cap: int = MAX_INJECTED_CHARS) -> str:
     """Concatenated active notes for a mission, frontmatter stripped, capped.
     Called by batch_runner.run_task() for prompt injection."""
     d = SKILLS / mission_id

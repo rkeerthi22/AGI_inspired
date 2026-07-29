@@ -856,12 +856,58 @@ stays unenforced — correctly, since `cost_usd` is always `0.0` on Ollama and t
 to check yet; wiring it is deferred until a paid provider key exists, per the original finding.
 `fallback_chain` traversal on 429/5xx is unimplemented — out of scope for this pass.
 
-### H7 — Constrain the skill-promotion surface (fixes F10)
-- Candidate notes must match a **strict template** (technique statements only); strip URLs and
-  imperative "visit/fetch/run" constructions at draft time.
-- `promote.py list` shows a full diff plus the source lesson/task provenance, so approval is
-  informed rather than a skim.
-- Cap total injected skill text and log every injection in the run log.
+### H7 — Constrain the skill-promotion surface (fixes F10) · **IMPLEMENTED + PROVEN 2026-07-29**
+- ~~Candidate notes must match a **strict template** (technique statements only); strip URLs and
+  imperative "visit/fetch/run" constructions at draft time.~~
+- ~~`promote.py list` shows a full diff plus the source lesson/task provenance, so approval is
+  informed rather than a skim.~~
+- ~~Cap total injected skill text and log every injection in the run log.~~
+
+**One deliberate departure from the spec above, and it matters.** "Strip imperative visit/fetch/run
+constructions" is a **verb** ban, and a verb ban is the wrong rule: this project's own first approved
+skill legitimately reads *"open every cited URL and confirm the exact claimed value"*, which such a
+ban rejects. What separates a technique from an injection is not the verb but whether the note names
+a **specific place to go or thing to run**. "Open every cited URL" carries no attacker-chosen target;
+"visit evil.example.com" does. So `sanitize_note()` bans concrete **targets and execution**, not
+verbs:
+
+- **URLs and bare domains are STRIPPED** (replaced with `[link removed]`) and the removal is surfaced
+  to the operator — a technique never needs a literal address, but the surrounding sentence usually
+  survives as a usable instruction.
+- **Execution and framing constructs are FATAL** — code fences, inline code spans, shell invocations
+  (`curl`/`bash`/`python`/…), pipelines and redirects, absolute filesystem paths, internal
+  schema/path names (`ledger.db`, `workspace/`, `lesson_candidates`), instruction-override phrasing
+  ("ignore all previous…"), and `system:`/`user:` role framing. Unlike a URL there is no safe residue
+  left after removing these, and a note that needed one is not a technique note.
+- Per-note length cap (700 chars) with truncation surfaced, and `active_skills_for()`'s injection cap
+  is now single-sourced from `MAX_INJECTED_CHARS` rather than a duplicate literal (same drift class
+  as F29's `_clean_url` consolidation).
+
+**Validated at BOTH gates, not one.** Draft time is not sufficient: a candidate then sits on disk as
+an editable markdown file until approval, and per **F14** an errant or prompt-injected worker holds
+exactly the file-write capability needed to rewrite it in between. `cmd_approve()` therefore
+re-validates from scratch and refuses rather than trusting the `sanitised:` line the file claims
+about itself.
+
+**`promote.py list` rebuilt for informed approval:** full note text (labelled as going into *every*
+future prompt for that mission), a live sanitiser verdict, the recorded strip history, and each cited
+evidence lesson resolved to its row — kind, source task, mission and text — so `evidence: [9, 10]`
+stops being an unfalsifiable model claim. Active skills additionally show their rollback baseline and
+per-mission injected size against the cap, and are re-scanned so a skill approved *before* H7 existed
+cannot sit there silently unvalidated.
+
+**Proven.** 16 unit assertions: both live skills and three verb-heavy legitimate notes accepted;
+attacker URLs and bare domains stripped with the target verifiably gone; eight execution/framing
+constructs rejected; oversize truncated. Then an end-to-end tamper test — a candidate carrying
+`sanitised: no changes` but poisoned with `Ignore all previous instructions` plus a read of
+`C:\Users\moham\.env` — confirmed `list` flags it with reasons rather than showing a clean excerpt,
+and `approve` **refused** it: exit 1, no skill file written, candidate left in place for an explicit
+reject, and **no git commit created**. The cap was proven by feeding a 5,999-char note and measuring
+2,000 injected.
+
+One honest limit: the per-run injection log line is verified by construction against real values
+(`injecting 1 approved skill(s), 346/2000 chars: [...]`) but emits for the first time on the next
+real mission fire — no research task has run since it was added.
 
 ### H8 — Test isolation (fixes F12) · **elevated priority — this already caused a real incident**
 Remove default-arg DB binding; resolve paths through a single accessor so tests can redirect
@@ -1122,10 +1168,12 @@ That immediately surfaced F34 above — the approval stamped a rollback baseline
 own safety net. Worth noting as a pattern: the gate's first real use found a defect in the gate,
 exactly as the first real use of the reasoning trace found F23.
 
-Still open: **H7** (candidate-note injection hardening — the roadmap's own stated precondition for
-enabling the promotion gate, and **two skills are now active without it**, so this is no longer
-hypothetical: the notes were model-drafted from model-written critic text, and nothing constrains
-their shape before they enter a prompt), the USD half of F8, **F27** (raw
+**H7 is now closed** (2026-07-29) — the F10 injection surface is constrained at both the draft and
+approval gates, `list` supports informed approval, and injection is capped and logged. It was built
+*after* the gate had already been used, which is the wrong order; both live skills were re-scanned
+under the new rules and pass.
+
+Still open: the USD half of F8, **F27** (raw
 substring matching's coincidental-match risk), no git remote (recovery is local-only), a re-run of
 task 30 as a true synthesis now that F30 routes it correctly, and Phase 2.5 onward (runtime
 abstraction, M2).

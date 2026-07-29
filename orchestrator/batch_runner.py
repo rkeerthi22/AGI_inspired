@@ -1048,6 +1048,21 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         skill_notes = promote.active_skills_for(mission["id"])
     except Exception:
         skill_notes = ""
+    # H7 (docs/HARDENING.md): "log every injection in the run log". This text persists
+    # into EVERY future prompt for the mission, which is what makes F10's chain worse
+    # than a single poisoned task -- so which skills were live for a given run has to be
+    # reconstructable from the log afterwards, not inferred from whatever the files
+    # happen to say today. Names + total size, never the note bodies (the run log is not
+    # the audit trail for content; git is).
+    if skill_notes:
+        try:
+            names = [p.name for p in sorted(
+                (promote.SKILLS / mission["id"]).glob("*.md"))]
+        except Exception:
+            names = ["<unreadable>"]
+        capped = " CAPPED" if len(skill_notes) >= promote.MAX_INJECTED_CHARS else ""
+        log(f"task {tid}: injecting {len(names)} approved skill(s), "
+            f"{len(skill_notes)}/{promote.MAX_INJECTED_CHARS} chars{capped}: {names}")
     skills_block = (f"\n\nAPPROVED ANALYST TECHNIQUES (from your past reviewed work — "
                     f"apply where relevant):\n{skill_notes}" if skill_notes else "")
     compliance_block = policy.compliance_prompt_block()
