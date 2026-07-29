@@ -662,7 +662,7 @@ def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
             dup = c.execute("SELECT task_id, status, started_at FROM tasks WHERE "
                             "mission_id=? AND spec=?", (mission["id"], spec)).fetchone()
             if dup:
-                if dup[1] in ("quota_wait", "queued", "interrupted"):  # H3: crash-recovered
+                if dup[1] in RESUMABLE_STATUSES:          # H3 + F43 (infra recovers)
                     rows.append((dup[0], dup[2]))     # resume it
                 continue                               # done/failed this week → skip
             if dry:
@@ -1456,6 +1456,20 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
 PARK_STATUSES = ("quota_wait", "budget_skip", "chain_exhausted")
 MAX_CONSECUTIVE_CHAIN_EXHAUSTED = 2
 
+# F43 (docs/HARDENING.md), 2026-07-30: statuses a LATER invocation may pick up again.
+# `infra_failed` belongs here and was missing, which F37 turned from harmless into blocking:
+# once an API/model failure is correctly classified as infra rather than as a content 'fail',
+# the row is no longer retryable at all, so a canary that failed because a model would not
+# load stayed failed even after the infrastructure recovered. Found immediately -- cloud
+# quota reset, the operator asked to re-run the canaries, and all five would have been
+# skipped ("already infra_failed this week").
+#
+# Note this does NOT contradict directive-2's deliberate exclusion of infra_failed from
+# retry_failed_this_fire(). That exclusion is about retrying inside the SAME fire, where
+# conditions are unchanged and a timeout would just burn another 1800s. This is a later
+# invocation, where the whole point is that conditions may have changed.
+RESUMABLE_STATUSES = ("quota_wait", "queued", "interrupted", "infra_failed")
+
 MAX_RETRIES_PER_FIRE = 3
 
 
@@ -1560,7 +1574,7 @@ def run_canaries(roles: dict) -> None:
         with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
             dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id='canaries' "
                            "AND spec=?", (spec,)).fetchone()
-        if dup and dup[1] not in ("quota_wait", "queued", "interrupted"):  # H3
+        if dup and dup[1] not in RESUMABLE_STATUSES:   # H3 + F43 (infra recovers)
             log(f"{name}: already {dup[1]} this week — skipping"); continue
         tid = dup[0] if dup else ledger.queue_task("canaries", spec, "deterministic grade")
         # F8/F13: canaries draw from the same daily token budget as mission work.
