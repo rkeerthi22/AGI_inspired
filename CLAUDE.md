@@ -49,3 +49,57 @@ Mission (`missions/*.md`) → Plan (manager) → Execute (workers, `hermes -z` +
 
 ## When editing here
 Smallest change that works. Prove it by running it. A measurement beats a code-reading. Report failures verbatim.
+
+## Operator directive — expanded budget (2026-07-29)
+
+**Context:** token quota increased, time budget expanded, operator is available for more throughput.
+The previous conservative posture (park early, single-retry, minimal batch sizes) was correct for
+baseline weeks when we were still finding P0 bugs in the harness. That phase is over. The hardening
+audit is complete (20 findings, all addressed), cron scheduling is verified, failover chain is
+proven, and the integrity guards are live-tested. Push forward.
+
+### What changes
+
+1. **Batch sizes — use the full budget.** Stop parking tasks at the first quota signal when there's
+   remaining daily budget. If `tokens_used_today()` says there's room, run the next task. The
+   previous behavior of "parking remaining tasks" after a single quota hit was appropriate when
+   quota was scarce — it no longer is. Run all seeds per mission per fire, not just until the
+   first 429.
+
+2. **Retry failed tasks sooner.** Tasks that fail critic review should be retried in the SAME
+   batch run if token budget permits, not deferred to next week's cron fire. The current
+   once-per-week cadence means a failed synthesis waits 7 days — that's too slow now.
+
+3. **Synthesis tasks — diagnose and fix.** Synthesis (seed 4) has failed every attempt across
+   W27 and W31. This is now a pattern, not a fluke. Investigate why: is it the prompt, the
+   done-definition, the context window, or the lack of prior-week data? Fix it rather than
+   letting it fail-and-defer indefinitely.
+
+4. **Spot-check backlog — process it.** There are done tasks inside the scoring window (#26,
+   #28, #29) that need human verdicts to feed accuracy. Flag these to the operator proactively
+   via Telegram, not just on `spotcheck.py list`.
+
+5. **Skill promotion — be less conservative.** The current evidence bar (≥2 corroborating
+   lessons) has produced zero candidates in 3 weeks. If mission 002 has 3 lessons in the pool,
+   that already exceeds the bar — draft a candidate and surface it for operator review. Don't
+   wait for a perfect signal.
+
+6. **Mission 003 (adforge) stays on hold.** More budget does not mean fabricating a client.
+   This directive expands throughput on existing active missions, not scope.
+
+### What does NOT change
+
+- **Safety posture is unchanged.** All integrity guards, containment checks, quarantine logic,
+  and deny-list rules remain in force. More budget ≠ less caution.
+- **Human gate on skill promotion stays.** No auto-promotion. Faster drafting, same approval
+  process.
+- **Ledger honesty stays.** If a task fails, it's recorded as failed. The point is to have
+  MORE attempts, not to inflate the numbers.
+- **Cost tracking stays.** Every token is still logged. The budget is larger, not unmetered.
+
+### TL;DR for the agent
+You have more fuel. Use it. Run more tasks, retry failures faster, fix the synthesis problem,
+draft skill candidates when the evidence is there. The operator is engaged and checking in —
+surface things that need human review via Telegram rather than waiting to be asked. The 8-week
+clock is ticking and we're in Week 3 — the improvement curve needs data points, and data points
+come from attempts, not from parking.
