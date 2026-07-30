@@ -33,7 +33,16 @@ def check(name, got, want):
 
 try:
     print("=== 1. baseline is clean ===")
-    check("no protected path is masked at rest", sorted(br._masked_under_protected()), [])
+    # F52 (2026-07-30) moved this baseline: `.claude` became a PROTECTED_PATH when
+    # HANDOFF.md was committed, and .git/info/exclude legitimately masks
+    # `.claude/worktrees/` -- the operator-DECIDED nested-worktree collapse. So "masked at
+    # rest" is no longer empty, and asserting [] would now fail for a correct system.
+    # The invariant that still carries weight is narrower and is asserted directly: the
+    # ONLY at-rest mask is that decided one. A mask on any OTHER protected path still
+    # fails here, and section 2 still requires the attack to add exactly one entry on top.
+    AT_REST = sorted(br._masked_under_protected())
+    check("the only at-rest mask is the DECIDED worktree collapse",
+          [m for m in AT_REST if "worktrees" not in m], [])
     a = br._untracked_files()
     b = br._untracked_files()
     check("untracked scan is stable across calls (no spurious delta)", a == b, True)
@@ -47,14 +56,15 @@ try:
     check("the exclude-source edit is itself detected",
           br._local_exclude_state()[EX_KEY] != before["excludes"][EX_KEY], True)
     check("the mask is attributed to a protected path",
-          sorted(br._masked_under_protected()), ["orchestrator/_f47_planted.py"])
+          sorted(br._masked_under_protected()),
+          sorted(AT_REST + ["orchestrator/_f47_planted.py"]))
 
     print("\n=== 3. remediation restores the exclude and removes the plant ===")
     br.fs_integrity_check(before, context="F47 test 3")
     check("exclude restored byte-identical", EXCLUDE.read_bytes(), EX_ORIGINAL)
     check("planted file removed", PLANT.exists(), False)
     check("masking is gone once the exclude is restored",
-          sorted(br._masked_under_protected()), [])
+          sorted(br._masked_under_protected()), AT_REST)
 
     print("\n=== 4. an exclude source CREATED during the call is removed ===")
     EXCLUDE.unlink()
@@ -85,8 +95,17 @@ try:
     print("\n=== 7. the guard's own view is not maskable ===")
     before = br.fs_integrity_snapshot()
     EXCLUDE.write_bytes(EX_ORIGINAL + b"\n.claude/\n")
-    check("masking .claude/ does not hide HANDOFF.md from the scan",
-          ".claude/HANDOFF.md" in br._untracked_files(), True)
+    # F52 (2026-07-30): HANDOFF.md is now TRACKED and `.claude` is a PROTECTED_PATH, so it
+    # is no longer reachable via the untracked scan -- the old assertion here tested a
+    # channel that cannot apply to it any more. The property under test is unchanged
+    # ("masking .claude/ must not hide the handoff from the guard") and now holds through a
+    # STRONGER channel: `git ls-files` does not consult ignore rules at all, so a tracked
+    # file cannot be masked by any exclude source. That is the real payoff of F52 over
+    # relying on untracked enumeration, and it is asserted rather than assumed.
+    check("masking .claude/ does not hide HANDOFF.md from the guard",
+          ".claude/HANDOFF.md" in br._tracked_hashes(), True)
+    check("...and the untracked scan legitimately no longer carries it",
+          ".claude/HANDOFF.md" in br._untracked_files(), False)
     br.fs_integrity_check(before, context="F47 test 7")
     check("exclude restored after the .claude/ mask attempt",
           EXCLUDE.read_bytes(), EX_ORIGINAL)

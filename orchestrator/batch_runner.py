@@ -492,7 +492,18 @@ PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
                    # into tests/. They are the only thing standing between F34-F47 and a
                    # silent regression, so a worker must not be able to weaken the tests that
                    # check the worker -- the same argument F42 made for .gitignore.
-                   "tests"]
+                   "tests",
+                   # F52 (docs/HARDENING.md), 2026-07-30: `.claude` had to join this list the
+                   # moment HANDOFF.md was COMMITTED. While untracked it was covered by
+                   # _untracked_files()'s hashes (F46/F47); tracking it removed it from that set
+                   # WITHOUT adding it to _tracked_hashes(), which only walks PROTECTED_PATHS.
+                   # Measured, not argued: a simulated tamper produced an empty delta on all
+                   # four detection channels. `.claude` is Claude Code's own config tree --
+                   # agents, skills, settings, hooks -- i.e. the one place where a written file
+                   # steers the SUPERVISING agent, which is exactly why F46 refused to
+                   # gitignore it. `.claude/worktrees/` stays out via .git/info/exclude, itself
+                   # watched by F47.
+                   ".claude"]
 
 # F42: PROTECTED_PATHS covers files that EXIST. A brand-new file at the repo root matched
 # nothing in it and was therefore invisible -- found 2026-07-30 when a 699-line

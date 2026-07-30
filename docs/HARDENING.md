@@ -1529,6 +1529,61 @@ recent rows were kept, that presentation remains entity-ordered, empty-ledger de
 the shipped cap exceeds the live window and cannot regress below the old 120.
 14/14 → **15/15 suites green**, compile clean.
 
+### F52 — Committing the handoff silently removed it from the containment surface · **P1 · PROVEN, found + fixed 2026-07-30**
+Self-inflicted, and found within a minute of causing it. `.claude/HANDOFF.md` had been covered by
+`_untracked_files()`'s hashes (F46/F47) **precisely because it was untracked**. Committing it removed
+it from that set without adding it to `_tracked_hashes()`, which walks only `PROTECTED_PATHS` — and
+`.claude` was not in the list.
+
+Measured, not argued. A simulated tamper immediately after the commit:
+
+| detection channel | delta |
+|---|---|
+| tracked hashes | `[]` |
+| new untracked | `[]` |
+| tampered untracked | `[]` |
+| porcelain | `[]` |
+
+Silent on all four. And the tree in question is Claude Code's own config directory — agents, skills,
+settings, hooks — i.e. the one place where a written file steers the **supervising** agent, which is
+exactly the reasoning F46 used when it *refused to gitignore* `.claude`. Tracking the file achieved
+the same blindness by the opposite route.
+
+**The general shape is worth more than the instance: changing a file's VCS status silently changes
+which guard covers it.** `git add` is not usually thought of as a security-relevant operation. Here
+it moved a file across the boundary between two mechanisms that each assumed the other had it. The
+F42→F46→F47→F52 sequence is one hole re-appearing at each new layer — root files, then untracked
+directories, then unversioned exclude sources, now VCS-status transitions.
+
+Fixed by adding `.claude` to `PROTECTED_PATHS`. Re-measured after: the tamper is caught on **two**
+channels (tracked hash + porcelain), `policy.validate_paths()` stays consistent, protected tracked
+files rise 51 → 53, and `.claude/worktrees/` remains collapsed as `<nested-repo>` rather than being
+enumerated.
+
+**Two knock-on effects, both handled rather than suppressed:**
+
+1. **`test_f47`'s baseline legitimately moved.** It asserted *no* protected path is masked at rest;
+   with `.claude` protected, `.git/info/exclude`'s `.claude/worktrees/` rule now masks one — a real,
+   operator-DECIDED collapse. The test now captures `AT_REST` and asserts the **only** at-rest mask
+   is that worktree, with the attack still required to add exactly one entry on top and remediation
+   still required to return to `AT_REST`. Detection power is unchanged; a mask on any other protected
+   path still fails it.
+2. **`test_f47` section 7 was testing a channel that no longer applies.** It asserted HANDOFF.md
+   appears in `_untracked_files()`; a tracked file never will. The property is unchanged and now
+   holds through a *stronger* channel — `git ls-files` does not consult ignore rules at all, so a
+   tracked file cannot be masked by any exclude source. That is the real payoff of F52 over relying
+   on untracked enumeration, and it is now asserted directly.
+
+**Residual, stated:** F47's mask detector now logs a WARNING on every snapshot naming
+`.claude/worktrees/jolly-gauss-8e52cb/`. That is F47 working, not failing — but a warning that fires
+always is a warning that stops being read. `git worktree remove .claude/worktrees/jolly-gauss-8e52cb`
+clears it at the source; it is the operator's worktree, so it is offered, not done.
+
+Verified by a new `f52` suite — 10 assertions — including the defect itself: the pre-F52 surface
+(`PROTECTED_PATHS` minus `.claude`) is shown not to cover the file at all, while the shipped surface
+catches the tamper on two channels. Restoration is by content copy, never `git checkout` (F36).
+**16/16 suites green**, `.git/info/exclude` byte-identical afterwards.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
