@@ -339,22 +339,22 @@ capped + logged) — note it was built *after* the gate had already been used, w
     read 0/0. `runs/canary_<name>.usage.json` may hold some of that spend, but `runs/` is gitignored
     and periodically cleaned, so a backfill would be partial and would rewrite an append-only ledger —
     not done without an explicit call.
-11. **Two skill candidates drafted for mission 002, awaiting your `promote.py approve|reject` —
-    BLOCKED ON OPERATOR, not on more work.** Sourced from real defects the #28/#29 spot-check notes
-    caught but never acted on:
+11. ~~**Two skill candidates drafted for mission 002, awaiting your `promote.py approve|reject`.**~~
+    **APPROVED 2026-07-30** (operator instruction, both). Sourced from real defects the #28/#29
+    spot-check notes caught but never acted on:
     - `20260730_002-content-niche-research_reconcile-every-repeated-metric-within-a-delivera.md` —
       task 28's self-contradiction (544K views vs. "587K-view follow-up", same video).
     - `20260730_002-content-niche-research_never-label-a-paraphrase-as-a-verbatim-quote.md` —
       task 29's Goldman Sachs line marked "(verbatim)" while paraphrasing the live page.
 
-    Each cites exactly **one** lesson row (ids 13, 14 — freshly inserted into `lesson_candidates`
-    from the spot-check notes, since neither came through the automated critic-FAIL path that
-    normally populates the pool). That is **below** `promote.py`'s own `MIN_EVIDENCE_ROWS=2`
-    corroboration bar for the automatic weekly review — stated here rather than left implicit, so
-    approval is an informed judgment call, not a rubber stamp on a number that looks bigger than it
-    is. Both passed the H7 sanitiser clean (verified via `promote.py list`, not assumed).
-    `python orchestrator/promote.py list` to read them in full; `approve <filename>` or
-    `reject <filename>` per candidate.
+    Each cited exactly **one** lesson row (ids 13, 14) — below `promote.py`'s own
+    `MIN_EVIDENCE_ROWS=2` corroboration bar for the automatic weekly review, stated at draft time so
+    the approval was an informed call, not a rubber stamp. Both now ACTIVE, stamped
+    `canary_baseline: 3` (from a real 2026-W31 observation, not a disarmed 0 — see F34), committed in
+    two scoped commits (`ef6e7d1`, `b9f80c3`), `lesson_candidates` ids 13/14 marked `promoted_to`,
+    `memory/ledgerbook.db.decisions` rows 7/8 record the approval provenance. `002-content-niche-
+    research`'s injected skill text is now **1217/2000 chars** (was 430) — still under the H7 cap, no
+    truncation. **16/16 suites green** after promotion.
 
 ---
 
