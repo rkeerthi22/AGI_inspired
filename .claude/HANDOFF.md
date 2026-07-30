@@ -2,10 +2,11 @@
 
 Registry source of truth: `S:\AGI_like\docs\HARDENING.md` (F1–F52 all written up there as of this
 session — **the F43 gap noted in the previous handoff is now CLOSED**). F1–F42 were originally
-reconstructed from HARDENING.md entries on disk, not from memory; F43–F51 were written as they landed.
+reconstructed from HARDENING.md entries on disk, not from memory; F43–F52 were written as they landed.
 
-HEAD = `11037da`. **Working tree fully clean** — this file is now tracked (F52), so there are no
-untracked entries at all.
+**Working tree fully clean** — this file is now tracked (F52), so the repo has no untracked entries
+at all. Note this file is itself committed, so `git log -1` will always sit one or more commits
+ahead of any hash quoted here; read HEAD from git, not from this line.
 
 ---
 
@@ -96,7 +97,7 @@ untracked entries at all.
 ## 2. Fix registry
 
 F1–F42 reconstructed from `docs/HARDENING.md` on disk; F43–F45 from the 2026-07-30 overnight session;
-F46–F51 from this session.
+F46–F52 from this session.
 
 - **F1** Concurrent runs cause silent data loss + false security alarms → no single-writer discipline → run-lock (`orchestrator/runlock.py`) + provenance-based integrity via `run_id`. P0 · PROVEN
 - **F2** Power loss orphans tasks permanently → no code path ever read/reset `status='running'` → lease-based crash recovery, `reconcile_interrupted_tasks()`. P0 · PROVEN by absence
