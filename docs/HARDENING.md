@@ -1257,6 +1257,58 @@ outside and left untouched; masking `.claude/` failing to hide `HANDOFF.md`; and
 no-op. Full set **11/11 green** (`f35 f36 f37 f39_f40 f42 f44 f47 h7 h7_gate baseline throughput`),
 compile clean, zero `runs/quarantine_*.json`, `.git/info/exclude` byte-identical afterwards.
 
+### F48 — Canary token spend was measured, then dropped on the floor · **P1 · PROVEN, found + fixed 2026-07-30**
+`run_canaries()` called `ledger.finish_task()` with no `tokens_in`/`tokens_out`. The data was right
+there: `worker_with_failover()` returns `usage`, and the line immediately above consumed it via
+`worker_failed(out, usage)`. It was simply never passed on.
+
+Not a rounding error — **every canary that has ever resolved records zero spend**:
+
+| mission | resolved | tokens_in | zero-token rows |
+|---|---|---|---|
+| `000-onboarding` | 1 | 7,021 | 0 |
+| `001-shopify-competitor-intel` | 7 | 23,492,390 | 2 |
+| `002-content-niche-research` | 6 | 12,263,874 | 0 |
+| **`canaries`** | **6** | **0** | **6 of 6** |
+
+`policy.tokens_used_today()` sums that column, so the `tokens_per_day_hard_stop` guard under-counted
+by exactly the canary spend — *"the daily guard protects less than it should"*, the same sentence F21,
+F22b and F32 were each written to stop being true. The spend was never even lost: it is written to
+`runs/canary_<name>.usage.json` on every call. It just never reached the ledger, and **if it is not in
+the ledger it did not happen** (CLAUDE.md).
+
+**This is F33 in a path F33 never checked.** F33 fixed synthesis token accounting — `run_synthesis()`
+passed no tokens and `ollama_chat()` discarded Ollama's top-level counts — and the canary path has the
+identical omission. Third path with the same defect (mission retry F32, synthesis F33, canaries F48),
+which is why the fix consolidates rather than adds a fourth copy: the accumulate arithmetic is now
+`accumulated_tokens()`, one definition called by both `run_task()` and `run_canaries()`. Two call
+sites computing the same thing from two copies of three lines is the exact failure shape of F43's
+duplicated status tuples.
+
+**All three post-call paths now record, not just the green one.** A quota-parked canary keeps whatever
+the failed rungs burned, and an `infra_failed` canary keeps its spend — which matters because
+`infra_failed` is in `TERMINAL_STATUSES`, so those tokens do count toward the day. Parking still does
+not stamp `finished_at` (F22b holds), so a parked row's spend is carried on the row and counted when
+it finally resolves. Resumed canaries accumulate, because `RESUMABLE_STATUSES` makes resumption a live
+case, not a theoretical one — the dedup query was widened to fetch the prior totals for that reason.
+
+**One acknowledged gap:** a canary killed by `subprocess.TimeoutExpired` still records nothing, because
+that path has no `usage` to record — the same limitation `finish_task()`'s own F21 comment describes
+("a timed-out run burns tokens without returning a usage file"). Detected and stated rather than
+papered over.
+
+Found by inspecting the ledger after a canary re-run, not by reading the code: the run log showed
+`3/5 green` while the rows behind it showed `tok=0/0` for canaries that had done real browser work.
+
+Verified by a new `f48` suite — 19 assertions — **and validated against the defect rather than assumed
+to catch it**: reverting only the `tokens_in=`/`tokens_out=` arguments on the done path (restored by
+file copy, never `git checkout` — F36) turns exactly three assertions red — the row carrying spend,
+resume accumulating, and `tokens_used_today()` moving. The suite also replays the pre-fix call shape
+directly on a row to show it yields 0/0, so a green run cannot be green for some unrelated reason, and
+asserts the helper reproduces `run_task()`'s old inline expression term-for-term so the mission path is
+untouched by the refactor. Full set **12/12 green**, compile clean, real ledger never opened (every
+assertion runs against a `shutil.copy2()` copy with escalate/rollback/integrity guards stubbed).
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's

@@ -1401,6 +1401,25 @@ def reconcile_interrupted_tasks() -> int:
 
 
 # ── execution ──────────────────────────────────────────────────────────────────
+def accumulated_tokens(usage: dict, prior_in, prior_out) -> tuple[int, int]:
+    """This attempt's consumption ADDED to whatever the row already carried.
+
+    F32 (docs/HARDENING.md) established the rule for run_task(): `finish_task()` writes
+    these columns via COALESCE, so omitting them preserves the prior value (F21) but
+    PASSING one replaces it -- and a retry that succeeds passes real numbers, silently
+    erasing the failed attempt's spend from `tokens_used_today()`.
+
+    F48, 2026-07-30: promoted from an inline expression to a shared function because the
+    canary path never had it at all, and the whole reason it never had it is that this
+    logic lived in exactly one function's body. Two call sites computing the same thing
+    from two copies of the same three lines is the failure shape of F33 (synthesis missed
+    when the mission path was fixed) and F43 (two status tuples). One definition, both
+    callers. `prior_*` may be None on a first attempt -- that is a no-op, not a special
+    case."""
+    return (int(usage.get("input_tokens") or 0) + int(prior_in or 0),
+            int(usage.get("output_tokens") or 0) + int(prior_out or 0))
+
+
 def run_task(tid: int, mission: dict, roles: dict) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
     import sqlite3
@@ -1622,8 +1641,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     # than it should. Latent while retries were rare; directive-2 below makes retries
     # routine, so it has to be closed first. `row` was read before this attempt started,
     # so it holds exactly the prior total (0/NULL on a first run -- a no-op there).
-    tok_in = int(usage.get("input_tokens") or 0) + int(row.get("tokens_in") or 0)
-    tok_out = int(usage.get("output_tokens") or 0) + int(row.get("tokens_out") or 0)
+    # F48: the arithmetic moved to accumulated_tokens(), now shared with run_canaries().
+    tok_in, tok_out = accumulated_tokens(usage, row.get("tokens_in"), row.get("tokens_out"))
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status=status)
@@ -1776,11 +1795,15 @@ def run_canaries(roles: dict) -> None:
     for name, prompt, grade in CANARIES:
         spec = f"[{wk}] {name}"
         with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
-            dup = c.execute("SELECT task_id, status FROM tasks WHERE mission_id='canaries' "
-                           "AND spec=?", (spec,)).fetchone()
+            dup = c.execute("SELECT task_id, status, tokens_in, tokens_out FROM tasks "
+                           "WHERE mission_id='canaries' AND spec=?", (spec,)).fetchone()
         if dup and dup[1] not in RESUMABLE_STATUSES:   # H3 + F43 (infra recovers)
             log(f"{name}: already {dup[1]} this week — skipping"); continue
         tid = dup[0] if dup else ledger.queue_task("canaries", spec, "deterministic grade")
+        # F48: a resumed canary must ADD to what the row already spent, not replace it --
+        # the same reason run_task() reads `row` before the attempt starts (F32). A canary
+        # is resumable by RESUMABLE_STATUSES, so this is a live case, not a theoretical one.
+        prior_in, prior_out = (dup[2], dup[3]) if dup else (0, 0)
         # F8/F13: canaries draw from the same daily token budget as mission work.
         if policy.token_budget_breached():
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
@@ -1814,7 +1837,9 @@ def run_canaries(roles: dict) -> None:
         db_integrity_check(snapshot, context=f"canary {name}")
         fs_integrity_check(fs_snapshot, context=f"canary {name}")
         if exhausted:
+            tok_in, tok_out = accumulated_tokens(usage, prior_in, prior_out)
             ledger.finish_task(tid, artifacts=[], status="quota_wait",
+                               tokens_in=tok_in, tokens_out=tok_out,
                                critic_notes="quota on every model in the fallback chain "
                                             "— canary parked (F9)",
                            append_note=True)
@@ -1833,17 +1858,26 @@ def run_canaries(roles: dict) -> None:
         # critic_verdict='fail' -- infrastructure flakiness written into the ledger as the
         # analyst being wrong, in the one path that gates deletion of approved skills.
         if worker_failed(out, usage):
+            tok_in, tok_out = accumulated_tokens(usage, prior_in, prior_out)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               tokens_in=tok_in, tokens_out=tok_out,
                                critic_notes=f"model/API failure, NOT a content miss "
                                             f"(excluded from the green count): {out[:150]}",
                                append_note=True)
             log(f"{name}: infra_failed ({out[:80]})"); continue
         ok = bool(grade(out))
         green += ok
+        # F48 (docs/HARDENING.md), 2026-07-30: this call recorded NO tokens. `usage` was
+        # returned by worker_with_failover() and consumed one line above by worker_failed(),
+        # then dropped -- so all 6/6 resolved canary rows read 0/0 while mission rows carried
+        # millions. policy.tokens_used_today() sums this column, so the daily hard stop
+        # under-counted by exactly the canary spend.
+        tok_in, tok_out = accumulated_tokens(usage, prior_in, prior_out)
         ledger.finish_task(tid, artifacts=[], status="done",
+                           tokens_in=tok_in, tokens_out=tok_out,
                            critic_verdict="pass" if ok else "fail",
                            critic_notes=f"deterministic: {'ok' if ok else 'MISS'} | {out[:150]}")
-        log(f"{name}: {'PASS' if ok else 'FAIL'}")
+        log(f"{name}: {'PASS' if ok else 'FAIL'} (in={tok_in} out={tok_out})")
     # Report the WEEK's actual state, not just this invocation's count -- found
     # 2026-07-18: a resume pass that only re-attempts quota-parked canaries printed
     # "0/5 green" and fired a false regression escalation, ignoring canaries that
