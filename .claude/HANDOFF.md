@@ -50,13 +50,21 @@ ahead of any hash quoted here; read HEAD from git, not from this line.
   tracking it moved it out of that set without moving it into `_tracked_hashes()`. **Changing a
   file's VCS status silently changes which guard covers it.** Both halves are now required together.
   **DECIDED.**
-- **The nested worktree stays COLLAPSED in the untracked scan** — `.claude/worktrees/jolly-gauss-8e52cb/`
-  is recorded as `<nested-repo>`: appearance/disappearance detected, internal churn not. Expanding it
-  would point a delete-on-sight remediation at a live git checkout whose `.git` internals and
-  `__pycache__` change for legitimate reasons, buying visibility into a directory the harness never
-  executes from. **DECIDED 2026-07-30 (operator).** If the residual ever needs closing, the move is
-  `git worktree remove .claude/worktrees/jolly-gauss-8e52cb` — delete the blind spot rather than
-  police it.
+- **A nested worktree stays COLLAPSED in the untracked scan, IF one exists** — recorded as one
+  `<nested-repo>` marker: appearance/disappearance detected, internal churn not. Expanding it would
+  point a delete-on-sight remediation at a live git checkout whose `.git` internals and `__pycache__`
+  change for legitimate reasons, buying visibility into a directory the harness never executes from.
+  **DECIDED 2026-07-30 (operator).** The design is unconditional; the instance is not — see below.
+  - **Residual CLOSED 2026-07-30.** `git worktree remove .claude/worktrees/jolly-gauss-8e52cb` (clean,
+    detached at `8f9338b`, no `--force`) + `git worktree prune`. Re-measured:
+    `_masked_under_protected()` → `[]`, one worktree in `git worktree list`, `.claude/HANDOFF.md`
+    still in `_tracked_hashes()`. `tests/test_f52.py` §3/§5 hardcoded the worktree's *presence*, so
+    removal alone would have flipped 3 assertions red; both now branch on live git/snapshot state
+    (present → one collapsed marker, absent → zero entries / nothing masked) so the rule is tested in
+    either world. **16/16 suites green** after the rewrite.
+  - **`.git/info/exclude`'s `.claude/worktrees/` line left in place — deliberate non-action.** Deleting
+    it buys nothing once the masked set is already empty, and an unversioned exclude source is exactly
+    the surface F47 exists to watch — not touched without a measured reason. **DECIDED.**
 - **F47 remediation rewrites only exclude sources INSIDE the repo.** The global ignore is the
   operator's personal config; silently editing a file outside the project is more than a containment
   guard should do unasked. Out-of-repo tampering is detected, escalated, and left alone. **DECIDED.**
@@ -150,7 +158,7 @@ F46–F52 from this session.
 - **F48** Canary token spend was measured, then dropped on the floor → `run_canaries()` called `ledger.finish_task()` with no `tokens_in`/`tokens_out`, though `worker_with_failover()` returns `usage` and the line above consumes it via `worker_failed(out, usage)`. **All 6/6 resolved canary rows read 0/0** while mission rows carried millions (001: 23.5M in, 002: 12.3M), so `policy.tokens_used_today()` under-counted by exactly the canary spend and `tokens_per_day_hard_stop` protected less than it claimed — the sentence F21/F22b/F32 were each written to stop being true. **F33's bug in a path F33 never checked** (third instance: mission retry F32, synthesis F33, canaries F48) → accumulate arithmetic consolidated into one `accumulated_tokens()` called by BOTH `run_task()` and `run_canaries()`, rather than a fourth copy; all three post-call canary paths record (done, quota_wait, infra_failed), dedup query widened to fetch prior totals so resumes accumulate. Residual: a `TimeoutExpired` canary still records nothing — no `usage` exists to record. Found by reading the ledger after a canary run showed `3/5 green` over rows reading `tok=0/0`. P1 · fixed 2026-07-30 · `tests/test_f48.py` (19 assertions; reverting only the fix turns exactly 3 red)
 - **F49** Synthesis silently receives a truncated brief and reports the missing part as a data gap → `run_synthesis()` builds its input with `p.read_text()[:6000] for p in briefs[:6]` — two silent caps, no marker, so neither the synthesis model nor the critic (which never sees the prompt) can tell a complete document from a bisected one. Measured: task 29's brief is 12,464 chars, 6,464 dropped, and `## Topic Opportunity 3` begins at char **6,060** — the cut misses it by **60 characters**. Task 30 therefore declared a data gap that was literally TRUE of the material it received, and grading that as an analyst error would have repeated F37; it was spot-checked pass and the defect recorded instead. Task 27 is hit harder and invisibly: all three of its input briefs (10,994/11,388/8,279) were cut, ~18KB of researched material never reached the synthesis meant to consolidate it, and the output still looks complete. F20/F31 family (judged on material never shown) but worse — those withheld REQUIREMENTS and produced visibly wrong output; this withholds EVIDENCE and produces well-formed output wrong only in what it omits, whose failure mode is an operator told to go source what the harness already has. Adjacent latent instance **now fixed as F51**: `_recent_fact_lines` was 12 rows from truncating. → **FIXED with the marker** (operator's call): `build_brief_block()` states every omission — `[TRUNCATED BY THE HARNESS: n of m characters ... researched and exists ... NOT a data gap]` plus a named section for briefs dropped by the count cap; caps promoted to `SYNTHESIS_BRIEF_CHARS`/`SYNTHESIS_MAX_BRIEFS` so raising them stays a separate one-line decision. **Crucially the prompt also had to change** — the model reasoned CORRECTLY from "absent"; nothing distinguished it from "withheld" — so it now carries "truncation is not a data gap ... do not tell the operator to research it, they already have it". Does NOT recover the omitted text; it makes the loss reportable instead of converting a harness limit into operator make-work. **Found by the spot-check, which is precisely the job F3 says only a human pass can do.** P1 · found + fixed 2026-07-30 · `tests/test_f49.py` (22 assertions, incl. the real task-29 brief now emitting `6464 of 12464`, and the pre-fix expression shown emitting nothing)
 - **F51** The fact ledger truncated silently, and dropped the alphabetical tail → `_recent_fact_lines(days=14, cap=120)` ended `rows[:cap]`. Third member of F49's family (F49 briefs, F50 model context, F51 facts) and the closest to firing: measured **108 facts in the 14-day window against a cap of 120** — twelve rows of headroom, while week W30 alone produced **70**. Worse than lossy, the ordering was `ORDER BY entity, id`, so overflow always dropped the alphabetical **tail** — deterministically the same entities (today `ai-productivity`/`dark-academia`/`modern-stoicism`, the whole onboarding set), chosen by name rather than age or relevance → cap 120 → **300**; F49's marker in the same words; and the newest `cap` rows now SELECTED (`id DESC LIMIT`) then PRESENTED grouped by entity, so truncation drops the oldest while reading order stays grouped. `db` made injectable (F12's lesson) so the suite never opens the live ledgerbook. Behaviour today is byte-identical (108 < 300). P1 · found + fixed 2026-07-30 · `tests/test_f51.py` (20 assertions; validated on a case where the two orderings DISAGREE — fix keeps `zzz*` newest, pre-fix keeps `aaa*` oldest)
-- **F52** Committing the handoff removed it from the containment surface → `.claude/HANDOFF.md` was covered by `_untracked_files()`'s hashes (F46/F47) **precisely because it was untracked**; `git add` moved it out of that set without moving it into `_tracked_hashes()`, which walks only `PROTECTED_PATHS` — and `.claude` was not listed. Measured a minute after the commit: a simulated tamper produced an EMPTY delta on all four channels (tracked hashes, new untracked, tampered untracked, porcelain). The blinded tree is Claude Code's own config dir — the one place a file steers the SUPERVISING agent, which is why F46 refused to *gitignore* it; tracking achieved the same blindness by the opposite route → `.claude` added to `PROTECTED_PATHS`; tamper now caught on TWO channels, protected tracked files 51→53, worktree still collapsed. **General lesson: changing a file's VCS status silently changes which guard covers it** — `git add` is not usually thought of as security-relevant. F42→F46→F47→F52 is one hole reappearing per layer. Knock-ons handled not suppressed: `test_f47`'s at-rest baseline legitimately moved (now asserts the ONLY at-rest mask is the DECIDED worktree), and its section 7 was re-pointed from the untracked channel to the tracked one, which is *stronger* since `git ls-files` ignores exclude rules entirely. Residual: F47 now WARNs on every snapshot about the worktree — `git worktree remove` clears it at source. P1 · found + fixed 2026-07-30 · `tests/test_f52.py` (10 assertions incl. the pre-F52 surface shown not to cover the file at all)
+- **F52** Committing the handoff removed it from the containment surface → `.claude/HANDOFF.md` was covered by `_untracked_files()`'s hashes (F46/F47) **precisely because it was untracked**; `git add` moved it out of that set without moving it into `_tracked_hashes()`, which walks only `PROTECTED_PATHS` — and `.claude` was not listed. Measured a minute after the commit: a simulated tamper produced an EMPTY delta on all four channels (tracked hashes, new untracked, tampered untracked, porcelain). The blinded tree is Claude Code's own config dir — the one place a file steers the SUPERVISING agent, which is why F46 refused to *gitignore* it; tracking achieved the same blindness by the opposite route → `.claude` added to `PROTECTED_PATHS`; tamper now caught on TWO channels, protected tracked files 51→53, worktree still collapsed. **General lesson: changing a file's VCS status silently changes which guard covers it** — `git add` is not usually thought of as security-relevant. F42→F46→F47→F52 is one hole reappearing per layer. Knock-ons handled not suppressed: `test_f47`'s at-rest baseline legitimately moved (now asserts the ONLY at-rest mask is the DECIDED worktree), and its section 7 was re-pointed from the untracked channel to the tracked one, which is *stronger* since `git ls-files` ignores exclude rules entirely. Residual: F47 now WARNs on every snapshot about the worktree — `git worktree remove` clears it at source. **Residual CLOSED same day**: worktree removed, `_masked_under_protected()` → `[]`, `test_f52.py` §3/§5 rewritten to branch on live git state instead of assuming the worktree's presence (16/16 still green). P1 · found + fixed 2026-07-30 · `tests/test_f52.py` (10 assertions incl. the pre-F52 surface shown not to cover the file at all)
 
 **H-items** (blueprint, tracked separately in HARDENING.md): H1–H6, H8, H9 done; **H7 CLOSED 2026-07-29**
 (skill-note sanitiser at both draft and approval gates, provenance in `promote.py list`, injection
@@ -320,8 +328,10 @@ capped + logged) — note it was built *after* the gate had already been used, w
    C1 right that way; the tool-free test did not. Worth one real probe next time the box is idle.
    Note F50 now excludes it from *synthesis* on size grounds, so this question only concerns the
    browser-worker path.
-9. **Optional, on request:** `git worktree remove .claude/worktrees/jolly-gauss-8e52cb` would delete
-   the F47 residual rather than police it. Not done — it is your worktree.
+9. ~~**Optional, on request:** `git worktree remove .claude/worktrees/jolly-gauss-8e52cb`~~
+   **DONE 2026-07-30.** Removed + pruned; `_masked_under_protected()` now `[]`;
+   `tests/test_f52.py` §3/§5 rewritten to branch on live state rather than assuming presence.
+   16/16 green.
 10. ~~**Canary token spend is never recorded.**~~ **FIXED 2026-07-30 as F48** (see registry). One
     residual, stated rather than papered over: a canary killed by `subprocess.TimeoutExpired` still
     records nothing, because that path has no `usage` to record — the same limitation `finish_task()`'s
@@ -377,13 +387,13 @@ Per-machine, per-session — re-verify before relying on them.
   `created_at` is UTC/space-separated (SQLite-written); `finished_at` is local/`T`-separated
   (Python `isoformat()`). This distinction is load-bearing — see F17, F19, F44.
 - **Three ignore sources feed the fs-guard** (F47). `.gitignore` is tracked and protected;
-  `S:\AGI_like\.git\info\exclude` (md5 `83316bf39d231e3d954929e9f606a762`, contains
-  `.claude/worktrees/`) and `C:\Users\moham\.config\git\ignore` (contains
-  `**/.claude/settings.local.json`) are **unversioned** — `core.excludesFile` is unset, yet git
-  honours that XDG path anyway.
-- **Untracked non-ignored set is 2 entries:** `.claude/HANDOFF.md` (hashed) and
-  `.claude/worktrees/jolly-gauss-8e52cb/` (`<nested-repo>`, unenumerable by git). Stable across
-  consecutive calls — no spurious deltas.
+  `S:\AGI_like\.git\info\exclude` (contains `.claude/worktrees/`, now masking nothing — see below)
+  and `C:\Users\moham\.config\git\ignore` (contains `**/.claude/settings.local.json`) are
+  **unversioned** — `core.excludesFile` is unset, yet git honours that XDG path anyway.
+- **Untracked non-ignored set is now 0 entries.** `.claude/HANDOFF.md` is tracked (F52), and
+  `.claude/worktrees/jolly-gauss-8e52cb/` was removed 2026-07-30 (`git worktree remove` + `prune`).
+  `_masked_under_protected()` → `[]`. The `.claude/worktrees/` line in `.git/info/exclude` is now
+  stale (masks an empty directory) but was left in place — see the F52 residual-closed note above.
 - **OneDrive** present and running (`C:\Users\moham\OneDrive`, PID 9004 at time of check). No
   removable drives attached, no mapped network drives.
 - **`EACefSubProcess` holding 1.77 GB RAM** — CLAUDE.md says Epic Online Services was removed

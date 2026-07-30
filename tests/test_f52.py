@@ -52,13 +52,23 @@ snap = br.fs_integrity_snapshot()
 check("...and carried in the tracked-hash set",
       ".claude/HANDOFF.md" in snap["hashes"], True)
 
-print("\n=== 3. the nested worktree stays collapsed (DECIDED, not an oversight) ===")
+print("\n=== 3. IF a nested worktree exists, it stays collapsed (DECIDED, not an oversight) ===")
+# 2026-07-30: the jolly-gauss-8e52cb worktree that motivated this test was removed
+# (`git worktree remove`) once its F47 snapshot warning had done its job. The property
+# under test was never "a worktree is present" -- it was "IF one is present, it must
+# collapse to one marker entry and never be hashed". Asserting that unconditionally
+# would silently stop testing anything the moment the tree is worktree-free, so this
+# branches on live git state instead of hardcoding either world.
+live_worktrees = [p for p in br._untracked_files() if "worktrees/" in p]
 check("worktree files are NOT hashed",
       any("worktrees" in k for k in snap["hashes"]), False)
 wt = {k: v for k, v in snap["untracked"].items() if "worktrees" in k}
-check("it appears as exactly ONE entry, not enumerated file-by-file", len(wt), 1)
-check("...and that entry is the collapsed marker, not a content hash",
-      list(wt.values()), ["<nested-repo>"])
+if live_worktrees:
+    check("it appears as exactly ONE entry, not enumerated file-by-file", len(wt), 1)
+    check("...and that entry is the collapsed marker, not a content hash",
+          list(wt.values()), ["<nested-repo>"])
+else:
+    check("no nested worktree present -> zero entries in either channel", len(wt), 0)
 
 print("\n=== 4. a tamper is DETECTED (the actual regression) ===")
 if not H.exists():
@@ -90,13 +100,20 @@ else:
         assert H.read_text(encoding="utf-8") == original
         print("         (restored by content, never git checkout — F36)")
 
-print("\n=== 5. the residual F52 creates, stated rather than hidden ===")
-# .git/info/exclude masks .claude/worktrees/, which is now UNDER a protected path, so
-# F47's mask detector fires on every snapshot. That is F47 working, not failing.
+print("\n=== 5. the residual F52 creates, stated rather than hidden (only WHILE a worktree exists) ===")
+# .git/info/exclude masks .claude/worktrees/, which is under a protected path, so F47's
+# mask detector fires on every snapshot -- but only while there is something under that
+# directory for it to mask. 2026-07-30: jolly-gauss-8e52cb was removed via
+# `git worktree remove`, which is the documented resolution, not a regression -- so the
+# residual must now be conditional on live state, same as section 3.
 masked = br._masked_under_protected() if hasattr(br, "_masked_under_protected") else []
-check("F47 reports the worktree as a masked protected path",
-      any("worktrees" in m for m in masked), True)
-print("         (expected: the collapse is DECIDED. `git worktree remove` clears it.)")
+if live_worktrees:
+    check("F47 reports the worktree as a masked protected path",
+          any("worktrees" in m for m in masked), True)
+    print("         (expected: the collapse is DECIDED. `git worktree remove` clears it.)")
+else:
+    check("no worktree present -> nothing masked under .claude", sorted(masked), [])
+    print("         (jolly-gauss-8e52cb removed 2026-07-30; warning silenced as designed.)")
 
 print("\nFAILURES:", fails if fails else "none")
 sys.exit(1 if fails else 0)

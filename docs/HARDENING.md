@@ -1579,7 +1579,19 @@ enumerated.
 always is a warning that stops being read. `git worktree remove .claude/worktrees/jolly-gauss-8e52cb`
 clears it at the source; it is the operator's worktree, so it is offered, not done.
 
-Verified by a new `f52` suite — 10 assertions — including the defect itself: the pre-F52 surface
+**Residual closed — 2026-07-30.** `git worktree remove .claude/worktrees/jolly-gauss-8e52cb` (clean,
+detached at `8f9338b`, no `--force` needed) followed by `git worktree prune`. Re-measured:
+`_masked_under_protected()` → `[]`, `git worktree list` → one entry, `.claude/HANDOFF.md` still in
+`_tracked_hashes()`. `.git/info/exclude`'s stale `.claude/worktrees/` line was left in place
+deliberately — deleting it buys nothing once the masked set is already empty, and an unversioned
+exclude source is exactly the surface F47 exists to watch, so it isn't touched without a measured
+reason. `test_f52.py` §3 and §5 hardcoded the worktree's *presence*, so removing it would have taken
+the suite from 16/16 to 13/16 without any actual regression; both sections now branch on live
+`git`/snapshot state (present → collapsed to one `<nested-repo>` marker, absent → zero entries /
+nothing masked), so the invariant is enforced in either world rather than assuming this one.
+**16/16 suites green** after the rewrite.
+
+Verified by the `f52` suite — 10 assertions — including the defect itself: the pre-F52 surface
 (`PROTECTED_PATHS` minus `.claude`) is shown not to cover the file at all, while the shipped surface
 catches the tamper on two channels. Restoration is by content copy, never `git checkout` (F36).
 **16/16 suites green**, `.git/info/exclude` byte-identical afterwards.
