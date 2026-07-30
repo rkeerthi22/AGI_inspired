@@ -34,8 +34,14 @@ roles:
     # this box at all (KV cache OOM at its 262k default context).
     provider: ollama
     model: gemma4:12b-ctx4k
+    context_tokens: 4096
     # No quota_group: local inference draws on no shared quota pool, so a cloud 429 must
     # never cause this rung to be skipped.
+    # F50: context_tokens is the num_ctx baked into the Modelfile by F38. Declaring it lets
+    # the failover chain skip this rung when a prompt provably cannot fit, instead of
+    # stalling ~1800s at 1.5 tok/s and failing with nothing useful to say. Measured: a
+    # synthesis prompt needs ~9,800-15,100 tok, so it is correctly skipped for those and
+    # still tried for anything that fits.
 
   embeddings:
     # Deferred: FTS5 (Hermes built-in) first. Enable only if recall demands it.
@@ -66,4 +72,10 @@ fallback_chain:
   # fixes BOTH callers without code changes. Proven with no caller options, the way hermes
   # actually calls it: `gemma4:12b` FAILS, `gemma4:12b-ctx4k` loads in 103s at 1.5 tok/s.
   # Rebuild: ollama create gemma4:12b-ctx4k -f config/gemma4-12b-ctx4k.Modelfile
-  - { provider: ollama, model: gemma4:12b-ctx4k }       # last resort, slow (~1.5 tok/s)
+  # F50 (docs/HARDENING.md), 2026-07-30: `context_tokens` declares that 4,096 so the chain
+  # can skip this rung when a prompt provably will not fit. It follows quota_group's opt-in
+  # rule above -- a rung declaring none is never skipped by inference, so a missing value
+  # can only waste a call, never skip a rung that would have worked. Measured: synthesis
+  # prompts need ~9,800-15,100 tok, so this rung had NEVER been able to serve that path at
+  # any brief cap this project has used; it is now skipped there and still tried elsewhere.
+  - { provider: ollama, model: gemma4:12b-ctx4k, context_tokens: 4096 }  # last resort, ~1.5 tok/s

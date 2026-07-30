@@ -1429,7 +1429,7 @@ suite exists to catch: the fixture filled briefs with `"x"` and asserted the bod
 characters, which failed at 6,001 — the marker prose contains "e**x**ists". The assertion was wrong,
 not the code.
 
-### F50 — The last fallback rung cannot fit a synthesis prompt, and never could · **P2 · PROVEN, FOUND 2026-07-30, NOT FIXED**
+### F50 — The last fallback rung cannot fit a synthesis prompt, and never could · **P2 · PROVEN, found + fixed 2026-07-30**
 `synthesis_with_failover()` calls `_failover_candidates(worker_cfg)` with the default
 `allow_local=True`, so `gemma4:12b-ctx4k` is in the synthesis chain. Its context is **4,096 tokens**.
 Measured at the **old** 6,000 cap, a synthesis prompt already needed **8,226 tokens** (content) to
@@ -1445,11 +1445,38 @@ Consequence when cloud quota is exhausted and synthesis falls through to it: a p
 on a rung measured at **1.5 tok/s**, against `LOCAL_FALLBACK_TIMEOUT_S`. The cost is a long stall
 ending in a failure that says nothing useful, not a degraded-but-real answer.
 
-Not fixed because the right fix is a judgement call the measurement does not settle: `allow_local=False`
-on the synthesis path (mirroring exactly what F40 did for canaries, one line) is the obvious candidate
-and would make synthesis *park* instead of stalling — but parking is only better than failing if the
-operator agrees that a tool-free synthesis is worth deferring rather than attempting degraded. F40 had
-a sharper argument available (the canary green count auto-deletes skills), which does not apply here.
+**Fixed by testing the cause, not a proxy for it.** `allow_local=False` — F40's tool, one line, and
+the obvious candidate — was **rejected**: locality is not why this rung fails. It would wrongly skip a
+future local model with a large context, and wrongly *keep* a small-context cloud one. The rung fails
+because the prompt does not fit, so that is what `_fits_context(cfg, prompt)` now tests, in both
+`synthesis_with_failover()` and `worker_with_failover()`.
+
+**Opt-in, following F39's rule exactly.** A rung declares `context_tokens` in `config/models.yaml` or
+it is never skipped by inference — so a missing declaration can only cost a wasted call, never skip a
+rung that would have worked. This also keeps the model fact in config: swapping a model stays a config
+edit, never a code edit (CLAUDE.md's model-agnostic constraint). `gemma4:12b-ctx4k` now declares the
+4,096 that F38 baked into its Modelfile; both cloud rungs deliberately declare nothing.
+
+The budget reserves `RESPONSE_RESERVE_TOKENS = 1500`, because a rung that can swallow the prompt with
+no room to answer is no more useful than one that cannot swallow it. The estimate is `len/4`, which is
+crude on purpose — it decides only fits/doesn't-fit with a wide margin, and never touches accounting,
+which comes from the provider's own counts (F33).
+
+The failure is now legible where it was silent. Instead of a 1800s stall, the log says:
+
+```
+skipping ollama/gemma4:12b-ctx4k (1/1) — prompt needs ~11285 tok
+(incl. 1500 reserved for the reply) but gemma4:12b-ctx4k declares only 4096
+```
+
+Verified by a new `f50` suite — 21 assertions, no model ever called (`ollama_chat`/`hermes_worker`
+stubbed) — using the **measured** sizes of real W31 prompts (39,141 chars content / 60,420 shopify).
+It pins the wrong fix out as well as the right one in: a large-context *local* rung is accepted, and
+the 4k rung still *runs* a small prompt, so nothing is banned wholesale. Reserve boundaries pinned
+either side; config asserted to declare 4096 on the gemma rung and `None` on both cloud rungs.
+**Validated against the defect:** removing just the guard from both loops makes the suite fail with
+`AssertionError: should not have been called: gemma4:12b-ctx4k` — the stall itself, reproduced.
+14/14 suites green, `policy.validate_paths()` still consistent.
 
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three

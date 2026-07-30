@@ -219,6 +219,47 @@ def _quota_group(cfg: dict) -> str | None:
     return cfg.get("quota_group")
 
 
+CHARS_PER_TOKEN = 4          # rough English ratio -- only ever used for a fits/doesn't-fit
+                             # decision with a large margin, never for accounting (that is
+                             # measured from the provider's own counts; see F33)
+RESPONSE_RESERVE_TOKENS = 1500   # a deliverable still has to fit in the reply
+
+
+def _fits_context(cfg: dict, prompt: str) -> bool:
+    """Can this rung physically accept `prompt` AND have room left to answer?
+
+    F50 (docs/HARDENING.md), 2026-07-30. `synthesis_with_failover()` walked the whole
+    chain including `gemma4:12b-ctx4k`, whose context is 4,096 tokens, while a synthesis
+    prompt measured 8,226 (content) to 11,662 (shopify) tokens even at the OLD 6,000-char
+    brief cap -- two to three times what that rung can accept. It had therefore never once
+    been able to serve this path. F38 made the rung LOADABLE by capping num_ctx; loadable
+    is not usable, and nothing checked the difference. The visible cost was a stall at
+    1.5 tok/s against LOCAL_FALLBACK_TIMEOUT_S ending in a failure that explains nothing.
+
+    Deliberately keyed on DECLARED CONTEXT, not on locality. `allow_local=False` (F40's
+    tool, one line, and the obvious candidate) encodes the wrong cause: it would wrongly
+    skip a future local model with a large context, and would wrongly KEEP a small-context
+    cloud one. The reason this rung fails is that the prompt does not fit, so that is what
+    is tested.
+
+    Opt-in exactly like F39's `quota_group`: a model that does not DECLARE
+    `context_tokens` is never skipped by inference. A missing declaration can only cost a
+    wasted call; it can never silently skip a rung that would have worked. Keeping the
+    number in `config/models.yaml` also holds the line that swapping a model is a config
+    edit, never a code edit."""
+    declared = cfg.get("context_tokens")
+    if not declared:
+        return True                       # undeclared: make no claim, never skip
+    need = len(prompt) // CHARS_PER_TOKEN + RESPONSE_RESERVE_TOKENS
+    return need <= int(declared)
+
+
+def _context_skip_note(cfg: dict, prompt: str) -> str:
+    need = len(prompt) // CHARS_PER_TOKEN + RESPONSE_RESERVE_TOKENS
+    return (f"prompt needs ~{need} tok (incl. {RESPONSE_RESERVE_TOKENS} reserved for the "
+            f"reply) but {cfg['model']} declares only {cfg.get('context_tokens')}")
+
+
 def _failover_candidates(worker_cfg: dict, allow_local: bool = True) -> list[dict]:
     """worker_cfg first, then fallback_chain entries not already equal to it, deduped
     by (provider, model) so a chain that happens to list the worker's own model again
@@ -267,6 +308,10 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
             log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
                 f"({i+1}/{len(candidates)}) — quota group '{grp}' already exhausted")
             continue
+        if not _fits_context(cfg, prompt):          # F50
+            log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
+                f"({i+1}/{len(candidates)}) — {_context_skip_note(cfg, prompt)}")
+            continue
         attempt_path = usage_path if i == 0 else usage_path.with_name(
             f"{usage_path.stem}_fallback{i}{usage_path.suffix}")
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else WORKER_TIMEOUT_S
@@ -304,6 +349,10 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
         if grp and grp in dead_groups:
             log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
                 f"({i+1}/{len(candidates)}) — quota group '{grp}' already exhausted")
+            continue
+        if not _fits_context(cfg, prompt):          # F50
+            log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
+                f"({i+1}/{len(candidates)}) — {_context_skip_note(cfg, prompt)}")
             continue
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else 600
         cfg_used = cfg
