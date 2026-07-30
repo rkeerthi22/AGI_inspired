@@ -438,7 +438,12 @@ PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
                    # worker would make its own output invisible to this very guard, since
                    # detection is `git status`, which honours ignore rules. IDENTITY.md was
                    # simply missed.
-                   ".gitignore", "IDENTITY.md"]
+                   ".gitignore", "IDENTITY.md",
+                   # 2026-07-30: the regression suites moved from session temp scratchpads
+                   # into tests/. They are the only thing standing between F34-F47 and a
+                   # silent regression, so a worker must not be able to weaken the tests that
+                   # check the worker -- the same argument F42 made for .gitignore.
+                   "tests"]
 
 # F42: PROTECTED_PATHS covers files that EXIST. A brand-new file at the repo root matched
 # nothing in it and was therefore invisible -- found 2026-07-30 when a 699-line
