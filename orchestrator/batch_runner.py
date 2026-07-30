@@ -1127,15 +1127,54 @@ def retract_facts(task_id: int) -> int:
         return cur.rowcount
 
 
-def _recent_fact_lines(days: int = 14, cap: int = 120) -> str:
-    """Fact-ledger view fed to synthesis tasks: current + prior week."""
+FACT_LEDGER_CAP = 300     # rows of fact ledger supplied to a synthesis; see _recent_fact_lines
+
+
+def _recent_fact_lines(days: int = 14, cap: int = FACT_LEDGER_CAP, db=None) -> str:
+    """Fact-ledger view fed to synthesis tasks: current + prior week.
+
+    F51 (docs/HARDENING.md), 2026-07-30 — F49's silent-truncation family, third member
+    (F49 the briefs, F50 the model context, this the facts). Three defects in one line:
+
+    1. **Silent.** `rows[:cap]` dropped the overflow with no marker, so the synthesis could
+       not tell a complete fact ledger from a clipped one — exactly what made F49 damaging
+       rather than merely lossy. Now stated, in the same words, for the same reason.
+    2. **About to bite, not hypothetical.** Measured 2026-07-30: **108 facts in the 14-day
+       window against a cap of 120** — twelve rows of headroom, when week W30 alone produced
+       **70 facts**. One ordinary week would have crossed it. Cap raised 120 → 300, which
+       covers a fortnight at more than double the busiest observed rate; worst case
+       ~50,700 chars (~12,675 tok) at the measured 169-char mean line.
+    3. **Dropping the wrong rows.** The old ordering was `ORDER BY entity, id`, so the
+       overflow was the alphabetical TAIL — deterministically the same entities every time
+       (today: `ai-productivity`, `dark-academia`, `modern-stoicism`, i.e. the whole
+       onboarding niche-selection set), regardless of age or relevance. Now the newest `cap`
+       rows are SELECTED, then presented grouped by entity: truncation drops the oldest,
+       which is defensible, while the reading order stays grouped, which is readable.
+
+    `db` is injectable and resolved at call time so tests can point it at a copy — F12's
+    lesson, which cost a junk row in the live ledger the first time it was ignored."""
     import sqlite3
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
+    path = db if db is not None else ROOT / "memory" / "ledgerbook.db"
+    since = f"-{days} days"
+    with sqlite3.connect(path, timeout=30) as c:
+        total = c.execute("SELECT count(*) FROM facts WHERE created_at >= datetime('now', ?)",
+                          (since,)).fetchone()[0]
         rows = c.execute(
-            "SELECT entity, statement, provenance_date, confidence FROM facts "
-            "WHERE created_at >= datetime('now', ?) ORDER BY entity, id",
-            (f"-{days} days",)).fetchall()
-    return "\n".join(f"- [{r[2]} conf{r[3]}] {r[0]}: {r[1]}" for r in rows[:cap]) or "(none yet)"
+            "SELECT entity, statement, provenance_date, confidence FROM ("
+            "  SELECT entity, statement, provenance_date, confidence, id FROM facts "
+            "  WHERE created_at >= datetime('now', ?) ORDER BY id DESC LIMIT ?"
+            ") ORDER BY entity, id",
+            (since, cap)).fetchall()
+    if not rows:
+        return "(none yet)"
+    lines = [f"- [{r[2]} conf{r[3]}] {r[0]}: {r[1]}" for r in rows]
+    if total > len(rows):
+        lines.append(
+            f"\n[TRUNCATED BY THE HARNESS: {total - len(rows)} of {total} facts in the "
+            f"{days}-day window were NOT supplied to you; the {len(rows)} most RECENT were "
+            f"kept. The rest exist in the fact ledger — they are withheld by a size cap, "
+            f"not absent. Anything they contain is NOT a data gap.]")
+    return "\n".join(lines)
 
 
 def seed_is_synthesis(spec: str) -> bool:

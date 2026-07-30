@@ -1478,6 +1478,57 @@ either side; config asserted to declare 4096 on the gemma rung and `None` on bot
 `AssertionError: should not have been called: gemma4:12b-ctx4k` — the stall itself, reproduced.
 14/14 suites green, `policy.validate_paths()` still consistent.
 
+### F51 — The fact ledger truncated silently, and dropped the alphabetical tail · **P1 · PROVEN, found + fixed 2026-07-30**
+`_recent_fact_lines(days=14, cap=120)` ended `return "\n".join(...) for r in rows[:cap]`. Third
+member of F49's family — **F49 withheld the briefs, F50 withheld the model's context, F51 withheld
+the facts** — and the one that was closest to firing. Three defects in one line:
+
+**1. Silent.** `rows[:cap]` dropped the overflow with no marker, so a synthesis could not tell a
+complete fact ledger from a clipped one. That is precisely what made F49 damaging rather than merely
+lossy, and the fix is the same marker in the same words, for the same reason: an omission the model
+cannot see becomes an absence it reports.
+
+**2. Twelve rows from biting.** Measured 2026-07-30:
+
+| | measured |
+|---|---|
+| facts inside the 14-day window | **108** |
+| cap | **120** |
+| headroom | **12 rows** |
+| facts produced by week W30 alone | **70** |
+| mean line length | 169 chars (median 147, max 694) |
+
+One ordinary week would have crossed it. Raised 120 → 300, which covers a fortnight at more than
+double the busiest observed rate; worst case ~50,700 chars (~12,675 tok).
+
+**3. Dropping the wrong rows, deterministically.** The ordering was `ORDER BY entity, id`, so the
+overflow was always the alphabetical **tail** — the same entities every time, chosen by name rather
+than by age or relevance. On today's data that tail is `ai-productivity`, `dark-academia`,
+`modern-stoicism`: the entire onboarding niche-selection set, which is exactly the material a
+cross-channel synthesis would want. A cap that silently discards a fixed slice of the alphabet is
+worse than a random one, because the loss is systematic and invisible at once.
+
+Fixed by **selecting** the newest `cap` rows and then **presenting** them grouped by entity — a
+subquery ordered `id DESC LIMIT ?` inside an outer `ORDER BY entity, id`. Truncation now drops the
+oldest, which is defensible; reading order stays grouped, which is why `entity` was there in the
+first place. Neither property had to be traded for the other.
+
+`db` is now injectable and resolved at call time, so the suite runs against a synthetic ledgerbook
+and never opens the live one — **F12's lesson**, which cost a junk row in the real ledger the first
+time it was ignored.
+
+Behaviour today is byte-identical: 108 < 300, so nothing truncates and the final ordering is
+unchanged. This is protection for the next fortnight, not a change to the current prompt.
+
+Verified by a new `f51` suite — 20 assertions, entirely on synthetic ledgerbooks in a temp dir.
+**Validated against the defect with a case where the two orderings genuinely disagree**, which the
+obvious fixture would have hidden: five OLD facts named `aaa*` and five NEW ones named `zzz*`, cap 5.
+The fix keeps `zzz0..zzz4` (the newest); the pre-fix expression keeps `aaa0..aaa4` (the oldest) — the
+bug, reproduced exactly. Also pinned: marker counts (`100 of 400 facts`), that the marker says the
+recent rows were kept, that presentation remains entity-ordered, empty-ledger degradation, and that
+the shipped cap exceeds the live window and cannot regress below the old 120.
+14/14 → **15/15 suites green**, compile clean.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
