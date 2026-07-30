@@ -16,6 +16,7 @@ Stdlib + PyYAML only."""
 import argparse
 import hashlib
 import json
+import os
 import re
 import shutil
 import subprocess
@@ -486,24 +487,99 @@ def _untracked_files() -> dict:
     all excluded by git itself) and git does not recurse into the nested worktree under
     `.claude/worktrees/`; the live set is 1 file, measured."""
     pol = policy.load()
-    out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain",
-                          "--untracked-files=all"],
+    # F47: `ls-files --others --exclude-per-directory=.gitignore` rather than
+    # `status --porcelain -uall --exclude-standard`. Two changes, both deliberate:
+    #   * ls-files --others names files individually, so no directory collapse to undo.
+    #   * --exclude-per-directory honours ONLY the version-controlled .gitignore files.
+    #     --exclude-standard additionally honours .git/info/exclude and the global ignore,
+    #     neither of which is in the audit trail, so under it an untracked file could be
+    #     hidden from this guard by one appended line leaving no trace in git history
+    #     (measured: planted a root file, guard saw it, appended one line, guard went blind).
+    # A nested repository still reports as one collapsed entry (git will not enumerate
+    # another repo's files); those are marked below rather than silently dropped.
+    out = subprocess.run(["git", "-C", str(ROOT), "ls-files", "--others",
+                          "--exclude-per-directory=.gitignore"],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
     hashes = {}
     for ln in out.stdout.splitlines():
-        if not ln.startswith("?? "):
-            continue
-        rel = ln[3:].strip().strip('"')
+        rel = ln.strip().strip('"')
         if not rel:
             continue
         p = ROOT / rel
         if policy.is_path_writable(p, pol):
+            continue
+        if rel.endswith("/"):
+            # A nested repository/worktree. git cannot enumerate inside it, so its
+            # appearance and disappearance are detectable but its contents are not.
+            hashes[rel] = "<nested-repo>"
             continue
         try:
             hashes[rel] = hashlib.sha256(p.read_bytes()).hexdigest()
         except Exception:
             hashes[rel] = "<unreadable>"
     return hashes
+
+
+def _local_exclude_sources() -> list[Path]:
+    """F47: the ignore sources git honours that are NOT in the repository.
+
+    `git status`/`ls-files` apply three ignore sources. Only `.gitignore` is version-
+    controlled (and protected — F42 put it in PROTECTED_PATHS precisely because rewriting it
+    masks the worker's own output). The other two are invisible to the audit trail:
+
+      * `.git/info/exclude` — repo-local, never committed, outside PROTECTED_PATHS.
+      * the global file — `core.excludesFile` if set, else git's XDG default
+        `~/.config/git/ignore`, which git honours **even when the config key is unset**.
+        Measured 2026-07-30: unset here, yet the XDG file exists and carries
+        `**/.claude/settings.local.json`, i.e. an active rule hiding a Claude Code settings
+        file — hooks and permissions — from this guard.
+    """
+    out = [ROOT / ".git" / "info" / "exclude"]
+    cfg = subprocess.run(["git", "-C", str(ROOT), "config", "--get", "core.excludesFile"],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if cfg.stdout.strip():
+        out.append(Path(os.path.expanduser(cfg.stdout.strip())))
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config")
+        out.append(Path(xdg) / "git" / "ignore")
+    return out
+
+
+def _local_exclude_state() -> dict:
+    """F47: exact BYTES of each unversioned exclude source, keyed by absolute path.
+
+    Bytes rather than hashes because the remediation is to put them back: these files are
+    small (hundreds of bytes), and a hash tells you something changed without letting you
+    undo it. A missing file is recorded as None so that CREATING one is a change too — the
+    cheapest way to blind the guard is to write a `.git/info/exclude` that did not exist."""
+    state = {}
+    for p in _local_exclude_sources():
+        try:
+            state[str(p)] = p.read_bytes()
+        except FileNotFoundError:
+            state[str(p)] = None
+        except Exception:
+            state[str(p)] = b"<unreadable>"
+    return state
+
+
+def _masked_under_protected() -> set:
+    """F47: paths under PROTECTED_PATHS that an UNVERSIONED exclude source is hiding.
+
+    The direct answer to "a protected path must not be maskable by a local exclusion": ask
+    git the same question twice, once honouring every ignore source and once honouring only
+    the version-controlled `.gitignore` files, and diff. Anything present in the second and
+    absent from the first is being hidden by `.git/info/exclude` or the global file.
+
+    This catches a mask that was planted BEFORE the snapshot, which the byte-comparison in
+    `_local_exclude_state()` cannot see — that one only catches a change across a worker
+    call. Together they cover both the pre-planted and the freshly-written case."""
+    def others(mode: str) -> set:
+        r = subprocess.run(["git", "-C", str(ROOT), "ls-files", "--others", mode,
+                            "--", *PROTECTED_PATHS],
+                           capture_output=True, text=True, encoding="utf-8", errors="replace")
+        return {ln.strip() for ln in r.stdout.splitlines() if ln.strip()}
+    return others("--exclude-per-directory=.gitignore") - others("--exclude-standard")
 
 
 def _untracked_of(snap: dict) -> dict:
@@ -546,8 +622,16 @@ def fs_integrity_snapshot() -> dict:
     are what make it safe to scope the revert below to exactly the files that changed."""
     out = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", *PROTECTED_PATHS],
                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    masked = _masked_under_protected()          # F47
+    if masked:
+        # Pre-existing, so not attributable to this call -- but it means a protected path is
+        # already hidden from the guard by an unversioned rule, which is worth saying out loud
+        # every time rather than only when it changes.
+        log(f"WARNING: {len(masked)} path(s) under PROTECTED_PATHS are masked by an "
+            f"unversioned exclude source: {sorted(masked)[:5]}")
     return {"porcelain": set(out.stdout.splitlines()), "hashes": _tracked_hashes(),
-            "untracked": _untracked_files()}   # F42, widened by F46 (key was "root")
+            "untracked": _untracked_files(),   # F42, widened by F46 (key was "root")
+            "excludes": _local_exclude_state(), "masked": masked}      # F47
 
 
 def fs_integrity_check(before: dict, context: str) -> None:
@@ -590,8 +674,20 @@ def fs_integrity_check(before: dict, context: str) -> None:
     new_root = set(u_after) - set(u_before)
     tampered = {p for p in set(u_after) & set(u_before) if u_after[p] != u_before[p]}
     new_untracked = sorted(set(new_untracked) | new_root | tampered)
-    if not changed and not new_untracked:
+
+    # F47: the ignore machinery itself. Rewriting an unversioned exclude source is a way to
+    # make everything above stop reporting, so it is checked separately from what it hides.
+    ex_before = before.get("excludes", {})
+    ex_after = after.get("excludes", {})
+    ex_changed = sorted(p for p in set(ex_before) | set(ex_after)
+                        if ex_before.get(p) != ex_after.get(p))
+    new_masked = sorted(after.get("masked", set()) - before.get("masked", set()))
+    if not changed and not new_untracked and not ex_changed and not new_masked:
         return
+    if ex_changed:
+        log(f"EXCLUDE-SOURCE TAMPERING during {context}: {ex_changed}")
+    if new_masked:
+        log(f"PROTECTED PATH NEWLY MASKED during {context}: {new_masked}")
     log(f"FILESYSTEM INTEGRITY VIOLATION during {context}: "
         f"{len(changed)} tracked modified {changed[:5]}, "
         f"{len(new_untracked)} untracked new/tampered {new_untracked[:5]}")
@@ -627,9 +723,51 @@ def fs_integrity_check(before: dict, context: str) -> None:
             log(f"  could not remove untracked tampered file {rel}: {e}")
     log(f"reverted {len(changed)} tracked file(s) via git checkout; removed "
         f"{len(removed)} untracked file(s): {removed}")
+
+    # F47: restore a tampered exclude source from the bytes in the snapshot. `git checkout`
+    # is useless here -- these files are not tracked, which is the whole problem -- so the
+    # pre-call bytes ARE the only source of truth, which is why the snapshot keeps them.
+    # Scoped to files inside the repo on purpose: the global ignore is the operator's personal
+    # config, and silently rewriting a file outside the project is beyond what a containment
+    # guard should do on its own. Out-of-repo tampering is reported and left alone.
+    restored, reported = [], []
+    for p in ex_changed:
+        path = Path(p)
+        try:
+            # str-prefix on resolved paths: `ROOT in path.parents` is exact-match only and
+            # fails on case or separator differences, which on Windows is a coin flip.
+            inside = str(path.resolve()).lower().startswith(str(ROOT.resolve()).lower())
+        except Exception:
+            inside = False
+        if not inside:
+            reported.append(p)
+            continue
+        try:
+            prior = ex_before.get(p)
+            if path.is_file():
+                # `changed`/`new_untracked` may both be empty when only an exclude source was
+                # touched, in which case the preserve loop above never created the stash.
+                stash.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(path, stash / f"EXCLUDE_{path.name}")
+            if prior is None:
+                path.unlink(missing_ok=True)   # it did not exist before the call
+            elif isinstance(prior, bytes) and prior != b"<unreadable>":
+                path.write_bytes(prior)
+            restored.append(p)
+        except Exception as e:
+            log(f"  could not restore exclude source {p}: {e}")
+            reported.append(p)
+    if restored:
+        log(f"  restored {len(restored)} unversioned exclude source(s) from snapshot bytes: "
+            f"{restored}")
+    if reported:
+        log(f"  exclude source(s) changed OUTSIDE the repo -- reported, NOT modified: {reported}")
+
     escalate(f"worker modified protected harness files during {context} -- auto-reverted "
             f"via git (originals preserved in {stash.name}). F14 containment fired: "
-            f"{(changed + new_untracked)[:5]}")
+            f"{(changed + new_untracked)[:5]}"
+            + (f" | exclude-source tampering: {ex_changed}" if ex_changed else "")
+            + (f" | protected paths newly masked: {new_masked}" if new_masked else ""))
 
 
 def _strip_tool_chatter(text: str) -> str:

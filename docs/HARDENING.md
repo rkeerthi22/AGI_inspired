@@ -1192,8 +1192,70 @@ That second ignore source deserves its own line, because the containment surface
 `git status` honours `.git/info/exclude`, which is **not version-controlled, not visible in any diff,
 and outside `PROTECTED_PATHS`** — so appending a path to it removes that path from the guard's view
 permanently, leaving no trace in git history. Everything the fs-guard can see is defined partly by a
-file the audit trail does not cover. Not fixed here; recorded as the next thing to look at, since it
-undercuts every "the guard would catch it" claim in this document by exactly one file.
+file the audit trail does not cover. **Fixed as F47 below**, on operator instruction, immediately
+after: it undercut every "the guard would catch it" claim in this document by exactly one file.
+
+### F47 — The guard's field of view was defined partly by files outside version control · **P1 · PROVEN, found + fixed 2026-07-30**
+Detection is `git status`/`git ls-files`, and those honour **three** ignore sources. Only one is in
+the repository:
+
+| source | in repo? | in the audit trail? | protected? |
+|---|---|---|---|
+| `.gitignore` (per directory) | yes | yes | yes — F42 added it to `PROTECTED_PATHS` for exactly this reason |
+| `.git/info/exclude` | yes, but never committed | **no** | **no** |
+| global — `core.excludesFile`, else git's XDG default `~/.config/git/ignore` | **no** | **no** | **no** |
+
+F42 saw half of this: its `PROTECTED_PATHS` comment says rewriting `.gitignore` is how a worker would
+make its own output invisible to the guard. The same argument applies to the other two sources and
+they were left out, which is worse rather than equivalent — `.gitignore` at least produces a tracked
+diff when edited.
+
+Proven, not argued: plant a file under `orchestrator/`, confirm the guard sees it, append one line to
+`.git/info/exclude`, and the guard goes blind. No commit, no diff, no trace. The global source is not
+hypothetical either — `core.excludesFile` is unset here, yet git still honours the XDG default, and
+that file exists and contains `**/.claude/settings.local.json`. A Claude Code settings file — hooks
+and permissions, read by the *supervising* agent — was already masked from the guard by a rule living
+outside the project entirely.
+
+**Fixed on three axes, because one alone is escapable.**
+
+1. **Enumeration no longer honours untrusted sources.** `_untracked_files()` moved from
+   `git status --porcelain -uall` (which implies `--exclude-standard`, i.e. all three sources) to
+   `git ls-files --others --exclude-per-directory=.gitignore`, which honours only the
+   version-controlled files. A local exclusion can no longer hide an untracked file from the scan at
+   all. Bonus: `ls-files --others` names files individually, so there is no directory collapse of the
+   F46 kind left to undo.
+2. **The sources themselves are watched.** The snapshot carries the exact **bytes** of each
+   unversioned source (`_local_exclude_state()`), so an edit across a worker call is detected and the
+   pre-call bytes are written back. Bytes rather than hashes deliberately: a hash proves something
+   changed without letting you undo it, and `git checkout` is useless on a file git never tracked, so
+   the snapshot is the only source of truth. A source that did not exist is recorded as `None`, which
+   makes *creating* one a change too — the cheapest blinding move is to write a
+   `.git/info/exclude` that was not there.
+3. **Masking of a protected path is named directly.** `_masked_under_protected()` asks git the same
+   question twice — once with `--exclude-standard`, once honouring only `.gitignore` — and diffs. The
+   difference is precisely the set of paths under `PROTECTED_PATHS` that an unversioned rule is
+   hiding. This catches a mask planted *before* the snapshot, which the byte comparison cannot see;
+   together they cover the pre-planted and the freshly-written case. A non-empty result logs a
+   WARNING on every snapshot, not only when it changes.
+
+**One deliberate limit.** Remediation rewrites only sources **inside** the repo. The global ignore is
+the operator's personal configuration, and silently editing a file outside the project is more than a
+containment guard should do unasked; out-of-repo tampering is detected, escalated, and left alone.
+Verified that remediation leaves it byte-identical.
+
+**Residual, stated plainly.** A nested repository still reports as one collapsed entry, because git
+will not enumerate another repo's files — `.claude/worktrees/jolly-gauss-8e52cb/` is recorded as
+`<nested-repo>`, so its appearance and disappearance are detected but changes inside it are not. It is
+a separate checkout that the running harness does not execute from, which is why this is recorded
+rather than fixed.
+
+Verified by a new `f47` suite — 15 assertions, all green: baseline unmasked and the scan stable across
+calls (no spurious deltas); the demonstrated attack detected on all three axes; the exclude restored
+byte-identical and the plant removed; a created source removed; the global source classified as
+outside and left untouched; masking `.claude/` failing to hide `HANDOFF.md`; and a clean call still a
+no-op. Full set **11/11 green** (`f35 f36 f37 f39_f40 f42 f44 f47 h7 h7_gate baseline throughput`),
+compile clean, zero `runs/quarantine_*.json`, `.git/info/exclude` byte-identical afterwards.
 
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
