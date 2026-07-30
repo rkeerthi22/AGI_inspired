@@ -1195,7 +1195,23 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     return m.group(1).lower(), verdict_text
 
 
-SYNTHESIS_BRIEF_CHARS = 6000     # per-brief prompt budget
+# F49, second half (2026-07-30): raised 6000 -> 24000 after measuring, not guessing.
+# At 6000, **11 of the 13 briefs on disk overflowed** -- truncation was the normal case,
+# not an edge case, and the largest brief (15,968 chars) lost 9,968 of them. 24000 clears
+# every observed brief with ~50% headroom.
+#
+# Measured cost, against a 20,000,000-token daily cap: a shopify synthesis prompt grows
+# ~25,200 -> ~39,000 chars (~+3,400 tok) and a content one ~11,500 -> ~17,700 (~+1,500).
+# That is the previously-withheld research finally reaching the model, which is the point.
+# Worst case at these caps (6 briefs x 24,000 + the fact block) is ~41k tokens, inside every
+# cloud rung's context.
+#
+# NOT a constraint, though it looks like one: the last fallback rung `gemma4:12b-ctx4k` has
+# a 4,096-token context and therefore could never run a synthesis -- measured at the OLD cap
+# it already needed 8,226 (content) to 11,662 (shopify) tokens. Raising the cap does not
+# break that rung; it has been decorative for this path all along. See the note in
+# docs/HARDENING.md F49.
+SYNTHESIS_BRIEF_CHARS = 24000    # per-brief prompt budget
 SYNTHESIS_MAX_BRIEFS = 6         # how many of this week's briefs are supplied
 
 

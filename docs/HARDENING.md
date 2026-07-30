@@ -1371,23 +1371,85 @@ that gives the marker meaning: *truncation is not a data gap; report it as suppl
 truncated, naming the brief and the omitted amount, and do not tell the operator to research it —
 they already have it.* A marker the model cannot interpret would still have been read as absence.
 
-**What this does and does not buy.** It does not recover the omitted text: a synthesis built from a
-cut brief is still built from a cut brief. What changes is that the loss becomes *reportable* —
-the deliverable can now say which part of its task it could not cover and why, instead of quietly
+**What the marker does and does not buy.** It does not recover the omitted text: a synthesis built
+from a cut brief is still built from a cut brief. What changes is that the loss becomes *reportable*
+— the deliverable can say which part of its task it could not cover and why, instead of quietly
 converting a harness limit into an instruction for the operator to redo work the harness already
-holds. Raising the cap remains the separate, unblocked decision.
+holds. That is the honest floor, and it holds at any cap.
 
-Verified by a new `f49` suite — 22 assertions — including on **the actual file that caused the bug**:
-`build_brief_block()` on task 29's brief now emits `TRUNCATED BY THE HARNESS: 6464 of 12464`, and the
-same section reproduces the pre-fix expression on that same file to confirm it emitted no marker and
-dropped Topic 3 without a trace. Boundary cases pinned in both directions (exactly `cap` is not
-truncated; `cap+1` reports one omitted character). End-to-end on the real `workspace/content` W31
-directory: the marker fires with the true figures. 13/13 suites green, compile clean.
+**The cap was then raised 6,000 → 24,000 (operator's call), after measuring rather than guessing.**
+The measurement is the part that matters, because it reframes the bug:
+
+| | measured 2026-07-30 |
+|---|---|
+| briefs on disk | 13 |
+| **exceeding the old 6,000 cap** | **11 of 13** |
+| largest brief | 15,968 chars (9,968 lost) |
+| median brief | 9,328 chars |
+
+Truncation was **the normal case, not an edge case**. Essentially every synthesis this project has
+ever run was built on cut input; task 30 is simply the one where the cut landed somewhere that made
+the damage legible. 24,000 clears the largest observed brief with ~50% headroom.
+
+Measured cost against the 20,000,000-token daily cap: a shopify synthesis prompt grows ~25,200 →
+~39,000 chars (**~+3,400 tokens**), a content one ~11,500 → ~17,700 (~+1,500). That increase *is* the
+previously-withheld research finally arriving. Worst case at these caps — 6 briefs × 24,000 plus the
+fact block — is ~41k tokens, inside every cloud rung.
+
+**A constraint that looks binding and is not**, worth writing down so it is not re-litigated: the
+last fallback rung `gemma4:12b-ctx4k` has a 4,096-token context, so it cannot run a synthesis at
+24,000 — but it could not at 6,000 either, where the prompt already needed 8,226 (content) to 11,662
+(shopify) tokens. Raising the cap does not break that rung. It has never worked for this path. That
+is recorded separately as F50.
+
+The fact block deserves a mention because the measurement was surprising: at 108 rows it is **18,432
+chars (~4,608 tokens)** — larger than the entire brief block used to be. `_recent_fact_lines`'s
+`cap=120` is the real limiter there, and it is the next one to bite.
+
+Verified by a new `f49` suite — 28 assertions — anchored on **the actual file that caused the bug**,
+and deliberately covering both halves of the fix separately, because they are independent:
+
+- *Marker, at the historical cap:* `build_brief_block(cap=6000)` on task 29's brief emits
+  `TRUNCATED BY THE HARNESS: 6464 of 12464`, with the exact figures.
+- *Validated against the defect:* the same section reproduces the **pre-fix expression** on that same
+  file and confirms it emitted no marker and dropped Topic 3 without a trace.
+- *Cap, at the shipped value:* the same brief is **no longer truncated at all**, and the suite asserts
+  that `Topic Opportunity 3` and the `metaintro.com` evidence task 30 was denied now actually reach
+  the model — the specific failure, closed at the source rather than merely annotated.
+- *Regression guard:* the shipped cap must exceed the largest brief on disk and must not drop below
+  16,000, so a future edit cannot quietly reintroduce routine truncation.
+- Boundaries pinned both ways (exactly `cap` is not truncated; `cap+1` reports one omitted character),
+  and the second silent cap (`max_briefs`) names the dropped files.
+
+End-to-end on the real `workspace/content` W31 directory: the brief block grows 11,472 → **17,709**
+chars with **zero** markers emitted. 13/13 suites green, compile clean.
 
 One test bug found and fixed while writing it, recorded because it is the same class of error the
 suite exists to catch: the fixture filled briefs with `"x"` and asserted the body was exactly 6,000
 characters, which failed at 6,001 — the marker prose contains "e**x**ists". The assertion was wrong,
 not the code.
+
+### F50 — The last fallback rung cannot fit a synthesis prompt, and never could · **P2 · PROVEN, FOUND 2026-07-30, NOT FIXED**
+`synthesis_with_failover()` calls `_failover_candidates(worker_cfg)` with the default
+`allow_local=True`, so `gemma4:12b-ctx4k` is in the synthesis chain. Its context is **4,096 tokens**.
+Measured at the **old** 6,000 cap, a synthesis prompt already needed **8,226 tokens** (content) to
+**11,662** (shopify) — two to three times what that rung can accept. At the new cap it is ~9,800 to
+~15,100.
+
+So the rung has never been able to serve a synthesis, at any cap this project has used. F38 fixed the
+adjacent problem — the model would not *load* because Ollama sized its KV cache from a 262,144-token
+default — and made it loadable at `num_ctx 4096`. Loadable is not usable: the fix that made the rung
+start is not the fix that makes it fit.
+
+Consequence when cloud quota is exhausted and synthesis falls through to it: a prompt that cannot fit,
+on a rung measured at **1.5 tok/s**, against `LOCAL_FALLBACK_TIMEOUT_S`. The cost is a long stall
+ending in a failure that says nothing useful, not a degraded-but-real answer.
+
+Not fixed because the right fix is a judgement call the measurement does not settle: `allow_local=False`
+on the synthesis path (mirroring exactly what F40 did for canaries, one line) is the obvious candidate
+and would make synthesis *park* instead of stalling — but parking is only better than failing if the
+operator agrees that a tool-free synthesis is worth deferring rather than attempting degraded. F40 had
+a sharper argument available (the canary green count auto-deletes skills), which does not apply here.
 
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three

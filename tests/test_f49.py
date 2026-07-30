@@ -85,19 +85,41 @@ if not real.exists():
 else:
     txt = real.read_text(encoding="utf-8")
     topic3 = txt.find("## Topic Opportunity 3")
-    check("Topic 3 really does fall past the cut", topic3 > 6000, True)
-    blk = br.build_brief_block([real])
-    check("the brief that broke task 30 is now marked", "[TRUNCATED BY THE HARNESS:" in blk, True)
+    check("Topic 3 really does fall past the OLD 6000 cut", topic3 > 6000, True)
+    # (a) at the historical cap, the marker fires with the true figures
+    blk_old = br.build_brief_block([real], cap=6000)
+    check("at cap=6000 the brief that broke task 30 is marked",
+          "[TRUNCATED BY THE HARNESS:" in blk_old, True)
     check("marker states the true omitted count",
-          f"{len(txt) - 6000} of {len(txt)}" in blk, True)
-    # validated against the defect: the pre-fix expression on the SAME file
+          f"{len(txt) - 6000} of {len(txt)}" in blk_old, True)
+    # (b) validated against the defect: the pre-fix expression on the SAME file
     old = f"### {real.name}\n{txt[:6000]}"
     check("PRE-FIX expression emits no marker (this was the bug)",
           "TRUNCATED" in old, False)
     check("...and silently drops Topic 3 with no trace",
           "Topic Opportunity 3" in old, False)
+    # (c) at the RAISED default cap the case that caused F49 no longer truncates at all
+    blk_now = br.build_brief_block([real])
+    check("at the shipped cap it is NOT truncated", "TRUNCATED BY THE HARNESS" in blk_now, False)
+    check("...and Topic 3 now actually reaches the model",
+          "Topic Opportunity 3" in blk_now, True)
+    check("...along with the metaintro evidence task 30 was denied",
+          "metaintro.com" in blk_now, True)
 
-print("\n=== 7. the prompt teaches the model what the marker means ===")
+print("\n=== 7. the shipped cap clears every brief on disk ===")
+allb = [p for d in ("content", "shopify", "onboarding")
+        for p in sorted((ROOT / "workspace" / d).glob("*.md"))
+        if (ROOT / "workspace" / d).exists() and "synthesis" not in p.name]
+biggest = max(len(p.read_text(encoding="utf-8")) for p in allb)
+over_old = sum(1 for p in allb if len(p.read_text(encoding="utf-8")) > 6000)
+print(f"  {len(allb)} briefs on disk, largest {biggest} chars, {over_old} exceeded the old 6000")
+check("the old cap really was overflowed by most briefs", over_old > len(allb) // 2, True)
+check("the shipped cap clears the largest of them",
+      biggest < br.SYNTHESIS_BRIEF_CHARS, True)
+check("cap did not silently regress below the largest brief",
+      br.SYNTHESIS_BRIEF_CHARS >= 16000, True)
+
+print("\n=== 8. the prompt teaches the model what the marker means ===")
 # A marker the model cannot interpret would still be read as absence.
 import inspect  # noqa: E402
 src = inspect.getsource(br.run_synthesis)
