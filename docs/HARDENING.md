@@ -1309,6 +1309,62 @@ asserts the helper reproduces `run_task()`'s old inline expression term-for-term
 untouched by the refactor. Full set **12/12 green**, compile clean, real ledger never opened (every
 assertion runs against a `shutil.copy2()` copy with escalate/rollback/integrity guards stubbed).
 
+### F49 — Synthesis silently receives a truncated brief and reports the missing part as a data gap · **P1 · PROVEN, FOUND 2026-07-30, NOT FIXED**
+`run_synthesis()` builds its input with
+
+```python
+f"### {p.name}\n{p.read_text(encoding='utf-8')[:6000]}" for p in briefs[:6]
+```
+
+Two silent caps: **6,000 characters per brief**, and **6 briefs**. Neither leaves a marker, so the
+synthesis model cannot tell a complete document from a bisected one, and the critic — which never
+sees the prompt — cannot tell either.
+
+**Found by spot-checking task 30, which is the spot-check doing exactly the job F3 says only a human
+pass can do.** That deliverable declares its third Channel-2 topic a data gap: *"The supplied
+AI-productivity brief for 2026-W31 contains only two topic opportunities with dated, sourced
+evidence."* Task 29 had in fact delivered three, the third carrying confidence-3 quotes that verify
+verbatim against metaintro.com. The obvious reading is an analyst error. It is not:
+
+| | measured |
+|---|---|
+| task 29 brief length | 12,464 chars |
+| supplied to synthesis | 6,000 |
+| dropped | 6,464 |
+| "## Topic Opportunity 3" begins at char | **6,060** |
+| paradox 80% quote at | 6,304 |
+| metaintro URL at | 6,515 |
+| competitor video 247K view count at | 7,731 |
+
+The cut misses the third topic's heading by **sixty characters**. The analyst's statement is
+therefore *literally true of the material it received*, and reporting a data gap rather than
+inventing a topic is precisely what its own prompt instructs. **Grading that as a content failure
+would repeat F37** — infrastructure scored as the analyst being wrong — so task 30 was spot-checked
+**pass**, and the defect recorded here instead.
+
+**Task 27 is hit harder and nobody noticed.** Its three W31 input briefs are 10,994 / 11,388 / 8,279
+chars, so *all three* were cut, and roughly 18KB of researched material never reached the synthesis
+that exists to consolidate it. It still produced a five-competitor diff table, which is why the loss
+is invisible: the output looks complete.
+
+This is the **F20/F31 family** — a worker judged on material it was never shown — with one property
+that makes it worse than either. F20 and F31 withheld *requirements*, which produced visibly wrong
+deliverables. F49 withholds *evidence*, and the deliverable it produces is well-formed, internally
+consistent, and wrong only in what it omits. The failure mode is an operator being told to go source
+information the harness already has.
+
+Adjacent latent instance, same shape: `_recent_fact_lines(days=14, cap=120)` caps the fact block at
+120 rows across all missions with no marker. 108 facts exist today, so it has not bitten yet; it will
+when it does.
+
+**Deliberately not fixed in the same session it was found.** The options are not equivalent — raise
+the cap, summarise rather than slice, slice at a section boundary, or keep the cap and append an
+explicit `[TRUNCATED: n chars omitted]` marker so the model can report the limit instead of
+misreading it as absence — and the right choice depends on the synthesis model's context budget,
+which is a live constraint under quota. The marker is the cheapest honest floor and should probably
+land regardless of which else is chosen. No fix belongs in a commit that has not measured that
+trade-off.
+
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
 materially different reasons. `budget_skip` means admission control (F24) refused **this** task's
