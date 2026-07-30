@@ -119,12 +119,78 @@ def backup_one(name: str, src: Path, dest_dir: Path) -> Path:
     return dest
 
 
-def prune(dest_dir: Path, name: str, keep: int = KEEP_LAST_N) -> int:
-    files = sorted(dest_dir.glob(f"{name}_*.db"))
+def prune(dest_dir: Path, name: str, keep: int = KEEP_LAST_N, suffix: str = ".db") -> int:
+    files = sorted(dest_dir.glob(f"{name}_*{suffix}"))
     excess = files[:-keep] if len(files) > keep else []
     for f in excess:
         f.unlink()
     return len(excess)
+
+
+def bundle_repo(dest_dir: Path) -> Path | None:
+    """Snapshot the ENTIRE git history into one verifiable file.
+
+    F16 gave the databases a second copy and stopped there. Everything else this project
+    is -- the orchestrator, the F1-F48 hardening registry, both promoted skills, the
+    regression suites -- lives only inside `.git`, on a single physical disk, with
+    `git remote -v` empty. The databases were the backed-up part and the reasoning was not.
+
+    A `git bundle` is the lightweight close: ONE file, no server, no account, no
+    credentials, and `git clone <file> <dir>` restores it directly. It is deliberately not
+    a substitute for a real remote -- it is the artifact that makes a remote a copy
+    operation the operator can do in one step, from anywhere, whenever they choose.
+
+    Verified on creation with `git bundle verify`, because an unreadable bundle is not a
+    backup -- the same rule replicate_offsite() applies to the databases."""
+    dest_dir.mkdir(parents=True, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%d_%H%M%S")
+    dest = dest_dir / f"repo_{ts}.bundle"
+    made = subprocess.run(["git", "-C", str(ROOT), "bundle", "create", str(dest), "--all"],
+                          capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if made.returncode != 0 or not dest.exists():
+        print(f"REPO BUNDLE FAILED: {(made.stderr or made.stdout).strip()[:300]}")
+        return None
+    ver = subprocess.run(["git", "-C", str(ROOT), "bundle", "verify", str(dest)],
+                         capture_output=True, text=True, encoding="utf-8", errors="replace")
+    if ver.returncode != 0:
+        print(f"REPO BUNDLE UNVERIFIABLE, discarding: {(ver.stderr or ver.stdout).strip()[:300]}")
+        dest.unlink(missing_ok=True)
+        return None
+    n = subprocess.run(["git", "-C", str(ROOT), "rev-list", "--count", "--all"],
+                       capture_output=True, text=True, encoding="utf-8", errors="replace")
+    pruned = prune(dest_dir, "repo", KEEP_LAST_N, suffix=".bundle")
+    print(f"repo: {dest.name} ({dest.stat().st_size} bytes, "
+          f"{n.stdout.strip() or '?'} commits) verified=True pruned={pruned} old file(s)")
+    return dest
+
+
+def replicate_bundle_offsite(local: Path, allow_same_disk: bool = False) -> dict:
+    """Same refusal policy as replicate_offsite(), but verified the way a bundle has to be.
+
+    Row counts are meaningless here; `git bundle verify` on the COPY is the equivalent
+    check, and it is the copy that matters -- verifying the original proves nothing about
+    the thing you would actually restore from."""
+    dest_root = offsite_dir()
+    if dest_root is None:
+        return {"status": "unconfigured"}
+    cls, why = classify_destination(dest_root)
+    if cls == "same_disk" and not allow_same_disk:
+        print(f"  OFFSITE REFUSED [repo]: {dest_root} is on the {why}")
+        return {"status": "refused_same_disk", "dest": str(dest_root)}
+    try:
+        dest_root.mkdir(parents=True, exist_ok=True)
+        dest = dest_root / local.name
+        shutil.copy2(local, dest)
+        ver = subprocess.run(["git", "-C", str(ROOT), "bundle", "verify", str(dest)],
+                             capture_output=True, text=True, encoding="utf-8", errors="replace")
+        ok = ver.returncode == 0
+        pruned = prune(dest_root, "repo", KEEP_OFFSITE_N, suffix=".bundle")
+        print(f"  offsite [{cls}]: {dest} verified={ok} pruned={pruned}")
+        return {"status": "ok" if ok else "verify_failed", "dest": str(dest),
+                "class": cls, "verified": ok}
+    except Exception as e:
+        print(f"  OFFSITE FAILED [repo]: {e}")
+        return {"status": "error", "error": str(e)}
 
 
 def replicate_offsite(local: Path, name: str, allow_same_disk: bool = False) -> dict:
@@ -180,6 +246,17 @@ def run_backup(allow_same_disk: bool = False) -> dict:
              f"counts-match={ok} pruned={pruned} old file(s)")
         results[name] = {"dest": str(dest), "counts_match": ok,
                          "offsite": replicate_offsite(dest, name, allow_same_disk)}
+    # The repo is the other half of "the source of truth" (F16 covered only the DBs).
+    # Fails soft: a bundle problem must never cost us the database backups above, which
+    # are already written by the time this runs.
+    try:
+        bundle = bundle_repo(BACKUP_DIR)
+        results["repo"] = ({"dest": str(bundle),
+                            "offsite": replicate_bundle_offsite(bundle, allow_same_disk)}
+                           if bundle else {"status": "bundle_failed"})
+    except Exception as e:                      # nightly job: never crash past this point
+        print(f"REPO BUNDLE ERRORED (databases above are unaffected): {e}")
+        results["repo"] = {"status": "bundle_failed", "error": str(e)}
     return results
 
 
@@ -219,7 +296,15 @@ if __name__ == "__main__":
     ap.add_argument("--allow-same-disk", action="store_true",
                     help="permit an offsite destination on the repo's own physical disk "
                          "(protects against deletion only, NOT disk failure)")
+    ap.add_argument("--bundle", action="store_true",
+                    help="write + verify a git bundle of the whole repo history only "
+                         "(skips the database backups)")
     args = ap.parse_args()
+    if args.bundle:
+        b = bundle_repo(BACKUP_DIR)
+        if b:
+            replicate_bundle_offsite(b, args.allow_same_disk)
+        sys.exit(0 if b else 1)
     if args.check_offsite:
         d = offsite_dir()
         if d is None:
@@ -235,5 +320,6 @@ if __name__ == "__main__":
         sys.exit(0 if ok else 1)
     res = run_backup(allow_same_disk=args.allow_same_disk)
     bad = [n for n, r in res.items()
-           if r.get("offsite", {}).get("status") in ("error", "verify_failed")]
+           if r.get("offsite", {}).get("status") in ("error", "verify_failed")
+           or r.get("status") == "bundle_failed"]
     sys.exit(1 if bad else 0)
