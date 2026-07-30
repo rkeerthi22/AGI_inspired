@@ -1195,13 +1195,63 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     return m.group(1).lower(), verdict_text
 
 
+SYNTHESIS_BRIEF_CHARS = 6000     # per-brief prompt budget
+SYNTHESIS_MAX_BRIEFS = 6         # how many of this week's briefs are supplied
+
+
+def build_brief_block(briefs: list, cap: int = SYNTHESIS_BRIEF_CHARS,
+                      max_briefs: int = SYNTHESIS_MAX_BRIEFS) -> str:
+    """This week's briefs, with every omission STATED instead of silently applied.
+
+    F49 (docs/HARDENING.md), 2026-07-30. This was
+    `p.read_text()[:6000] for p in briefs[:6]` -- two silent caps and no marker, so the
+    synthesis model could not distinguish a complete brief from a bisected one, and the
+    critic (which never sees the prompt) could not either.
+
+    Measured on task 30: task 29's brief is 12,464 chars, 6,464 were dropped, and
+    `## Topic Opportunity 3` begins at char 6,060 -- the cut missed it by SIXTY characters.
+    The synthesis then reported that third topic as a data gap and told the operator to go
+    source material the harness already held. Task 27 was hit harder and invisibly: all
+    three of its briefs were cut and ~18KB never arrived, yet the output looked complete.
+
+    The marker does NOT recover the omitted text -- the deliverable is still built from a
+    partial brief. What it changes is that the loss is now *reportable*: the model is told
+    the material exists and was withheld, so it can say so instead of concluding absence.
+    Raising `cap` remains available and independent of this fix.
+
+    Distinguishing the two cases is the whole point. A data gap means nobody researched it,
+    and the operator must go get it. A truncation means it WAS researched and simply was not
+    shown to the model. Conflating them is what turned F49 into wasted operator work."""
+    if not briefs:
+        return "(none)"
+    shown, dropped = briefs[:max_briefs], briefs[max_briefs:]
+    parts = []
+    for p in shown:
+        txt = p.read_text(encoding="utf-8")
+        if len(txt) > cap:
+            omitted = len(txt) - cap
+            body = (f"{txt[:cap]}\n\n[TRUNCATED BY THE HARNESS: {omitted} of {len(txt)} "
+                    f"characters of this brief were NOT supplied to you. That material was "
+                    f"researched and exists; it is withheld by a prompt-size cap, not absent. "
+                    f"Anything it may contain is NOT a data gap.]")
+        else:
+            body = txt
+        parts.append(f"### {p.name}\n{body}")
+    if dropped:
+        parts.append(
+            "### [BRIEFS OMITTED BY THE HARNESS]\n"
+            f"{len(dropped)} further brief(s) for this week were NOT supplied to you: "
+            f"{', '.join(p.name for p in dropped)}. They were researched and exist; they are "
+            f"withheld by a count cap, not absent. Anything they contain is NOT a data gap.")
+    return "\n\n".join(parts)
+
+
 def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path,
                   wk: str, baseline: bool, baseline_note: str) -> str:
     """Synthesis seeds derive from THIS WEEK'S briefs + the fact ledger — tool-free
     (no browser worker; the material is supplied, inventing new facts is forbidden)."""
     briefs = sorted(p for p in out_dir.glob(f"{wk}_*.md") if "synthesis" not in p.name)
-    brief_block = "\n\n".join(
-        f"### {p.name}\n{p.read_text(encoding='utf-8')[:6000]}" for p in briefs[:6]) or "(none)"
+    brief_block = build_brief_block(briefs)
     facts_block = _recent_fact_lines()
     # F20, extended to synthesis 2026-07-28. This path was deliberately left out of the
     # original fix because there was no failure evidence for it -- there is now: task 27
@@ -1230,6 +1280,18 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         "invent facts or sources that are not in the material. If a requested item is absent "
         "from the material (e.g. a market-pulse addendum that was never researched), state "
         "that plainly as a data gap instead of fabricating it.\n\n"
+        # F49: the marker is useless unless the model is told what it means. The original
+        # failure was not the model reasoning badly -- it was reasoning correctly from
+        # 'absent' when the truth was 'withheld', because nothing distinguished the two.
+        "IMPORTANT — TRUNCATION IS NOT A DATA GAP. A brief may carry a "
+        "'[TRUNCATED BY THE HARNESS: ...]' marker, or a '[BRIEFS OMITTED BY THE HARNESS]' "
+        "section may appear. Those mean the material WAS researched and exists, and was "
+        "withheld from you only by a size or count cap. Report that situation as "
+        "'supplied material truncated', naming the brief and the omitted amount, and say "
+        "which parts of your task it prevented you from covering. Do NOT call it a data "
+        "gap, do NOT conclude the topic does not exist, and do NOT tell the operator to go "
+        "research it — they already have it. A data gap means nobody researched it; a "
+        "truncation means you were not shown it.\n\n"
         f"## THIS WEEK'S BRIEFS\n{brief_block}\n\n## FACT LEDGER\n{facts_block}\n\n"
         "Reply with ONLY the deliverable markdown.")
     if policy.token_budget_breached():

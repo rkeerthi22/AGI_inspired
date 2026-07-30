@@ -1309,7 +1309,7 @@ asserts the helper reproduces `run_task()`'s old inline expression term-for-term
 untouched by the refactor. Full set **12/12 green**, compile clean, real ledger never opened (every
 assertion runs against a `shutil.copy2()` copy with escalate/rollback/integrity guards stubbed).
 
-### F49 — Synthesis silently receives a truncated brief and reports the missing part as a data gap · **P1 · PROVEN, FOUND 2026-07-30, NOT FIXED**
+### F49 — Synthesis silently receives a truncated brief and reports the missing part as a data gap · **P1 · PROVEN, found + fixed 2026-07-30**
 `run_synthesis()` builds its input with
 
 ```python
@@ -1357,13 +1357,37 @@ Adjacent latent instance, same shape: `_recent_fact_lines(days=14, cap=120)` cap
 120 rows across all missions with no marker. 108 facts exist today, so it has not bitten yet; it will
 when it does.
 
-**Deliberately not fixed in the same session it was found.** The options are not equivalent — raise
-the cap, summarise rather than slice, slice at a section boundary, or keep the cap and append an
-explicit `[TRUNCATED: n chars omitted]` marker so the model can report the limit instead of
-misreading it as absence — and the right choice depends on the synthesis model's context budget,
-which is a live constraint under quota. The marker is the cheapest honest floor and should probably
-land regardless of which else is chosen. No fix belongs in a commit that has not measured that
-trade-off.
+**Fixed with the marker** (operator's call, 2026-07-30), the option that is correct regardless of
+which else is later chosen. `build_brief_block()` replaces the inline expression and states every
+omission: a truncated brief carries `[TRUNCATED BY THE HARNESS: n of m characters ... researched and
+exists ... NOT a data gap]`, and briefs dropped by the count cap get their own named section. The
+caps are now `SYNTHESIS_BRIEF_CHARS` / `SYNTHESIS_MAX_BRIEFS` rather than magic numbers, so raising
+them stays a one-line, independent decision.
+
+**The marker alone would not have fixed this, and that is the part worth remembering.** The original
+failure was not the model reasoning badly — it reasoned *correctly* from "absent" when the truth was
+"withheld", because nothing in its input distinguished the two. So the prompt now carries the rule
+that gives the marker meaning: *truncation is not a data gap; report it as supplied-material
+truncated, naming the brief and the omitted amount, and do not tell the operator to research it —
+they already have it.* A marker the model cannot interpret would still have been read as absence.
+
+**What this does and does not buy.** It does not recover the omitted text: a synthesis built from a
+cut brief is still built from a cut brief. What changes is that the loss becomes *reportable* —
+the deliverable can now say which part of its task it could not cover and why, instead of quietly
+converting a harness limit into an instruction for the operator to redo work the harness already
+holds. Raising the cap remains the separate, unblocked decision.
+
+Verified by a new `f49` suite — 22 assertions — including on **the actual file that caused the bug**:
+`build_brief_block()` on task 29's brief now emits `TRUNCATED BY THE HARNESS: 6464 of 12464`, and the
+same section reproduces the pre-fix expression on that same file to confirm it emitted no marker and
+dropped Topic 3 without a trace. Boundary cases pinned in both directions (exactly `cap` is not
+truncated; `cap+1` reports one omitted character). End-to-end on the real `workspace/content` W31
+directory: the marker fires with the true figures. 13/13 suites green, compile clean.
+
+One test bug found and fixed while writing it, recorded because it is the same class of error the
+suite exists to catch: the fixture filled briefs with `"x"` and asserted the body was exactly 6,000
+characters, which failed at 6,001 — the marker prose contains "e**x**ists". The assertion was wrong,
+not the code.
 
 ### Directive-1 — One expensive seed cancelled every cheap seed behind it · **P1 · IMPLEMENTED + PROVEN 2026-07-29**
 The batch loop treated any `quota_wait` as "stop the whole fire", but a task parks for three
