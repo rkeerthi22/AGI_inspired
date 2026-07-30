@@ -186,7 +186,7 @@ capped + logged) — note it was built *after* the gate had already been used, w
   both `canary_baseline: 3` (now sourced from **2026-W31**, per `promote._current_canary_green()`).
 - **Regression suites now run from the repo:** `python tests/run_all.py` (all, serially) or
   `python tests/run_all.py f42 f47` (substring filter). It **refuses with exit 2** if
-  `runs/.batch.lock` exists. **15 suites, 15/15 green** (measured 2026-07-30 08:22).
+  `runs/.batch.lock` exists. **16 suites, 16/16 green** (re-measured 2026-07-30 11:45, post-F52).
 - **Standing rule (F36, extended by F42):** commit before triggering a fire, and do not edit tracked
   files — **including `.gitignore`** — while one runs. It cost work three times on 2026-07-29/30.
 
@@ -250,8 +250,26 @@ capped + logged) — note it was built *after* the gate had already been used, w
    exists to make visible, and the scorecard says so in both the file and the Telegram line.
    Question: will you re-run `python orchestrator/spotcheck.py pass|fail <id>` on even **two** of
    **27, 28, 29, 30**? Re-running overwrites the row with a genuine independent read, which is the
-   only thing that converts this from a self-graded number into evidence. What was actually
-   verified, so you can spot-audit my work rather than repeat it:
+   only thing that converts this from a self-graded number into evidence.
+
+   **The two cheapest to check genuinely, ~2 minutes each — this is the recommended next action,
+   and it is time-boxed by the scorecard cron at Sun 2026-08-02 04:00:**
+   - **#28** — open the three IDs and confirm the titles: `youtube.com/watch?v=5Lpc2nmziEQ` →
+     *"Backrooms Movie Breakdown and Ending Explained"*; `…v=SaPaNc3dY9M` → *"OBSESSION Movie
+     Breakdown: Every Hidden Detail You Missed!"*; `…v=UpJgzNeNnU0` → *"Disclosure Day is Not an
+     Alien Movie - Ending Explained"*.
+   - **#29** — open `https://blog.google/innovation-and-ai/products/gemini-notebook/notebooklm-gemini-notebook/`
+     and Ctrl-F for `30 million` and `secure cloud computer`. Both should appear verbatim.
+   ```
+   python orchestrator/spotcheck.py pass 28 "checked the three YouTube titles myself"
+   python orchestrator/spotcheck.py pass 29 "checked both quotes on blog.google myself"
+   ```
+   **Fail them if they do not check out** — a `fail` from the operator is worth more than a `pass`
+   from the assistant, and is the only route by which we would learn the critic is wrong. And note
+   the trap: running those commands *without* opening the links does not make the number
+   independent, it launders it. The value is entirely in the two minutes of looking.
+
+   What was actually verified, so you can spot-audit my work rather than repeat it:
    - **#18** — Notion Marketplace live: 4.9/5 on **54 ratings**, count exact; web search independently
      confirms **\$129** and the **SPRING50** code. Gumroad citations unverifiable (client-rendered).
    - **#28** — all three YouTube IDs resolve to their **exact** claimed titles.
@@ -326,10 +344,15 @@ Per-machine, per-session — re-verify before relying on them.
   removed, 31 skipped as in-use (not forced), and the `claude\` scratchpad tree excluded
   deliberately. The bulk was Visual Studio Installer / .NET workload manifest caches
   (`tl0gxj0e` 4.4 GB, `zikl4kdb` 1.65 GB), idle since 29 Jul — **not** harness data.
-  **It is drifting back down: 12.74 GB at the 08:22 sweep, ~1.7 GB lost in six idle hours**, so
-  this is a recurring consumer rather than a one-off, and the reclaim bought time rather than a
-  fix. Still **7.3 GB under CLAUDE.md's 20 GB floor**; Temp holds no obvious next 5 GB, so meeting
-  the floor needs a different target. S: **98.04 GB free**.
+  ~~It is drifting back down… a recurring consumer rather than a one-off~~ — **that reading was
+  WRONG and is corrected here.** Three points measured 2026-07-30: 14.42 GB (02:45) → 12.74 (08:22)
+  → **12.44 (11:45)**. The 0.30 GB/h implied by the first interval was **this session's own
+  activity** — restore drills cloning into `C:\…\Temp`, DB copies, repeated bundle writes. The
+  genuine idle rate over the last measured 3.4 h is **0.09 GB/h**, i.e. ~118 h to a 2 GB floor.
+  Sunday's 03:30 fire is ~2 days out and is **not** at risk. Do not re-raise this as an alarm
+  without three points; two points during heavy I/O say nothing.
+  Still **7.6 GB under CLAUDE.md's 20 GB floor**; Temp holds no obvious next 5 GB, so meeting the
+  floor needs a different target. S: **98.04 GB free**.
   **Free space on this box also swings ~2 GB minute-to-minute** — C: read 1.61 GB then 3.72 GB
   eleven minutes apart with nothing deleted between. Quote a delta, not a single reading.
 - **GPU:** `NVIDIA GeForce RTX 3050 Laptop GPU`, 4096 MiB total, ~929 MiB used, ~3034 MiB free.
@@ -389,7 +412,7 @@ Per-machine, per-session — re-verify before relying on them.
 
 ---
 
-## 7. Final verification sweep — 2026-07-30 08:22
+## 7. Final verification sweep — 2026-07-30 08:22, re-run 11:45
 
 Every line below was measured in one pass; **zero problems**.
 
@@ -438,3 +461,22 @@ seeing that a bundle-only restore recovers no data, for the databases too.
 whether Microsoft has finished uploading them is not observable from here. And `KEEP_OFFSITE_N = 7`
 makes offsite a rolling last-7, not an archive. A git remote remains the stronger answer, and is
 still not configured.
+
+### Re-run at 11:45, after F52 and the OneDrive work
+
+| check | result |
+|---|---|
+| commits | **86** on master |
+| working tree | **fully clean** — zero untracked entries (this file is now tracked, F52) |
+| regression suites | **16/16 green** |
+| `policy.validate_paths()` | consistent |
+| `PROTECTED_PATHS` entries | **12** (`.claude` added by F52) |
+| HARDENING registry | **53 entries, F1..F52 + F22b**, no gaps, no duplicates |
+| `runs/quarantine_*.json` | **0** |
+| C: free | **12.44 GB**, idle rate 0.09 GB/h — Sunday not at risk |
+| offsite | OneDrive carries bundle + both DBs; restore rebuilt 86 commits **with `.claude/HANDOFF.md` present (440 lines)** |
+| git remote | still **none** |
+
+**The gap the 08:22 sweep named is now closed.** At that point everything lived on one disk. It now
+lives on two, and the restore has been drilled — including this document, which the first drill
+recovered *absent*.
