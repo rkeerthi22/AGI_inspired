@@ -65,7 +65,7 @@ def load_roles() -> dict:
     return yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))["roles"]
 
 
-def escalate(reason: str, trigger: str | None = None) -> None:
+def escalate(reason: str, trigger: str | None = None, task_id: int | None = None) -> None:
     # trigger, when given, must be one of policy.yaml's own escalation.triggers
     # (F13, docs/HARDENING.md) -- validated so the declared list stays authoritative
     # rather than becoming stale decoration the moment a caller typos it.
@@ -75,6 +75,19 @@ def escalate(reason: str, trigger: str | None = None) -> None:
     with open(ESCALATIONS, "a", encoding="utf-8") as f:
         f.write(f"- {datetime.now().isoformat(timespec='seconds')} — {tagged}\n")
     log(f"ESCALATION -> {ESCALATIONS.name}: {tagged}")
+    # F53 (docs/HARDENING.md): a TASK-scoped escalation is an intervention -- the system
+    # could not finish this task itself and asked a human. Until now that fact reached a
+    # markdown file and nothing else, so the ledger column that scores it read 0 forever
+    # and 25% of fitness was awarded unconditionally. Run-scoped escalations (ollama
+    # unreachable, batch aborted) pass no task_id and are deliberately not counted: they
+    # are infrastructure, not a verdict on any one task's autonomy -- the same distinction
+    # F37 draws between infra failure and the analyst being wrong. Fail-soft: an
+    # escalation must still be delivered even if the ledger write fails.
+    if task_id is not None:
+        try:
+            ledger.record_intervention(task_id, trigger or "escalation")
+        except Exception as e:
+            log(f"WARNING: intervention not recorded for task {task_id}: {e}")
     # Best-effort push: inert until the operator sets a Telegram home channel
     # (they must message the bot once — platform rule). File above is the source of truth.
     try:
@@ -1414,7 +1427,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                            critic_notes="policy.yaml tokens_per_day_hard_stop reached — parked",
                            append_note=True)
         escalate(f"task {tid}: daily token budget exhausted, parked (synthesis)",
-                trigger="cost_cap_breach")
+                trigger="cost_cap_breach", task_id=tid)
         log(f"task {tid}: quota_wait (token budget)"); return "quota_wait"
     worker_cfg = roles["worker"]
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']} (tool-free synthesis)")
@@ -1451,7 +1464,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
             tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']} (tool-free synthesis)")
         escalate(f"task {tid}: synthesis completed via failover to "
                 f"{model_used_cfg['provider']}/{model_used_cfg['model']} after quota "
-                f"exhaustion on the primary worker", trigger="model_failover")
+                f"exhaustion on the primary worker", trigger="model_failover", task_id=tid)
         worker_cfg = model_used_cfg  # so the deliverable footer below is truthful too
 
     (RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
@@ -1469,7 +1482,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     verdict, verdict_text = run_critic(row, out, roles, baseline, scope_note=scope_note)
     if verdict == "needs_review":
         escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
-                trigger="pass_criteria_ambiguous")
+                trigger="pass_criteria_ambiguous", task_id=tid)
     # F18 (docs/HARDENING.md): status must reflect the verdict, not just "a call
     # returned." Previously EVERY resolved synthesis landed status='done' regardless
     # of verdict -- weekly_fitness() and is_first_run_for_mission() both read status
@@ -1708,7 +1721,8 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
                            critic_notes="policy.yaml tokens_per_day_hard_stop reached "
                                         "-- parked, retry once the day rolls over",
                            append_note=True)
-        escalate(f"task {tid}: daily token budget exhausted, parked", trigger="cost_cap_breach")
+        escalate(f"task {tid}: daily token budget exhausted, parked",
+                 trigger="cost_cap_breach", task_id=tid)
         log(f"task {tid}: quota_wait (token budget)")
         return "quota_wait"
     # F24 (docs/HARDENING.md): admission control. The check above is a pure gate -- it
@@ -1725,7 +1739,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
                            append_note=True)
         escalate(f"task {tid}: estimated {est:,} tokens exceeds remaining daily budget "
                 f"({policy.tokens_used_today():,} already spent) -- parked before starting",
-                trigger="cost_cap_breach")
+                trigger="cost_cap_breach", task_id=tid)
         log(f"task {tid}: budget_skip (estimated {est:,} won't fit) — trying the next seed")
         return "budget_skip"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
@@ -1764,7 +1778,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         ledger.update_model_used(tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']}")
         escalate(f"task {tid}: completed via failover to {model_used_cfg['provider']}/"
                 f"{model_used_cfg['model']} after quota exhaustion on the primary worker",
-                trigger="model_failover")
+                trigger="model_failover", task_id=tid)
         worker_cfg = model_used_cfg  # so the deliverable footer below is truthful too
     if worker_failed(out, usage):
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
@@ -1789,7 +1803,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
                            critic_notes=f"deny-list match: {deny_hits} -- see policy.yaml "
                                         f"hard_exclusions; output not persisted as a deliverable")
         escalate(f"task {tid}: worker output matched deny-list pattern(s) {deny_hits}",
-                trigger="deny_list_match")
+                trigger="deny_list_match", task_id=tid)
         log(f"task {tid}: failed (deny-list match {deny_hits})")
         return "failed"
 
@@ -1802,7 +1816,7 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     verdict, verdict_text = run_critic(row, out, roles, baseline, scope_note=scope_note)
     if verdict == "needs_review":
         escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
-                trigger="pass_criteria_ambiguous")
+                trigger="pass_criteria_ambiguous", task_id=tid)
     # F18 (docs/HARDENING.md): status must reflect the verdict. Previously EVERY
     # resolved task landed status='done' regardless of critic_verdict -- proven live
     # 2026-07-24: task_id 20/21/22 all carry critic_verdict='fail' with status='done',

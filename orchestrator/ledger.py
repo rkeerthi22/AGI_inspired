@@ -98,7 +98,7 @@ def start_task(task_id: int, model_used: str) -> None:
 
 def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, tokens_out=None,
                 critic_verdict=None, critic_notes=None, status="done",
-                interventions=0, intervention_types=None, append_note=False) -> None:
+                interventions=None, intervention_types=None, append_note=False) -> None:
     """F21 (docs/HARDENING.md): consumption columns default to None and are written
     via COALESCE, so OMITTING them preserves whatever a previous attempt recorded.
 
@@ -143,13 +143,64 @@ def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, token
             "critic_verdict=COALESCE(?, critic_verdict), "
             "critic_notes=CASE WHEN ?=1 THEN TRIM(COALESCE(critic_notes,'') || ' | ' || ?) "
             "             ELSE COALESCE(?, critic_notes) END, "
-            "interventions=?, intervention_types=? WHERE task_id=?",
+            "interventions=COALESCE(?, interventions), "
+            "intervention_types=COALESCE(?, intervention_types) WHERE task_id=?",
             (status, stamp,
              json.dumps(artifacts), cost_usd, tokens_in, tokens_out,
              critic_verdict,
              1 if append_note else 0, critic_notes or "", critic_notes,
-             interventions, json.dumps(intervention_types or []), task_id),
+             interventions,
+             json.dumps(intervention_types) if intervention_types else None, task_id),
         )
+
+
+def record_intervention(task_id: int, kind: str) -> int:
+    """Increment a task's intervention counter and append `kind`. Returns the new count.
+
+    F53 (docs/HARDENING.md): the intervention term was structurally incapable of ever
+    being non-zero, so 25% of the fitness score was awarded unconditionally on every
+    task in the project's history (all 32 rows read interventions=0). Two independent
+    defects compounded, and BOTH had to be fixed for either to matter:
+
+      1. `escalate()` (batch_runner) appended to workspace/ESCALATIONS.md and never
+         touched the ledger row -- the signal was generated and then discarded before
+         it reached the column that scores it. Same bug class as F33 (synthesis tokens)
+         and F48 (canary tokens): measured, then dropped on the floor. Third instance.
+      2. `finish_task()` wrote `interventions=?` with a default of 0, UNCONDITIONALLY
+         overwriting. It is the one consumption column F21 missed when it moved
+         cost/tokens/critic_verdict to COALESCE -- invisible precisely because the value
+         was always 0 already, so the clobber never destroyed anything observable. Fixed
+         in the same line above: an omitted argument now preserves what is there, which
+         is what F21 established for every other column on this row.
+
+    Escalations are the honest signal here because they are exactly "the system could not
+    finish this itself and told a human": ambiguous critic verdict, deny-list hit, budget
+    exhaustion, degraded failover. Run-scoped escalations (server unreachable, batch
+    aborted) pass no task_id and are deliberately NOT counted -- they are not attributable
+    to any one task's autonomy.
+
+    NOT backfilled, and the discontinuity is stated rather than smoothed: weeks W29-W31
+    genuinely recorded 0 because nothing could write the column, so their intervention
+    term is a structural artefact, not a measurement. Comparing a post-F53 week's fitness
+    against them will show a DROP that means the metric went live, not that the analyst
+    got worse. weekly_fitness() now reports `intervention_measured` so that distinction
+    survives into the scorecard instead of living only in this docstring."""
+    with _conn() as c:
+        row = c.execute("SELECT intervention_types FROM tasks WHERE task_id=?",
+                        (task_id,)).fetchone()
+        if row is None:
+            return 0
+        try:
+            kinds = json.loads(row["intervention_types"] or "[]")
+            if not isinstance(kinds, list):
+                kinds = []
+        except (json.JSONDecodeError, TypeError):
+            kinds = []
+        kinds.append(kind)
+        c.execute("UPDATE tasks SET interventions=COALESCE(interventions,0)+1, "
+                  "intervention_types=? WHERE task_id=?",
+                  (json.dumps(kinds), task_id))
+    return len(kinds)
 
 
 def update_model_used(task_id: int, model_used: str) -> None:
@@ -260,6 +311,21 @@ def weekly_fitness(week_start: str | None = None) -> dict:
         "avg_cost_usd": round(avg_cost, 4), "fitness": round(fitness, 3),
         "spot_checked": len(spot),
         "spot_checked_ai": spot_checked_ai,
+        # F53: which terms actually MEASURED something this window, and how much of the
+        # score was awarded regardless. Without this, F reads as four scored dimensions
+        # when some are constants: cost_eff falls back to 1.0 whenever avg_cost is 0,
+        # which is every week Ollama is the only provider (it reports $0), and before
+        # F53 the intervention term was structurally 0 on every task ever run. Two
+        # scorecard rows in this very ledger read fitness=0.35 on completion=0.0 and
+        # accuracy=None -- a week where NOTHING completed still scored 0.35, because
+        # 0.25+0.10 is the floor. Reporting the floor alongside the score is the same
+        # honesty fix F7/F45 made for vanishing denominators: the number is not wrong,
+        # but it is not what it looks like. W is untouched -- LOCKED (§3.2).
+        "intervention_measured": any(r["interventions"] for r in terminal),
+        "cost_measured": avg_cost > 0,
+        "fitness_floor": round(W["intervention"] * (1 - intervention_norm) * (0 if any(
+            r["interventions"] for r in terminal) else 1)
+            + W["cost"] * (0 if avg_cost > 0 else cost_eff), 3),
     }
 
 

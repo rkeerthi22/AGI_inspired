@@ -90,6 +90,28 @@ def _ai_check_suffix(fit: dict) -> str:
     return f", {n} AI-performed pending operator confirmation" if n else ""
 
 
+def _floor_line(fit: dict) -> str:
+    """F53: state how much of F was awarded without measuring anything.
+
+    A reader seeing 'F = 0.914' reasonably assumes four scored dimensions. Whenever a
+    term cannot move -- cost_eff falls back to 1.0 on every Ollama-only week, and before
+    F53 the intervention term was structurally 0 on every task ever run -- that weight is
+    a constant added to every score, floor and ceiling alike. This ledger holds two
+    scorecard rows reading F=0.35 on completion=0.0/accuracy=None: a week where nothing
+    completed still scored the floor. Same honesty fix as F7/F45 for vanishing
+    denominators: the number is not wrong, it is just not what it looks like. W is
+    LOCKED (§3.2) -- this reports, it does not re-weight."""
+    floor = fit.get("fitness_floor") or 0
+    if not floor:
+        return ""
+    dead = [n for n, k in (("intervention", "intervention_measured"), ("cost", "cost_measured"))
+            if not fit.get(k)]
+    return (f"- ⚠ **{floor:.2f} of F was awarded unconditionally** — "
+            f"{' and '.join(dead)} term(s) measured nothing this window, so that weight is "
+            f"a constant, not an achievement. Real scored range this week: "
+            f"{floor:.2f}–1.00.\n")
+
+
 def _canary_line(green: int, unjudged: int) -> str:
     """F45: denominator is the FIXED canary set, never the number that happened to run.
     A week where 3 passed and 2 parked is 3/5 with the gap stated, not 3/3."""
@@ -116,8 +138,11 @@ def render_md(week: str, fit: dict, green: int, ran: int, unjudged: int = 0,
         f"not just resolved)\n"
         f"- Accuracy (spot-checked {fit.get('spot_checked', 0)}"
         f"{_ai_check_suffix(fit)}): {_fmt(fit.get('accuracy'), pct=True)}\n"
-        f"- Intervention rate: {_fmt(fit.get('intervention_rate'), pct=True)}\n"
-        f"- Avg cost/task: ${fit.get('avg_cost_usd', 0) or 0}\n"
+        f"- Intervention rate: {_fmt(fit.get('intervention_rate'), pct=True)}"
+        f"{'' if fit.get('intervention_measured') else ' — ⚠ NOT MEASURED this window'}\n"
+        f"- Avg cost/task: ${fit.get('avg_cost_usd', 0) or 0}"
+        f"{'' if fit.get('cost_measured') else ' — ⚠ NOT MEASURED (Ollama reports $0)'}\n"
+        f"{_floor_line(fit)}"
         f"- Canaries green: {_canary_line(green, unjudged)}\n"
         f"{crash_line}"
         f"- Note: {fit.get('note', '')}\n\n"
@@ -137,12 +162,17 @@ def telegram_line(week: str, fit: dict, green: int, ran: int, unjudged: int = 0,
     drop_suffix = f" · {dropped} dropped/{pending} pending" if (dropped or pending) else ""
     ai_n = fit.get("spot_checked_ai", 0)
     ai_suffix = f" · ⚠ {ai_n} spot-check(s) AI-performed, pending your confirmation" if ai_n else ""
+    floor = fit.get("fitness_floor") or 0
+    dead = [n for n, k in (("interv", "intervention_measured"), ("cost", "cost_measured"))
+            if not fit.get(k)]
+    floor_suffix = (f" · ⚠ {floor:.2f} of F unearned ({'/'.join(dead)} not measured)"
+                    if floor else "")
     return (f"📊 {week} · F={_fmt(f)} · {fit.get('tasks_scheduled', fit['tasks_attempted'])} scheduled · "
             f"done {_fmt(fit.get('completion_rate'), pct=True)} · "
             f"acc {_fmt(fit.get('accuracy'), pct=True)} · "
             f"${fit.get('avg_cost_usd', 0) or 0}/task · canaries {green}/{CANARY_TOTAL}"
             f"{f' ({unjudged} unjudged)' if unjudged else ''}"
-            f"{drop_suffix}{crash_suffix}{ai_suffix}")
+            f"{drop_suffix}{crash_suffix}{ai_suffix}{floor_suffix}")
 
 
 def send_telegram(text: str) -> bool:

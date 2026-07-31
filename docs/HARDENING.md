@@ -1896,6 +1896,69 @@ fs-guard (H9), not duplicated here.
 
 ---
 
+### F53 — 25% of the fitness score was awarded unconditionally, on every task ever run · **P0 · PROVEN, found + fixed 2026-07-31**
+
+**Symptom.** `F = 0.35·completion + 0.30·accuracy + 0.25·(1−intervention) + 0.10·cost_eff`
+reads as four scored dimensions. Two of them could not move. Measured across the whole
+ledger: `SELECT DISTINCT interventions FROM tasks` returns exactly `[0]` — **all 32 rows,
+every mission, every week since the project began**. `cost_usd` is likewise `0.0` on all 32.
+So `intervention_norm = 0` always → the term contributes its full `0.25` on every task, and
+`cost_eff = min(1, 0.50/avg_cost) if avg_cost > 0 else 1.0` falls to the `else` branch every
+time → a further `0.10`. **The live dynamic range of F is 0.35–1.00, not 0–1.** The smoking
+gun is already in this project's own `scorecards` table: two rows read `fitness: 0.35` with
+`completion_rate: 0.0, accuracy: None` — weeks where *nothing completed and nothing was
+verified* still scored 0.35. Worse, HARNESS_DESIGN §7's M1 acceptance criterion
+"interventions −30% vs baseline by week 8" was **structurally unprovable**: 0 → 0 is not a
+30% decline, it is undefined. One of the four acceptance criteria could never be evaluated.
+
+**Root cause — two independent defects, and BOTH had to be fixed for either to matter.**
+1. **The signal was generated and then discarded.** `escalate()` appended to
+   `workspace/ESCALATIONS.md`, logged, pushed to Telegram — and never touched the ledger
+   row. Ten call sites produce genuinely task-scoped escalations (ambiguous critic verdict,
+   deny-list hit, budget exhaustion, degraded failover) and every one of them died in a
+   markdown file. This is exactly F33 (synthesis tokens measured, never recorded) and F48
+   (canary tokens measured, never recorded). **Third instance of the same bug class**: a
+   real measurement that never reaches the column that scores it.
+2. **Even a correct increment would have been erased at task end.** `finish_task()` wrote
+   `interventions=?` with a default of `0`, unconditionally overwriting. It is the one
+   consumption column **F21 missed** when it moved `cost_usd`/`tokens_in`/`tokens_out`/
+   `critic_verdict` to `COALESCE` — invisible precisely *because* the value was already
+   always 0, so the clobber never destroyed anything anyone could observe. A latent defect
+   that only becomes reachable once the other half is fixed.
+
+**Fix.** `ledger.record_intervention(task_id, kind)` increments the counter and appends the
+trigger to `intervention_types`; `finish_task()`'s write becomes
+`interventions=COALESCE(?, interventions)` with the default moved to `None` (F21's own
+pattern, finally applied to the column it skipped — an explicit caller value still wins, so
+existing callers are unaffected); `escalate()` gains an optional `task_id` and records an
+intervention when given one. **Run-scoped escalations deliberately do NOT count** — "ollama
+unreachable" and "batch aborted" pass no `task_id`, because infrastructure failure is not a
+verdict on any one task's autonomy, the same line F37 draws.
+
+**Reporting, because the number could not simply be corrected.** `weekly_fitness()` now
+returns `intervention_measured`, `cost_measured`, and `fitness_floor`; `scorecard.py`
+renders "⚠ **0.35 of F was awarded unconditionally**" in the markdown and
+"⚠ 0.35 of F unearned (interv/cost not measured)" in the Telegram line. This is the
+F7/F45 honesty fix applied to a numerator instead of a denominator: the score is not wrong,
+it is just not what it looks like. **W is untouched — LOCKED (§3.2)**, and asserted so by
+the test.
+
+**Not backfilled, and the discontinuity is stated rather than smoothed.** W29–W31 recorded 0
+because nothing *could* write the column; their intervention term is a structural artefact,
+not a measurement. The first post-F53 week will therefore likely show a fitness DROP that
+means *the metric went live*, not that the analyst got worse — `intervention_measured`
+exists so that distinction survives into the scorecard rather than living only in this
+entry. **`cost_eff` remains unmeasurable and is deliberately NOT faked**: Ollama genuinely
+reports $0 on a flat subscription, so inventing a per-task dollar figure would replace an
+honest constant with a dishonest variable. It is now labelled, not invented.
+
+Found by measuring the ledger while rating the harness, rather than by any test failing —
+every suite was green throughout, because nothing was *broken*; the metric was simply
+measuring less than it claimed. · `tests/test_f53.py` (17 assertions, incl. the pre-F53
+clobber reproduced explicitly and the 0.35 floor rebuilt from a clean schema)
+
+---
+
 ## Roadmap to M2
 
 **Phase 0 — P0 hardening (before the next unattended cycle).** Now five P0s, not two:
