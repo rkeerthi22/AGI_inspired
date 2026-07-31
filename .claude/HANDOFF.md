@@ -5,10 +5,12 @@ session**; no new fix registry entries, this session's work was infra/docs, not 
 F1–F42 were originally reconstructed from HARDENING.md entries on disk, not from memory; F43–F52
 were written as they landed.
 
-**⚠ READ THIS FIRST: working tree is NOT clean.** Two untracked files exist that this session did
-NOT create — `orchestrator/simulate.py` and `docs/HANDOFF_SIMULATION.md` — written by a DIFFERENT,
-parallel Hermes session sometime around 2026-07-31 01:22–03:24. Full detail in §5 item 0 below;
-this is the single most important thing to read before doing anything else in this repo.
+**Working tree carries 2 untracked files ON PURPOSE.** `orchestrator/simulate.py` and
+`docs/HANDOFF_SIMULATION.md` came from a parallel Hermes session; the operator has since confirmed
+they were **requested**, and instructed that they stay **uncommitted for now**. This is an expected
+state, not a containment incident — see §5 item 0, which is resolved rather than open. Because
+`orchestrator/` is a PROTECTED_PATH, `simulate.py` will keep appearing in `_untracked_files()`
+snapshots; that is the guard doing its job and should not be chased.
 
 ---
 
@@ -241,6 +243,10 @@ capped + logged) — note it was built *after* the gate had already been used, w
 | `orchestrator/simulate.py` (prediction layer) | **⚠ UNCOMMITTED, NOT this session's work, NOT reviewed** | exists on disk, untracked; see §5 item 0 — needs an operator decision, not a status |
 | `memory/ledgerbook.db` `experiences` table | **written outside containment, integrity checked clean** | 4 rows added by the parallel session bypassing `run_task()`'s guard entirely; all OTHER tables' row counts match expected exactly, so additive-only, not corrupting — but the containment invariant itself was bypassed, which is the point regardless of whether the payload was benign |
 | Hermes-native cron jobs | **newly observed this session, not previously tracked in this handoff** | `hermes cron list` shows 2: `919d7323dd0e` "Daily Intelligence Brief" (pre-existing, runs fine, last run 2026-07-30 ok) and `e6e05b1d2e8a` "Vaibhav Sisinty weekly video tracker" (new, first fire 2026-08-03) — distinct from the 4 `AGI_M1_*` Windows Task Scheduler jobs this handoff has tracked until now |
+| Vaibhav cron Telegram delivery | **shipped + verified live** | `deliver: local → telegram:6173105867`; before/after `jobs.json` diff showed exactly ONE changed field on ONE job, prompt byte-identical, other job `NO CHANGE`; real test message delivered |
+| `scorecard.send_telegram()` (bare `--to telegram`) | **verified working 2026-07-31** | called the function directly → returned `True` and delivered. Sunday 04:00 scorecard delivery is live |
+| `TELEGRAM_HOME_CHANNEL` mechanism | **verified by probe; `hermes doctor` is WRONG about it** | doctor says the key "will be ignored" — false. `send_cmd.py:_load_hermes_env()` bridges every top-level `config.yaml` scalar into `os.environ`; probe: absent before, `'6173105867'` after. **Deleting the key to satisfy doctor would break scorecard delivery.** CLAUDE.md annotated (`e81f7e3`) |
+| `orchestrator/simulate.py` prediction layer | **exists + operator-authorized; ACCURACY CLAIMS UNVALIDATED** | video "actuals" match no real video; task accuracy is median-vs-same-mission; skill model hardcodes `regressed: False` despite rollback `c7b5721`. Architecture sound, validation is not — see HARNESS_DESIGN.md §5 |
 
 ---
 
@@ -295,17 +301,41 @@ capped + logged) — note it was built *after* the gate had already been used, w
    without knowing that is exactly the "investigate before deleting" rule I operate under. Flagging,
    not acting, is the correct move until you weigh in.
 
-   **Three questions that need your answer, not mine:**
-   1. Was `simulate.py` + the Vaibhav cron requested by you in that other session? If yes, this is
-      working as intended and just needs to be reconciled with HARNESS_DESIGN.md's DEFER language
-      (either the design doc updates to reflect a revised decision, or the feature waits for M3 —
-      your call, not a default).
-   2. Do you want `simulate.py` committed, deleted, or left exactly as-is (uncommitted, inert) while
-      you decide? It currently does nothing unless invoked manually — it is not wired into
-      `batch_runner.py`, `promote.py`, or `scorecard.py` (its own doc confirms this under
-      "Integration Points — Not Yet Wired").
-   3. Do you want the Vaibhav cron job (`e6e05b1d2e8a`) to keep running? First fire is
-      **2026-08-03 09:00** — three days out, not urgent tonight, but real.
+   **ALL THREE QUESTIONS ANSWERED BY THE OPERATOR 2026-07-31 — resolved, do not re-raise:**
+   1. **Yes, requested.** Authorized work from a parallel session, not a containment breach.
+      HARNESS_DESIGN.md §5's DEFER verdict is **overridden by operator decision**, recorded there as
+      an AS-BUILT DEVIATION with the operator's own reasoning: *"an AGI would likely predict human
+      behavior more accurately."* That reframes simulation from cost-optimization (§5's original
+      framing) to a capability claim, under which the M3 gate never applied. **Do not delete
+      `simulate.py` as out-of-spec.**
+   2. **Leave uncommitted.** Operator: *"For now, let's not worry about committing for a while."*
+      Both files stay untracked and inert. (Note: an untracked file under `orchestrator/` — a
+      PROTECTED_PATH — will keep showing in `_untracked_files()`. That is the guard working, not a
+      fault; it is now expected, so do not chase it.)
+   3. **Keep the cron.** Operator set it up deliberately: *"I was also the one who set up the Sunday
+      loop because I tend to drift off once a week."* First fire **2026-08-03 09:00**.
+      **CHANGED 2026-07-31:** delivery switched `local` → `telegram:6173105867`, because a weekly
+      update that lands silently on disk fails precisely for someone who drifts. Verified: `jobs.json`
+      diffed before/after (exactly one field changed on one job; prompt byte-identical; the other job
+      `NO CHANGE`), and a real test message delivered. Backup of the pre-edit `jobs.json` is in this
+      session's scratchpad.
+
+   **What I verified about the module itself, since the accuracy claims in its own handoff do not
+   hold up** (full detail now in HARNESS_DESIGN.md §5, kept there because that is where the design
+   decision lives):
+   - **Video accuracy is not evidence** — recorded "actuals" (180,000 / 95,000 views) match **no
+     video** in the 17-record dataset (nearest 186,000 / 94,000) and both predictions were for
+     videos never published.
+   - **Task accuracy is a near-tautology** — predicted a mission's median cost, scored against
+     another run of that same scripted mission (4,518,017 vs actual 4,501,536).
+   - **Skill-safety training data is factually wrong** — `predict_skill_safety()` hardcodes
+     `"regressed": False` for every skill, but rollback `c7b5721` really happened, on mission 001,
+     the same mission it scored "low risk".
+
+   **Architecture sound, validation not — both true at once.** The fix is cheap (record outcomes only
+   from real published videos / real completed tasks) and the Vaibhav cron is the mechanism that will
+   supply genuine data. **Until then, treat every accuracy number this module reports as
+   unvalidated.** Not fixed this session: out of scope, and the operator asked for no commits.
 
 1. ~~**C: is at 1.6 GB free and falling.**~~ **LARGELY RESOLVED 2026-07-30** — operator approved
    clearing Temp; 10.7 GB reclaimed (439 entries, 31 skipped as in-use, `claude\` scratchpad
@@ -511,9 +541,26 @@ Per-machine, per-session — re-verify before relying on them.
   `Hi rkeerthi22!`.
 - **Two Hermes-native cron jobs exist** (`hermes cron list`), separate from the 4 `AGI_M1_*` Windows
   Task Scheduler entries this handoff has always tracked: `919d7323dd0e` (Daily Intelligence Brief,
-  pre-existing, Telegram delivery, last run OK) and `e6e05b1d2e8a` (Vaibhav weekly tracker, NEW,
-  local delivery, first fire 2026-08-03 09:00). Worth reconciling both cron systems into one place
-  next time this handoff is written, rather than tracking them separately.
+  pre-existing, `telegram:6173105867`, last run OK) and `e6e05b1d2e8a` (Vaibhav weekly tracker,
+  **now `telegram:6173105867` as of 2026-07-31**, first fire 2026-08-03 09:00). Job store is
+  `C:\Users\moham\AppData\Local\hermes\cron\jobs.json`. Worth reconciling both cron systems into one
+  place next time this handoff is written, rather than tracking them separately.
+- **Telegram: BOTH delivery forms verified live 2026-07-31.** Bare `--to telegram` (what
+  `scorecard.send_telegram()` uses) resolves via the config→env bridge and delivers; explicit
+  `telegram:6173105867` delivers and does **not** depend on the bridge. Prefer the explicit form for
+  new work — it survives a config migration that drops the key.
+- **⚠ `hermes doctor` emits a FALSE POSITIVE that can break delivery if acted on.** It reports
+  `Unknown top-level config key 'TELEGRAM_HOME_CHANNEL' — it will be ignored`. Proven false by probe
+  (env absent before `_load_hermes_env()`, `'6173105867'` after). Doctor validates the config
+  *schema*; the key is consumed through a bridge doctor does not model. **The CLAUDE.md rule about
+  this key is CORRECT and load-bearing — do not "clean up" the key.** Annotated in `e81f7e3`.
+  - **Process lesson, recorded because it nearly cost real damage:** I read that warning and told the
+    operator the CLAUDE.md rule was stale, offering to "fix" it. It was not stale — following my own
+    recommendation would have deleted a key that `scorecard.send_telegram()` depends on, three days
+    before the Sunday 04:00 fire. **A tool's own diagnostic is a code-read, not a measurement.** It
+    was caught only because the operator said "check it" rather than "do it". Same verification-ladder
+    failure the global rules name as the single most common one; it recurs under time pressure and at
+    the end of long sessions.
 - **`python tests/run_all.py` timed out at the 2-minute foreground cap TWICE this session** (after
   the README commit, and after the doc-accuracy-refresh commit) with zero output before the kill.
   Both times, running the identical command in the background instead completed cleanly at
@@ -613,3 +660,23 @@ recovered *absent*.
 **This sweep found something the previous one couldn't have: work from outside this session sitting
 in the same repo.** Every other line above is routine continuation. That one is not, and is
 deliberately the first thing this document says (see the banner at the top and §5 item 0).
+
+### Post-sweep delta — 2026-07-31 ~04:00 (operator answered, Telegram work)
+
+- **§5 item 0 RESOLVED.** Operator confirmed `simulate.py` + the Vaibhav cron were requested; they
+  stay **uncommitted** by instruction; the cron stays. HARNESS_DESIGN.md §5's DEFER verdict is now
+  formally overridden there as an AS-BUILT DEVIATION carrying the operator's reasoning, so a future
+  session cannot delete the module as out-of-spec.
+- **Vaibhav cron switched to Telegram** (`local` → `telegram:6173105867`), verified by before/after
+  `jobs.json` diff **and** a real delivered message. Rationale is the operator's own: they drift
+  weekly, and a disk-only update fails exactly that person.
+- **`hermes doctor` false positive found and recorded** — see §6. I had wrongly called a correct
+  CLAUDE.md rule stale on the strength of that warning; the probe reversed it. Committed as
+  `e81f7e3`.
+- **Commits this delta:** `e81f7e3` (CLAUDE.md doctor note), plus this handoff + HARNESS_DESIGN.md
+  §5 update. **97 commits**, 16/16 suites green, working tree carries only the 2 deliberately
+  uncommitted simulation files.
+- **No new F-numbers.** Nothing here was an AGI_like harness defect: the doctor bug is upstream
+  Hermes, the cron change is configuration, and the simulation-validation problems are in an
+  uncommitted module. Registry stays **F1..F52 + F22b**. Resisting the urge to mint F53 for a
+  non-fix is the point of an append-only registry.
