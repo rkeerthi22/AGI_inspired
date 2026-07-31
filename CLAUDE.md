@@ -6,7 +6,7 @@ Milestone 1 = research/BI analyst. Runtime backbone = **Hermes Agent** (`%LOCALA
 ## Model hierarchy (locked 2026-07-17; CURRENT routing verified 2026-07-18)
 - **Manager / critic brain** = `glm-5.2:cloud` (Ollama) right now — operator chose to stay Ollama-only (accepting quota-parked stretches) over adding an Anthropic key. The Anthropic path stays PREFERRED and pre-wired (commented block in `config/models.yaml`) for whenever that changes; not a re-decision, just flip the comment.
 - **Worker** = `kimi-k2.7-code:cloud` (Ollama Cloud) for bulk research/analysis — runs with the DEFAULT Hermes toolset (browser/web tools; real research needs `browser_*`, not a bare "web" toolset — see Ground-truth rules).
-- **Fallback** = local `gemma4:12b` (MEASURED 1.54 tok/s — emergency/offline batch only, never a live role).
+- **Fallback** = local `gemma4:12b-ctx4k` (MEASURED 1.54 tok/s — emergency/offline batch only, never a live role). Plain `gemma4:12b` is NOT what's configured: it OOMs on load every time (262k-token default context vs. 4GB VRAM) and has never once completed a task — the `-ctx4k` Modelfile variant (F38) is the one that actually runs.
 - All routing lives in `config/models.yaml`. Swapping a model = editing that file, never code. Keep it that way (model-agnostic is a hard constraint).
 
 ## Ground-truth rules (verified, do not relitigate)
@@ -26,6 +26,9 @@ Mission (`missions/*.md`) → Plan (manager) → Execute (workers, `hermes -z` +
 
 ## Kill switch
 `hermes gateway stop` + pause cron = full halt. Nightly `hermes backup` + `git -C S:\AGI_like push` = recovery.
+Remote configured 2026-07-30: `origin` → `github.com/rkeerthi22/AGI_inspired` (SSH, key-based,
+no stored password), default branch `master`. Offsite DB snapshots + a verified `git bundle`
+also land in OneDrive on every nightly backup — two independent off-disk copies, not one.
 
 ## Directory map
 - `config/` — models.yaml (routing), policy.yaml (deny-list, cost caps, autonomy)
@@ -45,7 +48,12 @@ Mission (`missions/*.md`) → Plan (manager) → Execute (workers, `hermes -z` +
 - `runs/` — per-run usage.json + raw worker output + logs (gitignored); `quarantine_*.json` here
   would mean the integrity guard caught an unauthorized write (none since the fix)
 - `docs/` — `INCIDENTS.md` (real bugs found + fixed, with root cause and lesson),
-  `MIGRATION.md` (OpenClaw→Hermes decision record)
+  `MIGRATION.md` (OpenClaw→Hermes decision record), `HARDENING.md` (the append-only F1…Fn fix
+  registry — every hardening fix, its root cause, and its regression test)
+- `tests/` — regression suite guarding the harness's own safety/correctness (fs-guard,
+  containment, clock-domain, canary accounting); `python tests/run_all.py` runs all of it
+- `.claude/HANDOFF.md` — running session-handoff doc: architectural decisions, unresolved
+  action items, environment facts — read this first when picking work back up
 
 ## When editing here
 Smallest change that works. Prove it by running it. A measurement beats a code-reading. Report failures verbatim.

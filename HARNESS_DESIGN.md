@@ -1,6 +1,9 @@
 # Cognitive AI Harness — Design Document (Phase 2)
 
-**Date:** 2026-07-17 · **Status:** Draft for approval · **Author:** Claude (Fable 5) with user decisions locked 2026-07-17
+**Date:** 2026-07-17 · **Status:** Approved 2026-07-17, implemented and running since M0 · **Author:** Claude (Fable 5) with user decisions locked 2026-07-17
+
+Sections below describing "PENDING" measurements or draft-stage architecture are the point-in-time research record this design was built from — left as written rather than rewritten. Current build status lives in `CLAUDE.md` (operating rules) and `docs/HARDENING.md` (the fix registry); this document is the *why*, not the *current state*.
+
 **Milestone 1:** one autonomous research/BI analyst that measurably improves at its job. **Milestone 2:** content-ops agent.
 **Locked decisions:** hybrid model strategy on Ollama Pro · WIDE autonomy (all autonomous except money, credentials, irreversible deletions) · model-agnostic (LLM swap = config change).
 
@@ -317,6 +320,16 @@ Reasoning: simulation pays when **acting is expensive or irreversible relative t
 ### M1 — Research analyst (weeks 1–8) — **IN PROGRESS, currently W29 (baseline week 1)**
 Weeks 1–2 baseline (no self-improvement active; measure floor). Weeks 3–8: full loop with gated skill promotion. Concretely: W29–W30 = baseline (no promotion); **W31 (Mon 2026-07-27) = promotion goes live** — the mechanism is already built and round-trip-verified ahead of that date (§2.4).
 **Acceptance:** ≥10 tasks/week attempted · completion ≥70% · accuracy ≥90% on spot-checks · interventions −30% vs baseline · cost ≤$0.50/task · scorecard auto-delivered 8/8 Sundays · zero deny-list breaches · canaries green 4 consecutive weeks. — status as of end of W29: batch engine + 4 crons live, memory-update stage writing real facts, spot-check workflow in use (1 recorded), scorecard delivered W29 via Telegram; acceptance is measured over the full 8 weeks, not yet evaluable.
+
+**UPDATE 2026-07-31 (W31, week 3 of 8; freshly measured, not carried over):** `ledger.weekly_fitness()`
+this week: completion **1.0** (7/7 attempted), accuracy **0.714**, fitness **0.914** — all 7 spot-checks
+recorded so far are AI-performed (F28 convention), so accuracy is not yet an independent number; the
+operator has 2 outstanding independent-verdict requests flagged in `.claude/HANDOFF.md`. Both mission
+skill-promotion candidates approved to date are on **002-content-niche-research** (2 active notes,
+canary baseline 3); **001-shopify-competitor-intel** has 1 active note. 16/16 regression suites green
+(`tests/`, built after this design was written — see `docs/HARDENING.md` for the fix registry behind
+each one). Git remote configured 2026-07-30, closing the single-disk risk named in §4's risk table.
+8-week acceptance is still not evaluable until week 8; this is a mid-run measurement, not a verdict.
 
 ### M2 — Content-ops employee (after M1 passes, not before)
 Same harness, new mission pack + skills (topic research → prompt packs → assembly QC around the manual Krea step). Reuses ledger, memory, critic unchanged — this is the test that the harness generalizes.
