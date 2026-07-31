@@ -1,9 +1,14 @@
 # Handoff — AGI_like (M1 research/BI analyst harness) · updated 2026-07-31
 
-Registry source of truth: `S:\AGI_like\docs\HARDENING.md` (still F1–F52 + F22b — **unchanged this
-session**; no new fix registry entries, this session's work was infra/docs, not a harness bug).
-F1–F42 were originally reconstructed from HARDENING.md entries on disk, not from memory; F43–F52
-were written as they landed.
+Registry source of truth: `S:\AGI_like\docs\HARDENING.md` — **F1–F53 + F22b, 54 entries**, no gaps
+(verified `grep -cE '^### F[0-9]+[a-z]? '`). F1–F42 were originally reconstructed from HARDENING.md
+entries on disk, not from memory; F43–F53 were written as they landed.
+
+**⚠ 5 COMMITS UNPUSHED.** `local master = afc67b6`, `origin/master = 613c950`. Everything from
+`9416aca` onward — including **F53, the whole execution-only directive, and this handoff** — exists
+only on this laptop. The remote was fully verified earlier this session, so this is drift, not a
+broken setup: one `git push origin master` closes it. Auto-mode blocks the assistant from running
+`git push`; it is an operator command. See §5 item 4.
 
 **Working tree carries 2 untracked files ON PURPOSE.** `orchestrator/simulate.py` and
 `docs/HANDOFF_SIMULATION.md` came from a parallel Hermes session; the operator has since confirmed
@@ -86,6 +91,43 @@ snapshots; that is the guard doing its job and should not be chased.
   conflated the two, so overflow dropped the alphabetical tail: the same entities every time, chosen
   by name rather than age. Truncation should drop the least recent; reading order should stay
   grouped. Neither had to be traded for the other. **DECIDED.**
+- **WEEKS 4–8 ARE EXECUTION ONLY — no new features, no new hardening, no refactors.** **LOCKED
+  2026-07-31** (`CLAUDE.md`, its own directive section, commit `afc67b6`). Rationale, agreed on
+  measured evidence: the harness rates ~**6/10** against a finished system, but lopsidedly —
+  self-hardening is 8–9/10 (54 registry entries, 17 green suites, guards that caught real
+  violations, DR drilled), while *evidence the employee is improving* is 2–3/10. The bottleneck
+  stopped being system quality and became **data**. Every hardening fix now has diminishing returns
+  against 17/17 green; every week without independent verdicts costs a data point that cannot be
+  recovered, because the 8-week window closes on schedule regardless of what is in it.
+  - **One standing exception, deliberately narrow:** a defect *actively corrupting the data being
+    collected* is still P0. A harness that silently poisons its own evidence defeats the point of an
+    execution-only phase. Bar is "this run is producing false numbers **right now**", not "this
+    could be better". F53 is the archetype — found by measuring, not by anything failing.
+  - **Reconciled, not left to contradict:** the 2026-07-29 expanded-budget directive told a future
+    session to *"fix the synthesis problem, draft skill candidates"* — both building. Its header now
+    carries a **SUPERSEDED IN PART** note: items 1/2/4 (batch sizes, faster retries, spot-check
+    backlog) survive as execution; items 3/5 are PAUSED.
+- **Fitness reports which of its terms actually measured anything** (F53). `weekly_fitness()` returns
+  `intervention_measured` / `cost_measured` / `fitness_floor`, and the scorecard prints
+  "⚠ 0.35 of F was awarded unconditionally". **W is untouched — LOCKED**, asserted by
+  `tests/test_f53.py`. This is the F7/F45 honesty fix applied to a *numerator* rather than a
+  denominator: the score was never wrong, it just was not what it looked like. **DECIDED.**
+- **`cost_eff` stays unmeasurable and LABELLED, never faked** (F53). Ollama genuinely reports $0 on a
+  flat subscription; deriving a per-task dollar figure would swap an honest constant for a dishonest
+  variable. It is reported as not-measured, not invented. **DECIDED.**
+- **F53 was NOT backfilled, and the discontinuity is stated rather than smoothed.** W29–W31 recorded
+  `interventions=0` because nothing *could* write the column — a structural artefact, not a
+  measurement. The first post-F53 week will likely show fitness **DROP**, meaning the metric went
+  live, not that the analyst got worse. `intervention_measured` exists so that distinction survives
+  into the scorecard. **DECIDED.**
+- **Run-scoped escalations do NOT count as interventions** (F53) — "ollama unreachable", "batch
+  aborted" pass no `task_id`. Infrastructure failure is not a verdict on any one task's autonomy;
+  same line F37 draws between infra failure and the analyst being wrong. **DECIDED.**
+- **Simulation layer authorized, overriding HARNESS_DESIGN §5's DEFER verdict** — operator's
+  reasoning, recorded verbatim in §5 of that doc: *"an AGI would likely predict human behavior more
+  accurately."* That reframes simulation from cost-optimization (§5's original framing) to a
+  capability claim, under which the M3 gate never applied. `orchestrator/simulate.py` stays
+  **UNCOMMITTED by instruction**. **DECIDED 2026-07-31.**
 - Rejected: **adding `"."` to `PROTECTED_PATHS`** to close the root gap (F42) — `memory/` and
   `workspace/` are policy.yaml *writable* roots inside the repo root, so `"."` declares the same
   subtree both writable and protected, and `policy.validate_paths()` compares literal paths so it
@@ -163,6 +205,8 @@ F46–F52 from this session.
 - **F49** Synthesis silently receives a truncated brief and reports the missing part as a data gap → `run_synthesis()` builds its input with `p.read_text()[:6000] for p in briefs[:6]` — two silent caps, no marker, so neither the synthesis model nor the critic (which never sees the prompt) can tell a complete document from a bisected one. Measured: task 29's brief is 12,464 chars, 6,464 dropped, and `## Topic Opportunity 3` begins at char **6,060** — the cut misses it by **60 characters**. Task 30 therefore declared a data gap that was literally TRUE of the material it received, and grading that as an analyst error would have repeated F37; it was spot-checked pass and the defect recorded instead. Task 27 is hit harder and invisibly: all three of its input briefs (10,994/11,388/8,279) were cut, ~18KB of researched material never reached the synthesis meant to consolidate it, and the output still looks complete. F20/F31 family (judged on material never shown) but worse — those withheld REQUIREMENTS and produced visibly wrong output; this withholds EVIDENCE and produces well-formed output wrong only in what it omits, whose failure mode is an operator told to go source what the harness already has. Adjacent latent instance **now fixed as F51**: `_recent_fact_lines` was 12 rows from truncating. → **FIXED with the marker** (operator's call): `build_brief_block()` states every omission — `[TRUNCATED BY THE HARNESS: n of m characters ... researched and exists ... NOT a data gap]` plus a named section for briefs dropped by the count cap; caps promoted to `SYNTHESIS_BRIEF_CHARS`/`SYNTHESIS_MAX_BRIEFS` so raising them stays a separate one-line decision. **Crucially the prompt also had to change** — the model reasoned CORRECTLY from "absent"; nothing distinguished it from "withheld" — so it now carries "truncation is not a data gap ... do not tell the operator to research it, they already have it". Does NOT recover the omitted text; it makes the loss reportable instead of converting a harness limit into operator make-work. **Found by the spot-check, which is precisely the job F3 says only a human pass can do.** P1 · found + fixed 2026-07-30 · `tests/test_f49.py` (22 assertions, incl. the real task-29 brief now emitting `6464 of 12464`, and the pre-fix expression shown emitting nothing)
 - **F51** The fact ledger truncated silently, and dropped the alphabetical tail → `_recent_fact_lines(days=14, cap=120)` ended `rows[:cap]`. Third member of F49's family (F49 briefs, F50 model context, F51 facts) and the closest to firing: measured **108 facts in the 14-day window against a cap of 120** — twelve rows of headroom, while week W30 alone produced **70**. Worse than lossy, the ordering was `ORDER BY entity, id`, so overflow always dropped the alphabetical **tail** — deterministically the same entities (today `ai-productivity`/`dark-academia`/`modern-stoicism`, the whole onboarding set), chosen by name rather than age or relevance → cap 120 → **300**; F49's marker in the same words; and the newest `cap` rows now SELECTED (`id DESC LIMIT`) then PRESENTED grouped by entity, so truncation drops the oldest while reading order stays grouped. `db` made injectable (F12's lesson) so the suite never opens the live ledgerbook. Behaviour today is byte-identical (108 < 300). P1 · found + fixed 2026-07-30 · `tests/test_f51.py` (20 assertions; validated on a case where the two orderings DISAGREE — fix keeps `zzz*` newest, pre-fix keeps `aaa*` oldest)
 - **F52** Committing the handoff removed it from the containment surface → `.claude/HANDOFF.md` was covered by `_untracked_files()`'s hashes (F46/F47) **precisely because it was untracked**; `git add` moved it out of that set without moving it into `_tracked_hashes()`, which walks only `PROTECTED_PATHS` — and `.claude` was not listed. Measured a minute after the commit: a simulated tamper produced an EMPTY delta on all four channels (tracked hashes, new untracked, tampered untracked, porcelain). The blinded tree is Claude Code's own config dir — the one place a file steers the SUPERVISING agent, which is why F46 refused to *gitignore* it; tracking achieved the same blindness by the opposite route → `.claude` added to `PROTECTED_PATHS`; tamper now caught on TWO channels, protected tracked files 51→53, worktree still collapsed. **General lesson: changing a file's VCS status silently changes which guard covers it** — `git add` is not usually thought of as security-relevant. F42→F46→F47→F52 is one hole reappearing per layer. Knock-ons handled not suppressed: `test_f47`'s at-rest baseline legitimately moved (now asserts the ONLY at-rest mask is the DECIDED worktree), and its section 7 was re-pointed from the untracked channel to the tracked one, which is *stronger* since `git ls-files` ignores exclude rules entirely. Residual: F47 now WARNs on every snapshot about the worktree — `git worktree remove` clears it at source. **Residual CLOSED same day**: worktree removed, `_masked_under_protected()` → `[]`, `test_f52.py` §3/§5 rewritten to branch on live git state instead of assuming the worktree's presence (16/16 still green). P1 · found + fixed 2026-07-30 · `tests/test_f52.py` (10 assertions incl. the pre-F52 surface shown not to cover the file at all)
+
+- **F53** 25% of the fitness score was awarded unconditionally, on every task ever run → **two independent defects, both required for either fix to matter**: (1) `escalate()` appended to `workspace/ESCALATIONS.md`, logged, pushed to Telegram — and never touched the ledger row, so ten task-scoped escalation sites all died in a markdown file (**F33/F48 class, third instance**: a real measurement that never reaches the column that scores it); (2) `finish_task()` wrote `interventions=?` defaulting to `0`, unconditionally overwriting — **the one consumption column F21 missed** when it moved cost/tokens/critic_verdict to `COALESCE`, latent and invisible precisely *because* the value was already always 0, so the clobber destroyed nothing observable until (1) was fixed. Measured across the whole ledger: `SELECT DISTINCT interventions FROM tasks` → exactly `[0]`, **all 32 rows, every mission, every week**; `cost_usd` likewise `0.0` on all 32, so `cost_eff` takes its `else 1.0` branch every time. **Live range of F is 0.35–1.00, not 0–1**, and the smoking gun was already in this project's own `scorecards` table: two rows reading `fitness: 0.35` with `completion_rate: 0.0, accuracy: None` — weeks where *nothing completed and nothing was verified* still scored 0.35. It also made an M1 acceptance criterion **structurally unprovable**: HARNESS_DESIGN §7's "interventions −30% vs baseline by week 8" is undefined for 0 → 0, so one of four criteria could never have been evaluated → `ledger.record_intervention(task_id, kind)`; `finish_task` → `interventions=COALESCE(?, interventions)` with the default moved to `None` (F21's own pattern finally applied to the column it skipped — explicit caller values still win, so existing callers are unaffected); `escalate()` gains optional `task_id`, wired at **8 task-scoped call sites**, with the 2 run-scoped ones deliberately left uncounted. Reporting added rather than the number corrected: `intervention_measured` / `cost_measured` / `fitness_floor` + scorecard lines in markdown **and** Telegram. `cost_eff` deliberately NOT faked. NOT backfilled. **W untouched — LOCKED**, asserted by the test. **Found by measuring the ledger while rating the harness, not by any test failing** — every suite was green throughout, because nothing was *broken*; the metric was simply measuring less than it claimed. P0 · found + fixed 2026-07-31 · `tests/test_f53.py` (17 assertions, incl. the pre-F53 clobber reproduced explicitly and the 0.35 floor rebuilt from a clean schema)
 
 **H-items** (blueprint, tracked separately in HARDENING.md): H1–H6, H8, H9 done; **H7 CLOSED 2026-07-29**
 (skill-note sanitiser at both draft and approval gates, provenance in `promote.py list`, injection
@@ -247,6 +291,12 @@ capped + logged) — note it was built *after* the gate had already been used, w
 | `scorecard.send_telegram()` (bare `--to telegram`) | **verified working 2026-07-31** | called the function directly → returned `True` and delivered. Sunday 04:00 scorecard delivery is live |
 | `TELEGRAM_HOME_CHANNEL` mechanism | **verified by probe; `hermes doctor` is WRONG about it** | doctor says the key "will be ignored" — false. `send_cmd.py:_load_hermes_env()` bridges every top-level `config.yaml` scalar into `os.environ`; probe: absent before, `'6173105867'` after. **Deleting the key to satisfy doctor would break scorecard delivery.** CLAUDE.md annotated (`e81f7e3`) |
 | `orchestrator/simulate.py` prediction layer | **exists + operator-authorized; ACCURACY CLAIMS UNVALIDATED** | video "actuals" match no real video; task accuracy is median-vs-same-mission; skill model hardcodes `regressed: False` despite rollback `c7b5721`. Architecture sound, validation is not — see HARNESS_DESIGN.md §5 |
+| **F53 intervention plumbing** | **shipped + verified** | `tests/test_f53.py` **17/17**, incl. the live-ledger premise (`DISTINCT interventions` → `[0]`) and the 0.35 floor rebuilt from a clean schema. **17/17 suites green** overall |
+| **F53 fitness-honesty reporting** | **shipped + verified against live data** | live `weekly_fitness()` → `intervention_measured: False, cost_measured: False, fitness_floor: 0.35`; Telegram line renders `⚠ 0.35 of F unearned (interv/cost not measured)`; **`fitness` itself unchanged at 0.914** — honesty added, number preserved |
+| Harness self-rating | **measured 6/10** | self-hardening 8–9/10 (54 registry entries, 17 suites, guards proven); *evidence of improvement* 2–3/10 (32 tasks total, W30 ran 3 vs ≥10/wk target, accuracy 100% self-graded) |
+| Execution-only directive W4–W8 | **LOCKED + committed** | `CLAUDE.md` commit `afc67b6`; 2026-07-29 directive header marked SUPERSEDED IN PART so the contradiction cannot mislead a future session |
+| Spot-check queue push | **verified delivered 2026-07-31** | `python orchestrator/spotcheck.py notify` → `0 awaiting spot-check, 10 AI-performed awaiting confirmation — telegram: sent` |
+| **Git remote currency** | **⚠ 5 COMMITS BEHIND** | `local master afc67b6` vs `origin/master 613c950`. F53 + directive + this handoff exist on one disk only |
 
 ---
 
@@ -344,11 +394,23 @@ capped + logged) — note it was built *after* the gate had already been used, w
    at the final sweep six hours later — still **7.3 GB under** CLAUDE.md's 20 GB floor, and the
    downward trend has resumed. Temp no longer holds an obvious next target, so meeting the floor
    needs a different reclaim source. Not urgent for Sunday's fire.
-2. **Spot-checks — WORK DONE 2026-07-30, INDEPENDENCE STILL MISSING.** All 7 requested tasks
-   (1, 5, 18, 27, 28, 29, 30) were verified against live sources and recorded `pass`, each note
-   prefixed `AI-PERFORMED CHECK` per F28. W31 accuracy **33% → 71%**, fitness **0.8 → 0.914**.
-   Only 4 of the 7 could move the metric — **#1, #5 and #18 predate the 7-day window** (starts
-   2026-07-23) and were recorded for the audit trail only.
+2. **Spot-checks — THE #1 ITEM FOR WEEKS 4–8, and the count was wrong until 2026-07-31.**
+   **It is 10 AI-performed verdicts, not 7.** The "7" carried by earlier handoffs counted only the
+   tasks a previous session was explicitly asked about; `spotcheck.pending_rows()` correctly reports
+   **10**, and the extra three — **#24, #25, #26** — are all IN-WINDOW and were never mentioned.
+   Measured 2026-07-31 (window opens `2026-07-24 08:10:49`):
+   - **In-window (7, these move W31 accuracy):** #24, #25, #26, #27 (001-shopify) · #28, #29, #30
+     (002-content)
+   - **Out of window (3, audit trail only):** #18, #5, #1
+   `spotcheck.py notify` delivered this to Telegram 2026-07-31 (`telegram: sent`). Note the message
+   lists only `ai_done[:8]`, so #5 and #1 do not appear in it — both out-of-window, so nothing that
+   moves the metric is hidden, but the message does not say it truncated.
+
+   **`0 awaiting spot-check` does NOT mean the queue is clear.** Every deliverable has a verdict;
+   what is missing is independence. All 10 were written by the assistant. Re-running
+   `spotcheck.py pass|fail <id>` overwrites a row with a genuine read — that is the ONLY way
+   accuracy stops being self-graded, and accuracy is **30% of fitness** and the one term the system
+   structurally cannot produce for itself.
 
    **The remaining gap is not effort, it is independence.** All **7/7** in-window checks are now
    AI-performed, so W31's accuracy term is entirely self-assessed — exactly the condition F28
@@ -393,7 +455,25 @@ capped + logged) — note it was built *after* the gate had already been used, w
    this tool** — check the sync icon; (b) `KEEP_OFFSITE_N = 7`, so offsite is a rolling last-7, not
    an archive; (c) the ledger now leaves the machine, a privacy change made knowingly after the DB
    secret scan came back clean.
-4. ~~**Git remote — the ONLY step left to actually close the single-disk risk.**~~ **DONE
+4. **⚠ PUSH THE 5 UNPUSHED COMMITS — the one live durability gap.** `local master afc67b6` vs
+   `origin/master 613c950`. Unpushed: `9416aca`, `e81f7e3`, `f185d27`, `d1effba` (**F53**),
+   `afc67b6` (**the execution-only directive**). Plus this handoff once committed. The remote is
+   configured and was verified three times earlier today, so this is drift, not breakage:
+   ```
+   git push origin master
+   ```
+   **The assistant cannot run this** — auto-mode's classifier blocks `git push` outright (observed
+   this session: *"Permission for this action was denied by the Claude Code auto mode classifier"*).
+   It is an operator command, or add a Bash permission rule to unblock it. Verify after with
+   `git ls-remote origin` — tip should read `afc67b6…` or later.
+
+   **Also still open, unchanged after 4 independent checks:** GitHub's default branch is `main`
+   (1 commit, README-only), not `master` (99 commits). `git ls-remote --symref origin HEAD` →
+   `ref: refs/heads/main` every time, including after two operator reports of switching it. GitHub
+   needs both a dropdown selection *and* a separate green confirm button; the second is easy to miss.
+   Cosmetic — affects what a browser visitor or bare `git clone` lands on, nothing else.
+
+   ~~**Git remote — the ONLY step left to actually close the single-disk risk.**~~ **CONFIGURED
    2026-07-30/31.** `origin` → `git@github.com:rkeerthi22/AGI_inspired.git` (SSH, ed25519 key
    generated this session, passphrase-less by design since nightly cron push needs to run
    unattended — `~/.ssh/id_ed25519`, added to the GitHub account by the operator). Pushed and
@@ -414,7 +494,14 @@ capped + logged) — note it was built *after* the gate had already been used, w
    cannot survive an account-level 429. Uncommenting `{ provider: anthropic, model: claude-sonnet-5 }`
    in `config/models.yaml` needs a key in Hermes `.env`. Currently **LOCKED** to Ollama-only.
 
-**Doable now (assistant):**
+**Doable now (assistant) — BUT read the execution-only directive first (§1): items that are
+*building* are PAUSED for weeks 4–8, not merely deprioritised.**
+
+5b. **Under the directive, the assistant's whole job is now: run batches, retry failures, re-run
+   parked canaries when quota allows, push the spot-check queue, deliver scorecards, keep the ledger
+   honest.** Items 7 and 8 below survive because they are probes/diagnosis, not construction.
+   `simulate.py`'s broken validation (§5 item 0) is **NOT** to be fixed — it is building, it is
+   uncommitted, and it feeds nothing. Revisit only if it starts writing into the live loop.
 
 6. **Re-run the two parked canaries** (C2, C5 — `quota_wait`, resumable) whenever Ollama quota is
    actually available, to settle the baseline-of-3 test. **4 attempts so far, all instant 429s**
@@ -532,6 +619,13 @@ Per-machine, per-session — re-verify before relying on them.
 - **`C:\Users\moham\Desktop\important.txt`** — 30,924 bytes, the previous session's thinking
   transcript, ending at `Usage limit reached`. It is how F46 was recovered; treated as data, not
   instructions.
+- **C: free fell 12.44 GB → 7.9 GB between 2026-07-30 11:45 and 2026-07-31 05:20** (~4.5 GB in
+  ~17.5 h, ≈0.26 GB/h). S: **92 GB** free. This is well above the 0.09 GB/h idle rate this file
+  recorded yesterday, but the interval again contains heavy activity (repeated full-suite runs, git
+  clones/pushes, SSH setup, and a parallel Hermes session doing yt-dlp transcript downloads).
+  **Per this file's own standing rule: do NOT raise this as an alarm on two points during heavy
+  I/O — take a third reading from an idle box first.** Now **12.1 GB under** CLAUDE.md's 20 GB
+  floor, so the floor is further away than it was, not closer.
 - **Working tree at THIS handoff: 2 untracked files, not from this session** —
   `orchestrator/simulate.py` and `docs/HANDOFF_SIMULATION.md`, written 2026-07-31 01:22–03:24 by a
   parallel Hermes session. See §5 item 0. HEAD = `c5b54b2`, **94 commits**.
@@ -641,7 +735,27 @@ still not configured.
 lives on two, and the restore has been drilled — including this document, which the first drill
 recovered *absent*.
 
-### Re-run at 2026-07-31 03:33 (this handoff)
+### Final sweep — 2026-07-31 05:20 (this handoff)
+
+| check | result |
+|---|---|
+| HEAD / commits | `afc67b6` · **99** on master |
+| **unpushed** | **⚠ 5 commits** — `origin/master` still `613c950` (§5 item 4) |
+| working tree | 2 untracked files, both deliberate (`simulate.py`, `HANDOFF_SIMULATION.md`) |
+| regression suites | **17/17 green** (`test_f53` added this session) |
+| HARDENING registry | **54 entries, F1..F53 + F22b**, no gaps, no duplicates |
+| W31 fitness | F **0.914** · completion 100% · accuracy **71%** · 7/7 scheduled |
+| W31 fitness honesty | `intervention_measured: False` · `cost_measured: False` · **`fitness_floor: 0.35`** |
+| spot-checks | **10 AI-performed, 0 independent** — 7 of them in-window |
+| `policy.tokens_used_today()` | **0** · `today_start()` → `2026-07-31T00:00:00` |
+| C: / S: free | **7.9 GB** / 92 GB |
+| GitHub default branch | still `main`, not `master` (4th check, unchanged) |
+
+**The one thing this sweep leaves open is durability, and it is one command.** F53 and the
+execution-only directive — the two most consequential artefacts of this session — exist on a single
+physical disk until `git push origin master` runs.
+
+### Re-run at 2026-07-31 03:33 (earlier in this session)
 
 | check | result |
 |---|---|
