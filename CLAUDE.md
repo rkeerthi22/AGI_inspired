@@ -62,6 +62,11 @@ Smallest change that works. Prove it by running it. A measurement beats a code-r
 
 ## Operator directive — expanded budget (2026-07-29)
 
+> **⚠ SUPERSEDED IN PART by the 2026-07-31 directive at the end of this file.** Items 1, 2 and 4
+> (batch sizes, faster retries, spot-check backlog) still stand — they are execution. Items 3 and 5
+> (diagnose/fix synthesis, draft skill candidates) are **PAUSED**: both are building, and building is
+> what the newer directive stops. Read the newer one before acting on this one.
+
 **Context:** token quota increased, time budget expanded, operator is available for more throughput.
 The previous conservative posture (park early, single-retry, minimal batch sizes) was correct for
 baseline weeks when we were still finding P0 bugs in the harness. That phase is over. The hardening
@@ -113,3 +118,44 @@ draft skill candidates when the evidence is there. The operator is engaged and c
 surface things that need human review via Telegram rather than waiting to be asked. The 8-week
 clock is ticking and we're in Week 3 — the improvement curve needs data points, and data points
 come from attempts, not from parking.
+
+## Operator directive — EXECUTION ONLY, weeks 4–8 (2026-07-31) · **LOCKED**
+
+**Context:** the harness rates ~6/10 against a finished system, and the split is lopsided — the
+*self-hardening* machinery is 8–9/10 (53 fixes with root causes, 17 regression suites, containment
+guards that have caught real violations, DR drilled), while *evidence the employee is improving* is
+2–3/10. Three weeks in, the improvement curve has almost no points on it, and F53 just showed that
+some of what it does have was compromised: 35% of every fitness score was awarded unconditionally.
+Operator's call, agreed on the evidence: **the bottleneck is no longer system quality. It is data.**
+
+### The rule
+
+**Weeks 4–8 are execution and independent human verdicts. Nothing else.** Do not add features. Do
+not add hardening. Do not refactor. The system is now exceptionally good at measuring itself; what
+it lacks is uncompromised measurements to take.
+
+### What this means concretely
+
+- **DO:** run batches, retry failures, re-run parked canaries when quota allows, push the spot-check
+  queue to the operator, deliver scorecards, keep the ledger honest.
+- **DO NOT:** open new F-numbers for anything that is not actively breaking a run; write new
+  orchestrator modules; wire `simulate.py` into the loop; expand mission scope; "improve" the
+  fitness function (W is LOCKED and F53 is the last word on its data).
+- **The one standing exception:** a defect that is actively corrupting the data being collected is
+  still a P0 and gets fixed immediately — a harness that silently poisons its own evidence defeats
+  the entire point of an execution-only phase. The bar is "this run is producing false numbers right
+  now", not "this could be better".
+
+### Why this is the right call, recorded so it is not relitigated
+
+Every additional hardening fix has diminishing returns against a system already at 17/17 green,
+while every week without independent verdicts permanently costs a data point that cannot be
+recovered later — the 8-week window closes on schedule whether or not it has evidence in it.
+Accuracy is 30% of fitness and is **the only term the system cannot produce for itself**. As of
+2026-07-31 all in-window spot-checks are AI-performed, so that 30% is currently self-graded.
+
+### The single highest-value action available
+
+`python orchestrator/spotcheck.py notify` pushes the pending queue to Telegram (delivery verified
+live 2026-07-31). Two operator verdicts convert the accuracy term from self-assessment into
+evidence. That is worth more to this project right now than any code that could be written.
