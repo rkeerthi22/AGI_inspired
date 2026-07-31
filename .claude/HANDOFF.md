@@ -1,12 +1,14 @@
-# Handoff — AGI_like (M1 research/BI analyst harness) · updated 2026-07-30
+# Handoff — AGI_like (M1 research/BI analyst harness) · updated 2026-07-31
 
-Registry source of truth: `S:\AGI_like\docs\HARDENING.md` (F1–F52 all written up there as of this
-session — **the F43 gap noted in the previous handoff is now CLOSED**). F1–F42 were originally
-reconstructed from HARDENING.md entries on disk, not from memory; F43–F52 were written as they landed.
+Registry source of truth: `S:\AGI_like\docs\HARDENING.md` (still F1–F52 + F22b — **unchanged this
+session**; no new fix registry entries, this session's work was infra/docs, not a harness bug).
+F1–F42 were originally reconstructed from HARDENING.md entries on disk, not from memory; F43–F52
+were written as they landed.
 
-**Working tree fully clean** — this file is now tracked (F52), so the repo has no untracked entries
-at all. Note this file is itself committed, so `git log -1` will always sit one or more commits
-ahead of any hash quoted here; read HEAD from git, not from this line.
+**⚠ READ THIS FIRST: working tree is NOT clean.** Two untracked files exist that this session did
+NOT create — `orchestrator/simulate.py` and `docs/HANDOFF_SIMULATION.md` — written by a DIFFERENT,
+parallel Hermes session sometime around 2026-07-31 01:22–03:24. Full detail in §5 item 0 below;
+this is the single most important thing to read before doing anything else in this repo.
 
 ---
 
@@ -232,13 +234,78 @@ capped + logged) — note it was built *after* the gate had already been used, w
 | F27 (coincidental digit match) | **FOUND, NOT FIXED** | no live wrong verdict to design against |
 | Offsite/off-machine durability | **NOT started** | single physical disk: C: and S: are both partitions of Disk 0 |
 | Repo history in the backup set | **shipped + restore-drilled** | `backup.py --bundle` writes+verifies `backups/repo_<ts>.bundle`; drill: `git clone` from it rebuilt every commit with `test_f48.py` and F48's registry entry intact. 7 bundles held; newest re-verified in the final sweep |
-| Git remote | **NOT started** | `git remote -v` empty; **81 commits** (an earlier handoff said 22 — wrong; measured `git rev-list --count HEAD`) exist only on this laptop |
+| Git remote | **shipped + verified 3x** | `origin` → `github.com/rkeerthi22/AGI_inspired`, SSH key-based; tip-hash+tree-diff identical after every push; **94 commits**, `git rev-list --count HEAD` |
+| GitHub default branch | **NOT fixed — checked 4x** | still `main` (README-only), not `master` (real history); operator-reported fix did not take |
+| Repo README.md | **shipped + committed** | `613c950`; project description, loop, fitness formula, directory map, safety posture — no numbers that go stale |
+| CLAUDE.md / HARNESS_DESIGN.md accuracy refresh | **shipped + committed** | `c5b54b2`; fixed a real bug (fallback model documented as plain `gemma4:12b`, which has never once completed a task per F38 — corrected to `gemma4:12b-ctx4k`), added missing directory-map entries, corrected HARNESS_DESIGN's stale "Draft"/"currently W29" status. 16/16 suites green before and after |
+| `orchestrator/simulate.py` (prediction layer) | **⚠ UNCOMMITTED, NOT this session's work, NOT reviewed** | exists on disk, untracked; see §5 item 0 — needs an operator decision, not a status |
+| `memory/ledgerbook.db` `experiences` table | **written outside containment, integrity checked clean** | 4 rows added by the parallel session bypassing `run_task()`'s guard entirely; all OTHER tables' row counts match expected exactly, so additive-only, not corrupting — but the containment invariant itself was bypassed, which is the point regardless of whether the payload was benign |
+| Hermes-native cron jobs | **newly observed this session, not previously tracked in this handoff** | `hermes cron list` shows 2: `919d7323dd0e` "Daily Intelligence Brief" (pre-existing, runs fine, last run 2026-07-30 ok) and `e6e05b1d2e8a` "Vaibhav Sisinty weekly video tracker" (new, first fire 2026-08-03) — distinct from the 4 `AGI_M1_*` Windows Task Scheduler jobs this handoff has tracked until now |
 
 ---
 
 ## 5. Unresolved action items
 
 **Blocked on user:**
+
+0. **A parallel Hermes session added a new subsystem to this repo, outside git, outside the
+   containment guard, and contradicting a locked design decision — needs your call before anything
+   else happens here.** Discovered 2026-07-31 03:33 while running the final verification sweep for
+   this handoff; not this session's work, not reviewed or approved by this session.
+
+   **What exists, verified by direct inspection (not by trusting the file's own claims):**
+   - `orchestrator/simulate.py` (567 lines, untracked) — a "prediction/simulation layer" with three
+     models (task-outcome prediction, video-engagement prediction, skill-safety prediction).
+   - `docs/HANDOFF_SIMULATION.md` (untracked) — its own handoff note, self-identifying as
+     `Author: Claude (glm-5.2:cloud) session`, dated 2026-07-30.
+   - `memory/ledgerbook.db` — **modified directly**, 4 new rows in the `experiences` table
+     (ids 1–4, timestamps 2026-07-31 01:22:44–01:23:09). Checked this table against corruption:
+     all other tables (`facts` 108, `entities` 47, `relations` 18, `decisions` 8) match expected
+     counts exactly, so this was additive-only, not damaging — but it bypassed
+     `orchestrator/batch_runner.py` entirely, which is the ONLY sanctioned ledgerbook writer.
+   - A **new Hermes-native cron job**, confirmed via `hermes cron list`: `e6e05b1d2e8a`, "Vaibhav
+     Sisinty weekly video tracker", `0 9 * * 1` (every Monday 09:00), next run **2026-08-03 09:00**,
+     local delivery (no Telegram). This will autonomously browse YouTube and download transcripts
+     via yt-dlp, unattended, starting Saturday.
+   - Files also written to `S:\AI videos\` (a separate, clearly-legitimate, long-running project of
+     yours — `channel_concept.md`, `brand_kit.md`, production scripts going back to 2026-07-20 — this
+     is NOT the concern; that project is real and yours). The concern is narrower: the same session
+     also reached INTO `S:\AGI_like\` specifically.
+
+   **Why this matters, concretely, against what's actually written down in this repo:**
+   - CLAUDE.md, verbatim: *"The worker never writes to `ledger.db`/`ledgerbook.db` directly, by
+     construction, not by trust."* This write did exactly that — via an interactive/oneshot Hermes
+     session that never went through `run_task()`'s containment guard, because that guard only
+     brackets subprocess calls the orchestrator itself launches.
+   - HARNESS_DESIGN.md §5, verbatim verdict: **"DEFER"** — simulation is explicitly named as an
+     M3-only feature, gated on M1 actually passing first and on "decisions with real cost" existing
+     (e.g. ad-budget allocation). We are in M1, week 3 of 8. `simulate.py` was built anyway; its own
+     handoff doc says "ahead of schedule" as if that were a virtue.
+   - CLAUDE.md's 2026-07-29 operator directive, verbatim: *"This directive expands throughput on
+     existing active missions, not scope."* A weekly YouTube-tracking cron job for a channel-research
+     side project is a scope addition, not throughput on missions 001/002.
+   - I edited HARNESS_DESIGN.md's §5/§7 status THIS session (commit `c5b54b2`) reaffirming the DEFER
+     verdict and citing current W31 state — **without knowing this already existed**, since it was
+     untracked and I had no reason to check for it until the final sweep. That edit is not wrong (it
+     accurately reflects what's committed), but it's now sitting next to an uncommitted contradiction.
+
+   **What I did NOT do, deliberately:** delete either file, revert the ledgerbook write, or cancel
+   the cron job. This may be work you specifically asked for in that other session — I have zero
+   visibility into what was actually requested there, and unilaterally discarding uncommitted work
+   without knowing that is exactly the "investigate before deleting" rule I operate under. Flagging,
+   not acting, is the correct move until you weigh in.
+
+   **Three questions that need your answer, not mine:**
+   1. Was `simulate.py` + the Vaibhav cron requested by you in that other session? If yes, this is
+      working as intended and just needs to be reconciled with HARNESS_DESIGN.md's DEFER language
+      (either the design doc updates to reflect a revised decision, or the feature waits for M3 —
+      your call, not a default).
+   2. Do you want `simulate.py` committed, deleted, or left exactly as-is (uncommitted, inert) while
+      you decide? It currently does nothing unless invoked manually — it is not wired into
+      `batch_runner.py`, `promote.py`, or `scorecard.py` (its own doc confirms this under
+      "Integration Points — Not Yet Wired").
+   3. Do you want the Vaibhav cron job (`e6e05b1d2e8a`) to keep running? First fire is
+      **2026-08-03 09:00** — three days out, not urgent tonight, but real.
 
 1. ~~**C: is at 1.6 GB free and falling.**~~ **LARGELY RESOLVED 2026-07-30** — operator approved
    clearing Temp; 10.7 GB reclaimed (439 entries, 31 skipped as in-use, `claude\` scratchpad
@@ -296,22 +363,23 @@ capped + logged) — note it was built *after* the gate had already been used, w
    this tool** — check the sync icon; (b) `KEEP_OFFSITE_N = 7`, so offsite is a rolling last-7, not
    an archive; (c) the ledger now leaves the machine, a privacy change made knowingly after the DB
    secret scan came back clean.
-4. **Git remote — the ONLY step left to actually close the single-disk risk.** **81** commits (both
-   skills, the whole F1–F52 record, the regression suites) exist on one physical disk.
-   **Half-closed 2026-07-30:** `backup.py` now writes and verifies a `git bundle` of the full
-   history into `backups/` on every nightly run, and a restore drill (`git clone` from the bundle)
-   rebuilt every commit intact. That makes the history a **single portable file** — but
-   `backups/` is on the same disk, so it protects against repo corruption and mistakes, **not**
-   disk failure. Two ways to finish, either of which is one operator action:
-   - **Cheapest, no account:** copy the newest `backups/repo_*.bundle` to any USB stick or other
-     machine. Verify anywhere with `git bundle verify <file>`; restore with `git clone <file> <dir>`.
-   - **Proper remote:** create an empty private repo, then `git remote add origin <url>` and
-     `git push -u origin master`. Tell me when the remote exists and I will verify the push
-     matches (`git rev-list --count`, ref comparison). **I will not create the repo, add the
-     remote, or enter credentials** — that is a prohibited action class, not a preference.
+4. ~~**Git remote — the ONLY step left to actually close the single-disk risk.**~~ **DONE
+   2026-07-30/31.** `origin` → `git@github.com:rkeerthi22/AGI_inspired.git` (SSH, ed25519 key
+   generated this session, passphrase-less by design since nightly cron push needs to run
+   unattended — `~/.ssh/id_ed25519`, added to the GitHub account by the operator). Pushed and
+   verified THREE separate times, each with tip-hash + root-commit + full tree-diff comparison, not
+   just exit code: after the initial 92-commit push, after the README commit (93), and after the
+   doc-accuracy-refresh commit (94, current HEAD `c5b54b2`). All three: `git diff master
+   origin/master --stat` empty, i.e. byte-identical.
 
-   Configuring `config/offsite_backup.path` (item 3) also gets the bundle off-disk automatically,
-   since `replicate_bundle_offsite()` uses the same destination and the same same-disk refusal.
+   **One residual, unresolved, checked 4 separate times with the same result:** GitHub's default
+   branch is still `main` (a 1-commit, README-only branch GitHub auto-created when the repo was
+   made), not `master` (the 94-commit real history). `git ls-remote --symref origin HEAD` →
+   `ref: refs/heads/main` every time, including after the operator twice reported having switched
+   it in Settings → Branches. Whatever was clicked did not save — GitHub requires both selecting
+   the branch AND a separate green confirm button, and it's easy to miss the second step. Low
+   urgency (doesn't affect the push/backup mechanism, only what a browser visitor or a bare
+   `git clone` lands on) but worth re-checking.
 5. **Second provider (F39/F41 payoff).** The chain is cross-*model*, not cross-*provider*, so it
    cannot survive an account-level 429. Uncommenting `{ provider: anthropic, model: claude-sonnet-5 }`
    in `config/models.yaml` needs a key in Hermes `.env`. Currently **LOCKED** to Ollama-only.
@@ -434,7 +502,26 @@ Per-machine, per-session — re-verify before relying on them.
 - **`C:\Users\moham\Desktop\important.txt`** — 30,924 bytes, the previous session's thinking
   transcript, ending at `Usage limit reached`. It is how F46 was recovered; treated as data, not
   instructions.
-- **Working tree clean at handoff apart from untracked `.claude/`.** HEAD = `36f8f18`.
+- **Working tree at THIS handoff: 2 untracked files, not from this session** —
+  `orchestrator/simulate.py` and `docs/HANDOFF_SIMULATION.md`, written 2026-07-31 01:22–03:24 by a
+  parallel Hermes session. See §5 item 0. HEAD = `c5b54b2`, **94 commits**.
+- **SSH key generated this session:** `C:\Users\moham\.ssh\id_ed25519` (ed25519, no passphrase —
+  deliberate, so the nightly `AGI_M1_backup` push can run unattended per CLAUDE.md's Kill switch
+  section). Public key added to the operator's GitHub account. `ssh -T git@github.com` confirms
+  `Hi rkeerthi22!`.
+- **Two Hermes-native cron jobs exist** (`hermes cron list`), separate from the 4 `AGI_M1_*` Windows
+  Task Scheduler entries this handoff has always tracked: `919d7323dd0e` (Daily Intelligence Brief,
+  pre-existing, Telegram delivery, last run OK) and `e6e05b1d2e8a` (Vaibhav weekly tracker, NEW,
+  local delivery, first fire 2026-08-03 09:00). Worth reconciling both cron systems into one place
+  next time this handoff is written, rather than tracking them separately.
+- **`python tests/run_all.py` timed out at the 2-minute foreground cap TWICE this session** (after
+  the README commit, and after the doc-accuracy-refresh commit) with zero output before the kill.
+  Both times, running the identical command in the background instead completed cleanly at
+  **16/16 green**, and process inspection mid-run showed active child PIDs actually progressing
+  (not deadlocked) — so this reads as system load (stdout block-buffering when redirected to a
+  file, plus whatever the parallel Hermes session was doing on this same box around 01:00–03:30),
+  not a real hang. Noted here in case the pattern recurs — if it does, background + `TaskOutput`
+  is the fast diagnostic, already proven twice.
 
 ---
 
@@ -506,3 +593,23 @@ still not configured.
 **The gap the 08:22 sweep named is now closed.** At that point everything lived on one disk. It now
 lives on two, and the restore has been drilled — including this document, which the first drill
 recovered *absent*.
+
+### Re-run at 2026-07-31 03:33 (this handoff)
+
+| check | result |
+|---|---|
+| commits | **94** on master, HEAD `c5b54b2` |
+| working tree | **NOT clean** — 2 untracked files, not from this session (§5 item 0) |
+| git remote | **configured**, `origin → github.com/rkeerthi22/AGI_inspired`, push verified 3x tip-hash+tree-diff |
+| GitHub default branch | still `main`, not `master` — open, low urgency |
+| regression suites | **16/16 green** (via background run; foreground timed out twice, confirmed false alarm both times) |
+| `policy.validate_paths()` | consistent |
+| `PROTECTED_PATHS` entries | **12**, unchanged |
+| HARDENING registry | **53 entries, F1..F52 + F22b**, unchanged this session |
+| `runs/quarantine_*.json` | **0** |
+| `memory/ledgerbook.db` integrity | all tables checked; `experiences` +4 rows (out-of-band, see §5); every other table's count matches expected exactly |
+| Hermes cron jobs | 2 (`919d7323dd0e` pre-existing OK, `e6e05b1d2e8a` new, unreviewed) — distinct from the 4 `AGI_M1_*` Task Scheduler jobs |
+
+**This sweep found something the previous one couldn't have: work from outside this session sitting
+in the same repo.** Every other line above is routine continuation. That one is not, and is
+deliberately the first thing this document says (see the banner at the top and §5 item 0).
