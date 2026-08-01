@@ -21,8 +21,12 @@ CONVENTION, not enforced by code: if the assistant performs a check on your beha
 "AI-PERFORMED CHECK" verbatim. ledger.weekly_fitness() greps for that exact string to
 report `spot_checked_ai` alongside `spot_checked`, and scorecard.py surfaces it as a
 caveat -- so the number stays visible without silently reclassifying it or touching the
-locked accuracy formula. Re-running this command yourself on the same task overwrites
-the row with a genuine independent read."""
+locked accuracy formula.
+
+Re-running this command yourself on the same task records a NEW verdict segment; the
+earlier one is kept for audit (the write APPENDS, it does not overwrite -- this docstring
+claimed otherwise until F54, 2026-08-01, and the claim was false). Classification reads
+only the LATEST segment, so an operator re-verification does clear the AI flag."""
 import sqlite3
 import sys
 from pathlib import Path
@@ -76,8 +80,14 @@ def pending_rows() -> tuple[list, list]:
             "FROM tasks WHERE status='done' AND mission_id != 'canaries' "
             "ORDER BY task_id DESC").fetchall()
     unchecked = [r for r in rows if r["human_verdict"] not in ("pass", "fail")]
+    # F54: classify on the LATEST verdict segment, not any historical one. This list drives
+    # the "still needs YOUR confirmation" Telegram nag, so grepping the whole field meant a
+    # row the operator had genuinely re-verified kept nagging forever and kept counting
+    # against accuracy independence.
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    import ledger
     ai_done = [r for r in rows if r["human_verdict"] in ("pass", "fail")
-               and "AI-PERFORMED CHECK" in (r["critic_notes"] or "")]
+               and ledger.is_ai_performed(r["critic_notes"])]
     return unchecked, ai_done
 
 

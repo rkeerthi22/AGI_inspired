@@ -394,8 +394,26 @@ capped + logged) — note it was built *after* the gate had already been used, w
    at the final sweep six hours later — still **7.3 GB under** CLAUDE.md's 20 GB floor, and the
    downward trend has resumed. Temp no longer holds an obvious next target, so meeting the floor
    needs a different reclaim source. Not urgent for Sunday's fire.
-2. **Spot-checks — THE #1 ITEM FOR WEEKS 4–8, and the count was wrong until 2026-07-31.**
-   **It is 10 AI-performed verdicts, not 7.** The "7" carried by earlier handoffs counted only the
+2. ~~**Spot-checks — THE #1 ITEM FOR WEEKS 4–8**~~ **FIRST TWO INDEPENDENT VERDICTS LANDED
+   2026-08-01.** The operator personally opened the three cited YouTube URLs (#28) and the
+   blog.google post (#29), confirmed titles and both verbatim quotes, and the verdicts were
+   recorded. **In-window independent spot-checks: 0 → 2. `spot_checked_ai`: 7 → 5.**
+   `accuracy` and `fitness` unchanged at **0.714 / 0.914** — this changed *provenance*, not
+   the score, which is exactly right: the number was never wrong, it was unverified.
+
+   **It took a P0 fix to make it register (F54).** The first attempt recorded both verdicts
+   and `spot_checked_ai` stayed at 7/7, because `cmd_verdict()` APPENDS and every classifier
+   grepped the whole notes field — so one historical AI segment flagged the row forever, and
+   the assistant's own note saying *"supersedes the earlier AI-PERFORMED CHECK"* re-flagged
+   the row it was clearing. Classification now reads only the latest `HUMAN(...)` segment.
+   Registry F54; the scorecard cron at **2026-08-02 04:00** would otherwise have published
+   7/7 self-graded hours after two stopped being so.
+
+   **Still self-graded, in-window (5):** #24, #25, #26, #27, #30. Same 2-minute treatment
+   each. Out-of-window: #1, #2, #5, #18 (audit trail only, cannot move the metric).
+
+   **Historical note on the count:**
+   It is 10 AI-performed verdicts, not 7. The "7" carried by earlier handoffs counted only the
    tasks a previous session was explicitly asked about; `spotcheck.pending_rows()` correctly reports
    **10**, and the extra three — **#24, #25, #26** — are all IN-WINDOW and were never mentioned.
    Measured 2026-07-31 (window opens `2026-07-24 08:10:49`):
@@ -407,14 +425,18 @@ capped + logged) — note it was built *after* the gate had already been used, w
    moves the metric is hidden, but the message does not say it truncated.
 
    **`0 awaiting spot-check` does NOT mean the queue is clear.** Every deliverable has a verdict;
-   what is missing is independence. All 10 were written by the assistant. Re-running
-   `spotcheck.py pass|fail <id>` overwrites a row with a genuine read — that is the ONLY way
-   accuracy stops being self-graded, and accuracy is **30% of fitness** and the one term the system
-   structurally cannot produce for itself.
+   what is missing is independence. ~~All 10 were written by the assistant.~~ **8 of 10 now** — #28
+   and #29 carry genuine operator reads as of 2026-08-01. Re-running `spotcheck.py pass|fail <id>`
+   ~~overwrites a row~~ **appends a new verdict segment** (the old one is kept for audit; the
+   "overwrites" wording came from the tool's own docstring and was **false** — see F54), and
+   classification reads only the latest segment. Accuracy is **30% of fitness** and the one term the
+   system structurally cannot produce for itself.
 
-   **The remaining gap is not effort, it is independence.** All **7/7** in-window checks are now
-   AI-performed, so W31's accuracy term is entirely self-assessed — exactly the condition F28
-   exists to make visible, and the scorecard says so in both the file and the Telegram line.
+   **The remaining gap is not effort, it is independence.** ~~All **7/7** in-window checks are now
+   AI-performed, so W31's accuracy term is entirely self-assessed~~ — **superseded 2026-08-01: 5/7,
+   with #28 and #29 now operator-verified.** The accuracy term is no longer *entirely* self-assessed,
+   which is the first time that has been true. The scorecard still carries the F28 caveat for the
+   remaining five, in both the file and the Telegram line.
    Question: will you re-run `python orchestrator/spotcheck.py pass|fail <id>` on even **two** of
    **27, 28, 29, 30**? Re-running overwrites the row with a genuine independent read, which is the
    only thing that converts this from a self-graded number into evidence.

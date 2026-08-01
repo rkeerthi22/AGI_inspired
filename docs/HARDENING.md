@@ -1959,6 +1959,56 @@ clobber reproduced explicitly and the 0.35 floor rebuilt from a clean schema)
 
 ---
 
+### F54 — An operator re-verification could never clear the AI-performed flag · **P0 · PROVEN, found + fixed 2026-08-01**
+
+**Symptom.** The operator personally opened the cited sources for tasks 28 and 29 on
+2026-08-01, confirmed the three YouTube titles and both blog.google quotes, and the verdicts
+were recorded through `spotcheck.py pass`. `spot_checked_ai` stayed at **7 of 7**. The single
+transition the whole F28 apparatus exists to enable — self-graded → independently verified —
+was structurally impossible, and `spotcheck.py`'s own docstring promised it worked:
+*"Re-running this command yourself on the same task overwrites the row with a genuine
+independent read."* **That sentence was false.**
+
+**Root cause — two defects, the second hiding inside the fix for the first.**
+1. **`cmd_verdict()` APPENDS, it does not overwrite:**
+   `critic_notes = COALESCE(critic_notes,'') || ' | HUMAN(...)'`. That is *correct* for an
+   append-only audit trail and was deliberate. But every classifier — `weekly_fitness()`'s
+   `spot_checked_ai` and `spotcheck.pending_rows()`'s `ai_done` — grepped the **whole field**
+   for `"AI-PERFORMED CHECK"`. One historical AI check therefore marked a row AI-performed
+   **permanently**, no matter how many genuine operator reads followed it.
+2. **The marker test was substring-anywhere, but F28 specifies the note must *start* with
+   the marker.** So prose that merely *mentions* it also matched — and the first real
+   operator note said *"supersedes the earlier AI-PERFORMED CHECK on this row"*, which
+   re-flagged the very row it was clearing. Written by the assistant, in the same action
+   that was supposed to record independence: the fix carried the bug.
+
+**Fix.** `ledger.latest_human_note()` extracts only the most recent `HUMAN(...)` segment;
+`ledger.is_ai_performed()` applies F28's own stated test (`startswith`) to that segment
+alone. Both classifiers call it. Audit history is untouched — every earlier segment is still
+on the row, which is the point of appending.
+
+**Fails closed, deliberately.** Pre-convention rows that name an assistant without using the
+marker (task 2, `"verified in live browser 2026-07-18 by Claude session (not operator)"`)
+still count as non-independent. Independence is the property being *proven*, so a false
+"independent" is a corrupted result while a false "AI-performed" is only a missed credit —
+the asymmetry decides the default. That row would otherwise have started counting as
+independent the moment this fix landed, silently inflating the number this fix exists to
+protect.
+
+**Measured, before → after:** in-window independent spot-checks **0 → 2**; `spot_checked_ai`
+**7 → 5**; tasks 28/29 dropped off the "still needs YOUR confirmation" Telegram nag; task 2
+correctly *appeared* as non-independent for the first time. `accuracy` and `fitness` are
+unchanged at **0.714 / 0.914** — this fixes provenance reporting, not the score. **W is
+untouched — LOCKED**, asserted by the test.
+
+**Timing made this P0 under the execution-only directive's standing exception** ("a defect
+actively corrupting the data being collected"): the W31 scorecard cron fires **2026-08-02
+04:00**, and would have reported 7/7 self-graded — hours after two of them stopped being so.
+· `tests/test_f54.py` (18 assertions, incl. the exact live failure reproduced and the pre-F54
+substring test shown returning the wrong answer)
+
+---
+
 ## Roadmap to M2
 
 **Phase 0 — P0 hardening (before the next unattended cycle).** Now five P0s, not two:

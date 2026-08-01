@@ -220,6 +220,47 @@ def add_lesson(task_id: int, lesson: str, kind: str = "worked") -> None:
         )
 
 
+def latest_human_note(notes: str | None) -> str:
+    """The note text of the MOST RECENT `HUMAN(...)` verdict segment, or ''.
+
+    F54 (docs/HARDENING.md): `spotcheck.cmd_verdict()` APPENDS
+    (`critic_notes = COALESCE(critic_notes,'') || ?`), so a row accumulates one segment per
+    verdict and every earlier one survives verbatim. That is right for audit and wrong for
+    classification -- and everything that classified a row grepped the WHOLE field, so a
+    single historical AI check marked the row AI-performed permanently. An operator
+    re-verification could never clear it, which is precisely the transition the F28
+    convention exists to enable and `spotcheck.py`'s own docstring promised."""
+    n = notes or ""
+    i = n.rfind("| HUMAN(")
+    if i < 0:
+        i = n.rfind("HUMAN(")          # pre-convention rows carry no leading pipe
+        if i < 0:
+            return ""
+    seg = n[i:]
+    j = seg.find("): ")
+    return seg[j + 3:].strip() if j >= 0 else ""
+
+
+def is_ai_performed(notes: str | None) -> bool:
+    """True when the LATEST verdict on this row was not an independent operator read.
+
+    F28 specifies the marker must START the note, so `startswith` is the convention's own
+    test -- substring-anywhere also matched prose that merely *mentions* the marker (e.g. an
+    operator note saying "supersedes the earlier AI-PERFORMED CHECK"), which is exactly how
+    the first real operator verdicts on tasks 28/29 failed to register on 2026-08-01.
+
+    Fails CLOSED: pre-convention rows that name a Claude session without using the marker
+    (task 2, 2026-07-18) still count as non-independent. Under-claiming independence is the
+    safe direction -- independence is the thing being proven, so a false 'independent' is a
+    corrupted result while a false 'AI-performed' is only a missed credit."""
+    note = latest_human_note(notes)
+    if not note:
+        return False
+    low = note.lower()
+    return (note.startswith("AI-PERFORMED CHECK")
+            or "by claude session" in low or "(not operator)" in low)
+
+
 TERMINAL_STATUSES = ("done", "failed", "infra_failed")  # a worker call was resolved
 PENDING_STATUSES = ("queued", "quota_wait", "running", "interrupted",
                     "blocked")  # not yet resolved (blocked: run_task.py --dry-run only)
@@ -293,7 +334,7 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     # the marker text those checks were written with (see spotcheck.py's own note),
     # rather than silently discounting them from the accuracy math -- W (§3.2) and
     # this formula are locked, not a place to add a new conditional this session.
-    spot_checked_ai = sum(1 for r in spot if "AI-PERFORMED CHECK" in (r["critic_notes"] or ""))
+    spot_checked_ai = sum(1 for r in spot if is_ai_performed(r["critic_notes"]))   # F54
     interventions = sum(r["interventions"] for r in terminal)
     avg_cost = sum(r["cost_usd"] for r in terminal) / n_terminal if n_terminal else 0.0
     completion_rate = completed / n_total
