@@ -1617,6 +1617,16 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         c.row_factory = sqlite3.Row
         row = dict(c.execute("SELECT * FROM tasks WHERE task_id=?", (tid,)).fetchone())
 
+    # Prediction Machine: record a prediction BEFORE the task runs (§predict→act→measure→learn).
+    # Fault-tolerant: if the prediction machine is unavailable, the harness runs normally.
+    if mission.get("id") != "canaries":
+        try:
+            sys.path.insert(0, str(ROOT.parent))
+            from prediction_machine.integrations.batch_runner_hook import before_task_runs
+            before_task_runs(tid, row["spec"], mission["id"])
+        except Exception:
+            pass  # prediction machine is optional — never block the harness
+
     worker_cfg = roles["worker"]
     wk = week_key()
     out_dir = ROOT / "workspace" / mission_workspace(mission["id"])
@@ -1640,7 +1650,16 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         "week's run has something real to compare against."
         if baseline else "")
     if seed_is_synthesis(row["spec"]):
-        return run_synthesis(tid, row, mission, roles, out_dir, wk, baseline, baseline_note)
+        synth_status = run_synthesis(tid, row, mission, roles, out_dir, wk, baseline, baseline_note)
+        # Prediction Machine: record the actual outcome AFTER the synthesis completes.
+        # Synthesis returns early (bypassing the main-flow after hook at the bottom of
+        # run_task), so we need our own call here. Fault-tolerant: never block the harness.
+        try:
+            from prediction_machine.integrations.batch_runner_hook import after_task_completes
+            after_task_completes(tid)
+        except Exception:
+            pass
+        return synth_status
     # Promoted technique notes (§2.4): operator-approved, repo-versioned, capped ~2k.
     try:
         import promote
@@ -1854,6 +1873,15 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
     facts_n = extract_facts(tid, out, roles["manager"]["model"]) if verdict == "pass" else 0
     log(f"task {tid}: {status} verdict={verdict} facts+{facts_n} "
         f"({dest.name}, in={tok_in} out={tok_out})")
+
+    # Prediction Machine: record the actual outcome AFTER the task completes.
+    # Fault-tolerant: if the prediction machine is unavailable, the harness runs normally.
+    try:
+        from prediction_machine.integrations.batch_runner_hook import after_task_completes
+        after_task_completes(tid)
+    except Exception:
+        pass  # prediction machine is optional — never block the harness
+
     return status
 
 

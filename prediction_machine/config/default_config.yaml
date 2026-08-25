@@ -1,0 +1,27 @@
+prediction_machine:
+  database_path: "S:/AGI_like/prediction_machine/data/predictions.db"
+  reports_dir: "S:/AGI_like/prediction_machine/reports/daily"
+
+  # Model versions
+  model_versions:
+    task_outcome: "task_outcome_v1"
+    video_engagement: "video_engagement_v1"
+    skill_safety: "skill_safety_v2"
+    miks_campaign: "miks_campaign_v1"
+
+  # Outcome due windows (how long until outcome is expected)
+  outcome_windows:
+    task_outcome: "2h"  # 2 hours
+    video_engagement_24h: "24h"
+    video_engagement_3d: "3d"
+    video_engagement_7d: "7d"
+    skill_safety: "7d"  # 1 week to observe canary regression
+    miks_campaign: "7d"  # 7-day campaign
+
+  # Anti-cheat
+  min_sample_size_for_metrics: 10
+  max_error_for_valid: 100.0  # predictions with >100% error are still valid, just wrong
+
+  # Integration
+  auto_predict_tasks: true
+  auto_collect_outcomes: true
