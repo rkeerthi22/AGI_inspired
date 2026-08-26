@@ -5,7 +5,6 @@ day boundaries only disagree during part of the day (00:00-02:00 local at UTC+2)
 purely row-based test would pass on a buggy build for 22 hours out of 24 and look green.
 The boundary-expression assertions below hold regardless of when this runs.
 """
-import shutil
 import sqlite3
 import sys
 import tempfile
@@ -18,8 +17,30 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import policy  # noqa: E402
 import ledger  # noqa: E402
 
+# F12: LEDGER_DB is injectable so the test does not need to copy the live DB.
+# Copying the live ledger.db (as the previous version did) brought in today's real
+# W35 task rows (ids 65, 66, 68, 69, 70 etc.), which the test's "delete task_id >= 9700"
+# cleanup did NOT remove (those ids are below 9700), and the test then asserted
+# tokens_used_today() == planted_value while the function was actually returning
+# planted_value + ~3.08M of real W35 spend. Using a fresh empty schema gives the
+# policy code the same column layout without any data the test did not plant.
+_TASKS_SCHEMA = """
+CREATE TABLE tasks (
+    task_id INTEGER PRIMARY KEY,
+    mission_id TEXT,
+    spec TEXT,
+    status TEXT,
+    finished_at TEXT,
+    tokens_in INTEGER,
+    tokens_out INTEGER,
+    pass_criteria TEXT,
+    created_at TEXT
+);
+"""
+
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
-shutil.copy2(ROOT / "ledger" / "ledger.db", tmp)
+with sqlite3.connect(tmp) as _c:
+    _c.executescript(_TASKS_SCHEMA)
 policy.LEDGER_DB = tmp
 ledger.LEDGER_DB = tmp
 fails = []
