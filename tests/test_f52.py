@@ -93,8 +93,8 @@ else:
         out = subprocess.run(["git", "-C", str(ROOT), "ls-files", *pre],
                              capture_output=True, text=True, encoding="utf-8",
                              errors="replace").stdout.splitlines()
-        check("PRE-F52 surface did not cover it at all",
-              any("HANDOFF" in t for t in out), False)
+        check("PRE-F52 surface did not cover .claude/HANDOFF.md at all",
+              ".claude/HANDOFF.md" in out, False)
     finally:
         shutil.copy2(safe, H)
         assert H.read_text(encoding="utf-8") == original

@@ -12,7 +12,7 @@ Dependency direction (per the W9 plan, section 1):
 This module depends only on:
     - stdlib (json, re, subprocess, urllib)
     - yaml (for load_fallback_chain)
-    - ROOT (pathing) -- this module's own definition, mirroring batch_runner.py
+    - runtime_context.ROOT / runtime_context.log
 
 What does NOT live here:
     - _strip_tool_chatter: a string cleaner used by both run_task (scheduler) and
@@ -27,11 +27,11 @@ from pathlib import Path
 import json
 import re
 import subprocess
-from datetime import datetime
 
-# Paths shared with batch_runner.py. Both files add `orchestrator/` to sys.path,
-# so importing ROOT here works the same as it does in batch_runner.
+# Paths and logging are shared via runtime_context.py (Move 5a) so every
+# orchestrator module writes to the same run-scoped log stream.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+from runtime_context import ROOT, log  # noqa: E402
 import yaml  # for load_fallback_chain()
 
 # Module constants needed by the moved functions.
@@ -44,21 +44,6 @@ CHARS_PER_TOKEN = 4          # rough English ratio -- only ever used for a fits/
                              # decision with a large margin, never for accounting (that is
                              # measured from the provider's own counts; see F33)
 RESPONSE_RESERVE_TOKENS = 1500   # a deliverable still has to fit in the reply
-
-# `log` and `ROOT` are provided by a tiny import-block at the top of execution.py,
-# but they need to live SOMEWHERE accessible from this module. batch_runner.py
-# defines them; we mirror the bare minimum here so the moved functions don't have
-# to be rewritten to take log() / ROOT as parameters.
-ROOT = Path(__file__).resolve().parent.parent
-
-def log(msg: str) -> None:
-    """Same shape as batch_runner.log(): print with a timestamp, also append to RUNS/<batch>.log
-    if one is open. batch_runner.py owns the actual file handle; this is a no-op stub that
-    will be replaced by a real implementation once scheduler.py is moved (which owns
-    the run-scoped log file). For now, the moved functions call into the live
-    `log` via the re-export shim that batch_runner.py will add."""
-    print(f"[{datetime.now().isoformat(timespec='seconds')}] {msg}")
-
 
 def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
                   timeout: int = WORKER_TIMEOUT_S) -> tuple[str, dict]:

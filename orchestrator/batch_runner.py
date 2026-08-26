@@ -31,10 +31,10 @@ import citecheck  # noqa: E402
 import ledger  # noqa: E402
 import policy  # noqa: E402
 
-ROOT = Path(__file__).resolve().parent.parent
-RUNS = ROOT / "runs"
-MISSIONS = ROOT / "missions"
-ESCALATIONS = ROOT / "workspace" / "ESCALATIONS.md"
+from runtime_context import (  # noqa: E402
+    ROOT, RUNS, MISSIONS, ESCALATIONS, log, set_log_file,
+)
+
 MAX_WORKER_CALLS_PER_RUN = 12          # policy cost cap proxy (Ollama returns no $)
 # Raised 900 -> 1800 on 2026-07-28. 900s was calibrated against UNDER-SPECIFIED tasks: before
 # F20 the worker never received the mission's done-definition, so it did far less research
@@ -50,51 +50,11 @@ MAX_WORKER_CALLS_PER_RUN = 12          # policy cost cap proxy (Ollama returns n
 # COUPLED: ledger.LEASE_SECONDS must stay > this + ~360s (raised to 2400 in the same commit).
 WORKER_TIMEOUT_S = 1800
 
-_log_file = None
-
-
-def log(msg: str) -> None:
-    line = f"[{datetime.now().strftime('%H:%M:%S')}] {msg}"
-    print(line, flush=True)
-    if _log_file:
-        with open(_log_file, "a", encoding="utf-8") as f:
-            f.write(line + "\n")
-
 
 def load_roles() -> dict:
     return yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))["roles"]
 
 
-def escalate(reason: str, trigger: str | None = None, task_id: int | None = None) -> None:
-    # trigger, when given, must be one of policy.yaml's own escalation.triggers
-    # (F13, docs/HARDENING.md) -- validated so the declared list stays authoritative
-    # rather than becoming stale decoration the moment a caller typos it.
-    policy.validate_trigger(trigger)
-    tagged = f"[{trigger}] {reason}" if trigger else reason
-    ESCALATIONS.parent.mkdir(parents=True, exist_ok=True)
-    with open(ESCALATIONS, "a", encoding="utf-8") as f:
-        f.write(f"- {datetime.now().isoformat(timespec='seconds')} — {tagged}\n")
-    log(f"ESCALATION -> {ESCALATIONS.name}: {tagged}")
-    # F53 (docs/HARDENING.md): a TASK-scoped escalation is an intervention -- the system
-    # could not finish this task itself and asked a human. Until now that fact reached a
-    # markdown file and nothing else, so the ledger column that scores it read 0 forever
-    # and 25% of fitness was awarded unconditionally. Run-scoped escalations (ollama
-    # unreachable, batch aborted) pass no task_id and are deliberately not counted: they
-    # are infrastructure, not a verdict on any one task's autonomy -- the same distinction
-    # F37 draws between infra failure and the analyst being wrong. Fail-soft: an
-    # escalation must still be delivered even if the ledger write fails.
-    if task_id is not None:
-        try:
-            ledger.record_intervention(task_id, trigger or "escalation")
-        except Exception as e:
-            log(f"WARNING: intervention not recorded for task {task_id}: {e}")
-    # Best-effort push: inert until the operator sets a Telegram home channel
-    # (they must message the bot once — platform rule). File above is the source of truth.
-    try:
-        import scorecard
-        scorecard.send_telegram(f"⚠ AGI harness escalation: {reason}")
-    except Exception:
-        pass
 
 
 # ── model calls ────────────────────────────────────────────────────────────────
@@ -1189,7 +1149,7 @@ def main() -> int:
     args = ap.parse_args()
 
     RUNS.mkdir(exist_ok=True)
-    _log_file = RUNS / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+    set_log_file(RUNS / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
     import runlock
     try:

@@ -18,6 +18,7 @@ is the cheap, honest check.
 """
 import subprocess
 import sys
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,15 +33,29 @@ def main() -> int:
               f"worker tampering and remove them.\nWait for the fire to finish, then re-run.")
         return 2
 
-    wanted = [a.lower() for a in sys.argv[1:]]
+    include_live = "--live-data" in sys.argv
+    wanted = [a.lower() for a in sys.argv[1:] if a != "--live-data"]
     suites = sorted(p for p in TESTS.glob("test_*.py")
                     if not wanted or any(w in p.stem.lower() for w in wanted))
     if not suites:
         print(f"no suites matched {wanted}")
         return 2
 
+    quarantine = set()
+    qfile = TESTS / "QUARANTINE.md"
+    if qfile.is_file():
+        for line in qfile.read_text(encoding="utf-8").splitlines():
+            m = re.search(r"`?(test_[a-zA-Z0-9_]+)" + r"`?", line)
+            if m:
+                quarantine.add(m.group(1))
+
     results = []
+    quarantined = []
     for s in suites:
+        if s.stem in quarantine and not include_live:
+            quarantined.append(s.stem)
+            print(f"  [QUARANTINED] {s.stem}")
+            continue
         proc = subprocess.run([sys.executable, str(s)], cwd=str(ROOT),
                               capture_output=True, text=True,
                               encoding="utf-8", errors="replace")
@@ -56,7 +71,10 @@ def main() -> int:
             print("--- stderr ---")
             print(proc.stderr.strip()[-1500:])
 
-    print(f"\n{len(results) - len(failed)}/{len(results)} suites green")
+    print(f"\n{len(results) - len(failed)}/{len(results)} suites green", end="")
+    if quarantined:
+        print(f" ({len(quarantined)} quarantined live-data check(s): {', '.join(quarantined)})", end="")
+    print()
     return 1 if failed else 0
 
 

@@ -1,438 +1,247 @@
-# Refactor Plan — `batch_runner.py` → 5 modules (Week 9)
-**Status: DRAFT, awaiting operator approval before any code moves**
+# Refactor Plan — `batch_runner.py` split (Week 9, revised)
+**Status: APPROVED FOR 5a–5e, one move at a time, tests green after each**
 **Author: AGI_like agent, 2026-08-26**
-**Depends on: `OSINT_INTEGRATION_PLAN.md` §1 + §7 (operator-signed W9 transition)**
+**Revised: 2026-08-26 after operator review of Move 4 + review.txt**
 
 ---
 
-## 0. Why this is a separate plan from OSINT
+## 0. Why this revision exists
 
-The OSINT plan's §1 says the 5-file split is the prerequisite for OSINT.
-It is not a part of the OSINT plan because it has its own risk profile
-and its own sequencing problem: the OSINT plan is "add new capability
-without growing `batch_runner.py`." This plan is "move existing code
-without breaking anything." Different shape of work, different review
-shape. Two documents, two approvals.
+The original plan proposed a 1,300-line Move 5 (`scheduler.py`) that would
+have contained every function left in `batch_runner.py`: scheduling, evaluation,
+canaries, fact extraction, CLI glue and shared helpers. The operator correctly
+identified that this is not a module boundary — it relocates the monolith rather
+than finishing the refactor.
 
----
-
-## 1. The actual shape of `batch_runner.py` today
-
-I read the file end-to-end before planning the split. Function-level
-survey (line numbers from the version at commit `075be4f`):
-
-```
-2,324 lines, 53 top-level functions, 1 class.
-
-  integrity    369 lines / 10 fns   (fs-guard, db-integrity, escalate, preflight)
-  execution    462 lines / 16 fns   (model calls, failover, db integrity check)
-  prompts      250 lines /  9 fns   (mission parsing, brief builder, fact lines)
-  evaluation   456 lines /  5 fns   (run_critic, run_synthesis, run_canaries)
-  scheduler    570 lines / 10 fns   (run_task, queue, retry, expire, reconcile)
-  top-level    162 lines /  4 fns   (main, _run, log, load_roles)
-                                 ---
-  total      2,269 lines / 54 fns   (some helpers counted twice)
-```
-
-The OSINT plan's 5-bucket labels work, but the buckets are not
-equal-sized. **`scheduler.run_task` alone is 324 lines** — the
-5-file split doesn't shrink that function, it just moves it.
-The split is about **separating concerns**, not reducing total
-size. A future `run_task` decomposition is a separate refactor
-that should not happen in the same commit as the file split.
-
-`batch_runner.py` itself stays as the top-level entry point: it
-will contain `main()`, `_run()`, `log()`, `load_roles()`, and the
-`*`-imports of the 5 new modules. ~170 lines. That's the file
-that `orchestrator/batch.cmd` calls.
+This revision replaces the single Move 5 with **Moves 5a–5e**, each with a
+real separation of concerns, no duplicated helpers, no wildcard imports, and no
+"leftovers" module. `batch_runner.py` remains a thin compatibility/entry-point file.
 
 ---
 
-## 2. The dependency graph (and the ordering it implies)
+## 1. What has already landed
 
-Reading every `def` for cross-references:
+| Move | File | What moved | Status |
+|---|---|---|---|
+| Move 1 | `orchestrator/integrity.py` | fs-guard, db-guard, escalate, preflight | committed |
+| Move 2 | `orchestrator/execution.py` | model calls, failover, context checks | committed |
+| Move 3 | `orchestrator/prompts.py` | prompt building, mission parsing, brief block | committed |
+| Move 4 | `orchestrator/evaluation.py` | `seed_is_synthesis`, `retract_facts` (leaf only) | committed |
+| Move 5a | `orchestrator/runtime_context.py` | shared logging + path constants | **done, not yet committed** |
 
-```
-  integrity   ──→ execution      (preflight → db_integrity_check, fs_integrity_check)
-  execution   ──→ (no cross)
-  prompts     ──→ (no cross)
-  evaluation  ──→ execution      (run_critic, run_synthesis → *_with_failover)
-  evaluation  ──→ prompts        (run_synthesis → build_brief_block)
-  scheduler   ──→ integrity      (run_task → escalate)
-  scheduler   ──→ execution      (run_task → worker_with_failover via run_critic)
-  scheduler   ──→ prompts        (run_task → pass_criteria_for, task_scope_note)
-  scheduler   ──→ evaluation     (run_task → run_synthesis, run_critic)
-  scheduler   ──→ prediction_machine.integrations (already wired in f6b58c1)
-```
+Move 4 was intentionally leaf-only: the full evaluation layer (`run_critic`,
+`run_synthesis`, `run_canaries`, `extract_facts`) depends on scheduler helpers
+(`week_key`, `queue_mission_tasks`, `run_task`) that were still in
+`batch_runner.py`. Extracting it cleanly requires scheduler state to move first.
 
-This is a DAG, not a cycle. Layered top-to-bottom:
-
-```
-  L0: integrity  (no internal deps)
-  L1: execution  (only L0)
-  L2: prompts    (no deps)
-  L3: evaluation (L1 + L2)
-  L4: scheduler  (L0 + L1 + L2 + L3 + prediction_machine)
-  T: batch_runner.py (L4 only — and the CLI surface)
-```
-
-Importing in this order is cycle-free. The natural commit sequence
-follows the layering: move integrity first, then execution, then
-prompts, then evaluation, then scheduler. **One module per commit.
-Each commit must keep all 15 green suites green.**
+Move 5a was pulled forward to fix a logging regression: `integrity.py` and
+`execution.py` had their own `log()` implementations, so failover and
+escalation messages were not reaching the active run log. `runtime_context.py`
+gives every module a single shared logger.
 
 ---
 
-## 3. The sequence — 5 moves, each independently shippable
+## 2. The remaining moves (5b–5e)
 
-### Move 1: `orchestrator/integrity.py`
+### 5b — Scheduler state functions
+**File:** `orchestrator/scheduler.py`
 
-Functions moving out of `batch_runner.py`:
+Pure scheduling helpers that manage task lifecycle state in `ledger.db`:
 
-```
-L68-100   escalate                (33 lines)
-L401-416  _db_snapshot            (16 lines)
-L417-421  db_integrity_snapshot   ( 5 lines)
-L422-532  db_integrity_check      (111 lines)
-L533-600  _untracked_files        (68 lines)
-L601-625  _local_exclude_sources  (25 lines)
-L626-643  _local_exclude_state    (18 lines)
-L644-662  _masked_under_protected (19 lines)
-L663-672  _untracked_of           (10 lines)
-L673-692  _tracked_hashes         (20 lines)
-L693-714  fs_integrity_snapshot   (22 lines)
-L715-850  fs_integrity_check      (136 lines)
-L881-898  preflight               (18 lines)
-                            TOTAL: ~500 lines
-```
+- `queue_mission_tasks`
+- `expire_stale_parked`
+- `reconcile_interrupted_tasks`
+- `retry_failed_this_fire`
+- `_check_repeated_failure`
+- `mission_workspace`
+- `accumulated_tokens`
+- `is_first_run_for_mission`
+- `week_key`
+- `parse_mission` (used by queue + scheduler)
 
-But `db_integrity_*` and `fs_integrity_*` touch the same
-`PROTECTED_PATHS` / `writable_roots(pol)` machinery that
-`policy.py` already exposes. They could either:
-- (a) all live in `integrity.py` together (~500 lines)
-- (b) split further: `integrity.py` for fs-guard,
-  `integrity_db.py` for db integrity (~370 + ~130)
+Dependencies:
+- `runtime_context` (paths, log)
+- `ledger`
+- `policy`
+- `prompts` (`pass_criteria_for`)
+- `evaluation` (`seed_is_synthesis`)
 
-Recommendation: **(a) for now.** The 500 lines is still
-smaller than the original `batch_runner.py` and keeps the
-two integrity paths in one file. A further split is a
-future refactor.
+No model calls, no integrity guards, no CLI.
 
-**Touch surface for tests:**
-- `test_f42.py`, `test_f46.py`, `test_f47.py`, `test_f48.py`,
-  `test_f52.py`, `test_throughput.py`, `test_f36.py` all
-  call into the integrity machinery. They import via
-  `from orchestrator import batch_runner; batch_runner.<fn>`
-  patterns. After the move, either (i) `batch_runner` keeps
-  thin re-export shims for backward compatibility, OR
-  (ii) the tests are updated to import from `integrity`
-  directly.
+### 5c — Evaluation services
+**File:** `orchestrator/evaluation.py` (extends existing file)
 
-Recommendation: **(i) re-export shims**, not test edits,
-for Move 1. Reasons: the change is purely organizational,
-updating 7 test files at once multiplies the failure modes
-a refactor can introduce, and F52 already made
-`.claude/HANDOFF.md` a file the agents must not lose
-visibility on — minimizing test churn protects the safety
-net.
+The grading and memory-update stage. These functions call execution + prompts
+but do not manage the outer task queue:
 
-**Commit message:**
-```
-orchestrator: extract integrity.py from batch_runner.py
+- `run_critic`
+- `run_synthesis`
+- `run_canaries`
+- `extract_facts`
+- existing: `seed_is_synthesis`, `retract_facts`
 
-Move fs-guard, db-integrity, escalate, and preflight into
-their own module. No behavior change. Re-export the moved
-functions from batch_runner.py so existing callers (including
-7 test files) continue to work without edits.
-```
+Dependencies:
+- `runtime_context`
+- `integrity` (db/fs integrity guards)
+- `execution` (worker/failover)
+- `prompts` (briefs, criteria, scope)
+- `ledger`, `policy`
+- `citecheck`
+- `promote` (rollback check)
 
-### Move 2: `orchestrator/execution.py`
+### 5d — Task execution decomposition
+**File:** `orchestrator/task_runner.py`
 
-Functions moving:
+A single `run_task` of ~286 lines is too large and does too many things.
+Decompose it into smaller, independently testable paths while keeping the public
+`run_task` entry point as a thin dispatcher:
 
-```
-L101-124  hermes_worker            (24 lines)
-L125-197  ollama_chat              (73 lines)
-L198-218  _is_local_model          (21 lines)
-L219-223  load_fallback_chain      ( 5 lines)
-L224-240  _quota_group             (17 lines)
-L241-269  _fits_context            (29 lines)
-L270-275  _context_skip_note       ( 6 lines)
-L276-299  _failover_candidates     (24 lines)
-L300-346  worker_with_failover     (47 lines)
-L347-400  synthesis_with_failover  (54 lines)
-L851-856  _strip_tool_chatter      ( 6 lines)
-L857-862  is_quota_error           ( 6 lines)
-L863-880  worker_failed            (18 lines)
-                              TOTAL: ~330 lines
-```
+- `_prepare_task_input` — build prompt, scope note, skill injection
+- `_run_research_task` — worker path, integrity wrap, outcome capture
+- `_run_synthesis_task` — synthesis routing
+- `_record_outcome` — ledger write, fact extraction, lesson capture
+- `run_task` — orchestrates the above
 
-`execution.py` imports from `integrity.py` (the
-`PROTECTED_PATHS` lookup is exposed by integrity's
-`db_integrity_snapshot`, which is called by execution's
-model-call path indirectly).
+Dependencies: all lower layers plus `prediction_machine.integrations.batch_runner_hook`.
 
-`db_integrity_check` was placed in Move 1's integrity.py per
-recommendation (a). That is *only* correct if
-`db_integrity_check` is also considered execution code. The
-two views are compatible: integrity.py's `db_integrity_check`
-is a containment guard, and execution.py's calls into model
-services are the things being contained. Both are correct
-placements; I went with integrity because the function is
-a guard, not an execution path.
+### 5e — CLI / entry point
+**File:** `orchestrator/batch_runner.py` (shrinks to ~50 lines)
 
-**Touch surface for tests:**
-- No tests call `hermes_worker` / `ollama_chat` /
-  `worker_with_failover` directly. They all go through
-  `run_task` (Move 5). Same re-export shim strategy.
-- `test_f37.py`, `test_f38.py`, `test_f39_f40.py`,
-  `test_f50.py` exercise these paths via `run_task`.
-  Re-export shims cover them.
+Only the command-line surface and `_run` dispatch remain:
 
-### Move 3: `orchestrator/prompts.py`
+- `main`
+- `_run`
+- `load_roles`
+- re-export shims for backwards compatibility (until tests migrate)
 
-Functions moving:
-
-```
-L899-912   parse_mission            (14 lines)
-L913-916   week_key                 ( 4 lines)
-L955-968   pass_criteria_for        (14 lines)
-L969-1006  deliverable_requirements (38 lines)
-L1007-1048 task_scope_note          (42 lines)
-L1049-1063 is_first_run_for_mission (15 lines)
-L1064-1075 mission_objective        (12 lines)
-L1076-1090 _parse_json_array        (15 lines)
-L1157-1203 _recent_fact_lines       (47 lines)
-L1204-1223 seed_is_synthesis        (20 lines)
-L1330-1376 build_brief_block        (47 lines)
-                              TOTAL: ~268 lines
-```
-
-(`week_key` and `parse_mission` are arguably scheduler
-functions, but they are tiny, have no state, and are used
-by `run_task` in a way that makes them naturally part of
-the prompt-building context. Putting them in prompts keeps
-Move 5 leaner.)
-
-`prompts.py` has no internal cross-module deps. It does
-take `mission_id` strings and return text blobs. Cleanest
-module in the split.
-
-**Touch surface for tests:**
-- No direct tests for `pass_criteria_for`,
-  `deliverable_requirements`, `task_scope_note`,
-  `is_first_run_for_mission`, `mission_objective`,
-  `_parse_json_array`, `_recent_fact_lines`,
-  `seed_is_synthesis`, `build_brief_block`. All are
-  exercised through `run_task`.
-- `test_f31.py` (task_scope_note coverage) — re-export
-  shim covers it.
-
-### Move 4: `orchestrator/evaluation.py`
-
-Functions moving:
-
-```
-L1091-1139 extract_facts            (49 lines)
-L1140-1156 retract_facts            (17 lines)
-L1224-1329 run_critic               (106 lines)
-L1377-1510 run_synthesis            (134 lines)
-L2025-2174 run_canaries             (150 lines)
-                              TOTAL: ~456 lines
-```
-
-(`run_canaries` is a long function but not a structurally
-complex one — it iterates a fixed set of spec strings and
-calls `worker_with_failover` once per spec. It can be
-left as-is in Move 4.)
-
-`evaluation.py` depends on `execution.py` and `prompts.py`.
-Both are already in place by Move 4.
-
-**Touch surface for tests:**
-- `test_f31.py` (scope), `test_f30.py` (synthesis
-  routing), `test_f37.py` (canary infra-failure),
-  `test_f54.py` (spot-check). Re-export shims cover all.
-- One quirk: `run_canaries` calls
-  `worker_with_failover` which is in `execution.py`. After
-  Move 4, `evaluation.py` does
-  `from orchestrator.execution import worker_with_failover`.
-  The re-export shim in `batch_runner.py` keeps
-  `batch_runner.worker_with_failover` working too.
-
-### Move 5: `orchestrator/scheduler.py`
-
-Functions moving:
-
-```
-L917-954   queue_mission_tasks         (38 lines)
-L1511-1551 expire_stale_parked         (41 lines)
-L1552-1593 reconcile_interrupted_tasks (42 lines)
-L1594-1612 accumulated_tokens          (19 lines)
-L1613-1936 run_task                    (324 lines)
-L1937-1984 retry_failed_this_fire      (48 lines)
-L1985-1999 _check_repeated_failure     (15 lines)
-L2000-2024 mission_workspace           (25 lines)
-                                  TOTAL: ~552 lines
-```
-
-This is the largest single move. **`run_task` is the
-orchestrator's main loop** — 324 lines that call every
-other module. After Move 5, `scheduler.py` depends on
-integrity, execution, prompts, evaluation, and the
-already-existing `prediction_machine.integrations`.
-
-**Touch surface for tests:**
-- Almost every test goes through `run_task` or its
-  helpers. Re-export shims cover everything.
-- `test_throughput.py`, `test_f54.py`,
-  `test_f50.py`, `test_f53.py`, `test_h7.py`,
-  `test_h7_gate.py` — re-export shim strategy still
-  applies.
-
-After Move 5, `batch_runner.py` is ~170 lines: just
-`main()`, `_run()`, `log()`, `load_roles()`, and the
-imports of the 5 new modules. **Final commit message:**
-
-```
-orchestrator: extract scheduler.py from batch_runner.py
-
-Move queue_mission_tasks, expire_stale_parked,
-reconcile_interrupted_tasks, accumulated_tokens,
-run_task, retry_failed_this_fire, _check_repeated_failure,
-and mission_workspace into their own module. After this
-commit, batch_runner.py is the entry-point + CLI surface
-only; the 5 new modules are the actual orchestrator.
-```
+`batch.cmd` and Windows scheduled tasks continue to call
+`python orchestrator/batch_runner.py` unchanged.
 
 ---
 
-## 4. The 8 things that can break, and how each is guarded
+## 3. The corrected dependency graph
 
-| Risk | Likelihood | Guard |
+After Move 5a:
+
+```
+runtime_context
+    ↑
+integrity  →  execution  →  prompts  →  evaluation
+    ↑            ↑            ↑            ↑
+    └────────────┴────────────┴────────────┘
+                  ↓
+              scheduler
+                  ↓
+              task_runner
+                  ↓
+            batch_runner.py (CLI)
+```
+
+`scheduler` may import `evaluation` for `run_canaries` only if `run_canaries` is
+kept in scheduler. If `run_canaries` lives in evaluation, then scheduler
+imports evaluation and evaluation stays a leaf. The exact direction will be
+decided during 5c/5d; the rule is: **no cycles**.
+
+---
+
+## 4. AST-level findings that shaped this split
+
+Function sizes (after Move 5a) from `batch_runner.py`:
+
+| Function | Lines | Proposed home |
 |---|---|---|
-| Re-export shim misses a name | low | After each move, run `python tests/run_all.py` AND `python -c "from orchestrator import batch_runner; print([n for n in dir(batch_runner) if not n.startswith('_')])"` and compare to pre-move list. |
-| Cross-module import creates a cycle | low | Move in layering order (integrity → execution → prompts → evaluation → scheduler). Don't write `from scheduler import ...` anywhere except in `batch_runner.py`. |
-| Test that monkey-patches a moved function via `batch_runner.<fn>` breaks | medium | Re-export shim preserves the patch target. Verify by running test_throughput.py and test_f54.py after Move 5. |
-| The 3 still-red suites (test_baseline, test_f49, test_f52) — already broken pre-refactor, refactor might mask the failure | low | Run `python tests/run_all.py` before AND after each move; compare. If a "was red, still red" pair goes "was red, now green" or vice versa, halt. |
-| `_run()` and `main()` reference module-level constants that move | low | Both reference `LEDGER_DB`, `PROTECTED_PATHS`, `POLICY_PATH` via `policy`/`ledger`. Those are imported in `batch_runner.py` and stay there. The 5 new modules import `policy`/`ledger` themselves. |
-| F15 (bare `git commit` sweeps unrelated work) | low | Each move is one explicit-pathspec commit. Predictions.db is gitignored now. |
-| F42 (root file accidentally added during move) | low | All moves stay within `orchestrator/`. The only top-level change after Move 5 is that `batch_runner.py` shrinks and 5 new files appear. No new root entries. |
-| F47 (an `.gitignore` rule masks the new files) | very low | None of the moved functions touch gitignore rules. The 5 new `.py` files match no gitignore pattern. The fs-guard will detect them as expected new tracked files. |
+| `run_task` | 286 | `task_runner.py` (decomposed) |
+| `run_canaries` | 144 | `evaluation.py` |
+| `run_synthesis` | 132 | `evaluation.py` |
+| `_run` | 117 | `batch_runner.py` |
+| `run_critic` | 84 | `evaluation.py` |
+| `extract_facts` | 47 | `evaluation.py` |
+| `retry_failed_this_fire` | 43 | `scheduler.py` |
+| `expire_stale_parked` | 39 | `scheduler.py` |
+| `reconcile_interrupted_tasks` | 39 | `scheduler.py` |
+| `queue_mission_tasks` | 36 | `scheduler.py` |
+| `accumulated_tokens` | 17 | `scheduler.py` |
+| `is_first_run_for_mission` | 13 | `scheduler.py` |
+| `_parse_json_array` | 13 | `scheduler.py` or `runtime_context.py` utilities |
+| `_check_repeated_failure` | 13 | `scheduler.py` |
+| `parse_mission` | 12 | `scheduler.py` |
+| `mission_workspace` | 4 | `scheduler.py` |
+| `week_key` | 2 | `scheduler.py` |
+| `load_roles` | 2 | `batch_runner.py` |
+| `_strip_tool_chatter` | 4 | `runtime_context.py` utilities |
+
+Cross-module bare calls inside `batch_runner.py`:
+
+- `_check_repeated_failure` → `integrity.escalate`
+- `_run` → `integrity.escalate`, `integrity.preflight`
+- `extract_facts` → `execution.ollama_chat`
+- `queue_mission_tasks` → `prompts.pass_criteria_for`
+- `retry_failed_this_fire` → `evaluation.seed_is_synthesis`
+- `run_canaries` → `integrity.db_integrity_*`, `integrity.fs_integrity_*`, `integrity.escalate`, `execution.worker_*`
+- `run_critic` → `execution.ollama_chat`
+- `run_synthesis` → `prompts.*`, `integrity.escalate`, `execution.synthesis_with_failover`
+- `run_task` → `integrity.*`, `prompts.*`, `evaluation.seed_is_synthesis`, `execution.worker_*`
+
+Late imports (inside functions) that will need to move with their owners:
+
+- `sqlite3` — used by most scheduler + evaluation functions
+- `scorecard`, `promote`, `spotcheck` — `_run`
+- `runlock` — `main`
+- `promote` — `run_canaries`, `run_task`
+- `urllib.error` — `run_synthesis`
+- `prediction_machine.integrations.batch_runner_hook` — `run_task`
+
+Keyword/callback references (monkey-patch targets in tests):
+
+- `ledger.finish_task(..., tokens_in=..., tokens_out=...)` in `run_canaries`, `run_synthesis`, `run_task`
+- `run_critic(..., scope_note=...)` in `run_synthesis`, `run_task`
+- `escalate(..., task_id=...)` in `run_synthesis`, `run_task`
+- `synthesis_with_failover(..., usage_out=...)` in `run_synthesis`
+
+These are internal data-flow hooks, not public extension points. The refactor
+will keep them as explicit keyword arguments so tests can continue to patch
+them where needed.
 
 ---
 
-## 5. The test-gating rule
+## 5. Test gate after each move
 
-**After each of Moves 1–5, the test suite must show `15/18 green`
-exactly — no more, no less.** Specifically:
+After every move:
 
-- The 15 already-green suites stay green.
-- The 3 already-red suites stay red at the same assertions.
+```
+python tests/run_all.py
+```
 
-If a move causes any green suite to fail, halt. The diagnosis
-hierarchy is: re-export shim → import cycle → test-patch
-target → cross-module constant lookup → behavior regression.
-Steps 1–4 are recoverable within the same session; step 5 is
-a containment event (revert and re-plan).
+must report **all non-quarantined suites green**. The only quarantined suite is
+`test_baseline.py`, a live-data check that copies the real `ledger.db`. It is
+run separately with:
 
-The 3 red suites are NOT in scope for this refactor. They
-were deferred per the W4–W8 execution-only directive. They
-stay deferred. The refactor does not fix them; it must also
-not break them further.
+```
+python tests/run_all.py --live-data
+```
 
----
-
-## 6. The single largest risk: `run_task`'s 324 lines
-
-`run_task` is the only function in the file that is both
-huge AND structurally entangled. It calls:
-
-- `before_task_runs`, `after_task_completes` (prediction_machine)
-- `extract_facts`, `seed_is_synthesis`, `run_synthesis`,
-  `build_brief_block` (prompts + evaluation)
-- `worker_with_failover`, `synthesis_with_failover` (execution)
-- `pass_criteria_for`, `deliverable_requirements`,
-  `task_scope_note`, `is_first_run_for_mission`,
-  `mission_objective` (prompts)
-- `escalate` (integrity)
-- `promote.active_skills_for` (promote.py — stays put)
-- `policy.tokens_used_today`, `policy.compliance_prompt_block`,
-  `policy.is_path_writable` (policy.py — stays put)
-- `_check_repeated_failure` (scheduler)
-
-That is 6+ cross-module calls plus inline prompt
-construction. The 5-file split will turn these into
-explicit imports but will NOT shrink `run_task` itself.
-A future refactor that decomposes `run_task` into
-`_run_research_task`, `_run_synthesis_task`,
-`_record_outcome` etc. is a separate effort and is
-explicitly out of scope for this plan.
-
-This means **after the 5-file split, `scheduler.py`
-will be 552 lines and `run_task` will still be 324
-of those.** That is fine. The point of the split
-is *separation of concerns*, not *lines per file*.
-Each module becomes independently testable and
-independently understandable. A future `run_task`
-decomposition can happen in its own refactor, with
-its own regression suite, on a stable foundation.
+No move proceeds until the deterministic gate is green.
 
 ---
 
-## 7. The schedule (operator-approved cadence, not optimistic)
+## 6. What this plan is NOT
 
-| Day | Move | Verification |
-|---|---|---|
-| D1 | Move 1: integrity.py | `python tests/run_all.py` → 15/18 (same as today) |
-| D1 | Move 2: execution.py | same |
-| D2 | Move 3: prompts.py | same |
-| D2 | Move 4: evaluation.py | same |
-| D3 | Move 5: scheduler.py | same — plus a `wc -l orchestrator/*.py` to confirm the size distribution |
-| D3 | Push all 5 commits to origin master | `git push origin master`, then `git ls-remote origin master` shows the new tip |
-
-D1–D3 is 3 working days of agent time. **No 4-day stretch**
-— the OSINT plan's W10 OSINT work begins after this lands
-and tests stay green for 48 hours.
-
-If any single day's commit doesn't pass the 15/18 gate, halt
-that move. Don't push, don't move to the next one. Investigate,
-revert if needed, re-plan.
+- **Not a 1,300-line leftovers module.** Move 5 of the original plan is dead.
+- **Not adding capability.** Moves 5b–5e are purely organizational.
+- **Not changing behavior.** Each function moves byte-for-byte; only imports and
+decomposition change.
+- **Not touching OSINT.** OSINT expansion stays on hold until this refactor lands
+and tests are stable.
 
 ---
 
-## 8. What this plan is NOT
+## 7. Operator approval required
 
-- **Not a rewrite of `run_task`.** The 324-line function
-  moves into `scheduler.py` byte-for-byte. Its internals
-  are not touched.
-- **Not an opportunity to fix the 3 red test suites.**
-  They were deferred before the directive override; they
-  stay deferred. If a move inadvertently makes them
-  green, great, but don't try to make them green.
-- **Not adding any new capability.** This is purely
-  organizational. The OSINT plan's W10 work is a
-  separate, later effort.
-- **Not changing behavior of any moved function.** Every
-  function moves with its docstring, its constants, its
-  private helpers, and its quirks intact. The tests
-  exist to prove this.
+Before starting Move 5b, confirm:
 
----
+1. The 5a–5e split boundary is correct.
+2. `task_runner.py` decomposition (5d) is acceptable as a separate move after
+   5b and 5c.
+3. The test gate above is the right gate.
 
-## 9. Operator sign-off
-
-This plan is on disk at `S:\AGI_like\REFACTOR_PLAN.md`.
-**I will not begin Move 1 until you confirm:**
-
-1. The sequence (5 moves, layered bottom-up, re-export
-   shims) is correct.
-2. The schedule (D1–D3, halting on any green-suite
-   regression) is the right cadence.
-3. The `run_task` 324-line caveat (it moves but does
-   not shrink) is acceptable as a result.
-
-If you want a different split — say, 7 modules, or
-a different layering, or aggressive `run_task`
-decomposition in parallel — say so and I will revise
-this plan before touching code.
+Do not begin Move 5b until approved.

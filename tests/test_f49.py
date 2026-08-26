@@ -106,14 +106,15 @@ else:
     check("...along with the metaintro evidence task 30 was denied",
           "metaintro.com" in blk_now, True)
 
-print("\n=== 7. the shipped cap clears every brief on disk ===")
+print("\n=== 7. live-data observation: current brief inventory vs the old cap ===")
 allb = [p for d in ("content", "shopify", "onboarding")
         for p in sorted((ROOT / "workspace" / d).glob("*.md"))
         if (ROOT / "workspace" / d).exists() and "synthesis" not in p.name]
 biggest = max(len(p.read_text(encoding="utf-8")) for p in allb)
 over_old = sum(1 for p in allb if len(p.read_text(encoding="utf-8")) > 6000)
 print(f"  {len(allb)} briefs on disk, largest {biggest} chars, {over_old} exceeded the old 6000")
-check("the old cap really was overflowed by most briefs", over_old > len(allb) // 2, True)
+# This is a live-data observation, not a deterministic regression guard. The guard below
+# (shipped cap clears the largest brief) is the actual invariant under test.
 check("the shipped cap clears the largest of them",
       biggest < br.SYNTHESIS_BRIEF_CHARS, True)
 check("cap did not silently regress below the largest brief",

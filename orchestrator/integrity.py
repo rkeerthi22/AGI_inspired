@@ -17,7 +17,7 @@ same quirks, and the same F-numbers in the comments. The
 (including 7 test files) continue to work without edits.
 
 Layer position: L0 of the dependency graph. No internal cross-module
-imports; only `policy`, `ledger`, `scorecard`, and stdlib.
+imports; only `policy`, `ledger`, `runtime_context`, and stdlib.
 """
 from __future__ import annotations
 
@@ -29,24 +29,7 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-RUNS = ROOT / "runs"
-ESCALATIONS = ROOT / "workspace" / "ESCALATIONS.md"
-
-
-def log(msg: str) -> None:
-    """Local stdout+file log helper. Duplicated from `batch_runner.log` rather than
-    imported to avoid a cycle (batch_runner re-exports from this module). Behaviour
-    is identical: write to stdout AND to `runs/schtask_last.log` if the parent
-    directory exists, so cron-driven runs leave a tail-able record."""
-    print(msg, flush=True)
-    try:
-        RUNS.mkdir(exist_ok=True)
-        with open(RUNS / "schtask_last.log", "a", encoding="utf-8") as _f:
-            _f.write(msg + "\n")
-    except Exception:
-        pass
-
+from runtime_context import ROOT, RUNS, ESCALATIONS, log
 
 # Policy + ledger are sibling modules in the orchestrator/ directory (the existing
 # convention treats `orchestrator/` as a flat namespace, not a real package -- there
