@@ -125,6 +125,9 @@ from prompts import (  # noqa: E402,F401
     SYNTHESIS_BRIEF_CHARS, SYNTHESIS_MAX_BRIEFS, FACT_LEDGER_CAP,
     _INTERNAL_CRITERIA_RE,
 )
+from evaluation import (  # noqa: E402,F401
+    seed_is_synthesis, retract_facts,
+)
 
 def parse_mission(mission_id: str) -> dict:
     path = MISSIONS / f"{mission_id}.md"
@@ -263,40 +266,6 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
                       (entity, stmt, url, date, conf, tid, ledger.RUN_ID))
             written += 1
     return written
-
-
-def retract_facts(task_id: int) -> int:
-    """Close validity windows on all facts produced by a given task. Called when
-    a spot-check FAILS a task the critic had passed — the facts already extracted
-    are tainted and must not persist as current truths. Uses supersede-not-delete
-    semantics per HARNESS_DESIGN §1.2."""
-    import sqlite3
-    with sqlite3.connect(ROOT / "memory" / "ledgerbook.db", timeout=30) as c:
-        cur = c.execute(
-            "UPDATE facts SET valid_until=datetime('now'), status='retracted' "
-            "WHERE source_task_id=? AND valid_until IS NULL",
-            (task_id,))
-        return cur.rowcount
-
-
-def seed_is_synthesis(spec: str) -> bool:
-    """Does this seed describe a synthesis (tool-free, works only from material already
-    gathered) rather than fresh research?
-
-    F30 (docs/HARDENING.md), 2026-07-29: this used to require the seed to literally START
-    with "synthesis". Mission 002's seed 3 reads "Cross-channel synthesis: ..." -- one word
-    off -- so it was routed to the full browser worker every week and did fresh web
-    research instead of synthesising the two channel briefs it was written to combine.
-    Confirmed in task 30's deliverable: it invented a channel ("AI News Recap", not one of
-    the mission's two) and cited corticallabs.com, bbc.com and a Google blog post about
-    self-healing roads -- generic AI news, no connection to the operator's channels. Every
-    002 synthesis has failed since the mission went active (tasks 14, 22, 30); this is why.
-
-    Match on the seed's LEADING CLAUSE only (to the first colon, capped), so a research
-    seed that happens to mention synthesis in its body is not misrouted into the tool-free
-    path where it could not do the lookups it needs."""
-    body = re.sub(r"^\[[^\]]*\]\[seed \d+\]\s*", "", spec).lower()
-    return bool(re.search(r"synthesi[sz]", body.split(":", 1)[0][:80]))
 
 
 def run_critic(row: dict, out: str, roles: dict, baseline: bool,
