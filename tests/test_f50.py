@@ -19,10 +19,17 @@ sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import yaml  # noqa: E402
 import batch_runner as br  # noqa: E402
+import execution  # noqa: E402  -- Move 2: ollama_chat / hermes_worker /
+                   #                     load_fallback_chain / log now live here, and
+                   #                     internal calls inside synthesis_with_failover
+                   #                     and worker_with_failover resolve against
+                   #                     execution's globals. Patching batch_runner.X
+                   #                     would rebind the public name but not redirect
+                   #                     the internal call -- so monkey-patch on execution.
 
 fails = []
 logs = []
-br.log = lambda *a, **k: logs.append(" ".join(str(x) for x in a))
+execution.log = lambda *a, **k: logs.append(" ".join(str(x) for x in a))
 
 
 def check(name, got, want):
@@ -70,8 +77,8 @@ def fake_chat(model, prompt, timeout=300, trace_path=None, usage_out=None):
     raise AssertionError(f"should not have been called: {model}")
 
 
-br.ollama_chat = fake_chat
-br.load_fallback_chain = lambda: [SMALL]
+execution.ollama_chat = fake_chat
+execution.load_fallback_chain = lambda: [SMALL]
 logs.clear()
 out, cfg_used, exhausted = br.synthesis_with_failover(synth, SMALL, log_prefix="t")
 check("the too-small rung was never called", calls, [])
@@ -91,16 +98,16 @@ def ok_chat(model, prompt, timeout=300, trace_path=None, usage_out=None):
     return "deliverable text"
 
 
-br.ollama_chat = ok_chat
-br.load_fallback_chain = lambda: [SMALL]
+execution.ollama_chat = ok_chat
+execution.load_fallback_chain = lambda: [SMALL]
 out, cfg_used, exhausted = br.synthesis_with_failover(tiny, SMALL, log_prefix="t")
 check("small prompt DOES run on the 4k rung", served, ["gemma4:12b-ctx4k"])
 check("not exhausted", exhausted, False)
 
 print("\n=== 5. worker_with_failover got the same guard ===")
 wcalls = []
-br.hermes_worker = lambda prompt, cfg, path, timeout=None: (wcalls.append(cfg["model"]), ("", {}))[1]
-br.load_fallback_chain = lambda: [SMALL]
+execution.hermes_worker = lambda prompt, cfg, path, timeout=None: (wcalls.append(cfg["model"]), ("", {}))[1]
+execution.load_fallback_chain = lambda: [SMALL]
 logs.clear()
 out, usage, cfg_used, exhausted = br.worker_with_failover(
     synth, SMALL, ROOT / "runs" / "t.usage.json", log_prefix="t")
