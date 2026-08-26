@@ -11,6 +11,9 @@ ledger/*.db-wal
 memory/*.db
 memory/*.db-shm
 memory/*.db-wal
+prediction_machine/data/*.db
+prediction_machine/data/*.db-shm
+prediction_machine/data/*.db-wal
 backups/
 
 # Agent scratch + ingested raw data (audit lives in the ledger, not here).
