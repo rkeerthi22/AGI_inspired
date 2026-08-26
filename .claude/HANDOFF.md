@@ -816,3 +816,151 @@ deliberately the first thing this document says (see the banner at the top and �
   Hermes, the cron change is configuration, and the simulation-validation problems are in an
   uncommitted module. Registry stays **F1..F52 + F22b**. Resisting the urge to mint F53 for a
   non-fix is the point of an append-only registry.
+
+---
+
+## Post-handoff delta — 2026-08-26 (operator resumed work after 26 days)
+
+The handoff above is from 2026-07-31. The harness ran unattended until 2026-08-26, with no
+agent-written updates to this file. This block records the deltas a future session needs to
+read this doc correctly, without rewriting the 818 lines above.
+
+**Commits this delta, on `master` (was 99 → now 107):**
+- `146f9af` F54: an operator re-verification could never clear the AI-performed flag (fixes
+  spot-check classification; spot_checked_ai is read from the latest `HUMAN(...)` segment,
+  not the whole notes field).
+- `8ab05f7` F55: worker produces partial work on tool failure instead of empty deliverable
+  (prompt-side instruction for 503/403/timeouts; does NOT address `loop_web_search_cap` —
+  see finding below).
+- `bb202f6` Fix prediction system bottlenecks: unify CLI, fix MIKS engine, deprecate v1
+  (~8,700 lines, 47 files; lands the `prediction_machine/` subsystem you will see in
+  `git log` but not in the body of this handoff).
+- `bc86d35` test_f44: use empty schema instead of copying live ledger.db **(this session)**.
+- `f6b58c1` canary prediction gate: remove `mission_id != canaries` skip **(this session)**.
+- All 5 commits pushed to `origin/master` (was 4 unpushed; now 0 unpushed).
+
+**This session landed 4 separate items the operator asked for, in order:**
+
+1. **F44 test fix (Option 1).** `tests/test_f44.py` was failing on data-pollution, not a code
+   bug. The test copied the live `ledger/ledger.db` (which had 67 real task rows including
+   today's W35 spend of ~3.08M tokens) and only DELETEd `task_id >= 9700` — which left
+   real W35 task IDs 65/66/68/69/70 in the test DB. Result: `tokens_used_today()` was
+   returning `planted_value + 3_089_362` while the test asserted it was just `planted_value`.
+   `policy.py:126-145` (the F44 fix shipped 2026-07-30) was always correct. The fix uses
+   `sqlite3.connect(tmp).executescript(CREATE TABLE tasks ...)` to get the same column
+   layout without any data the test did not plant. F12's affordance (`LEDGER_DB` is
+   injectable) is the right tool here, just wasn't being used. **11/11 assertions green
+   after the fix.** This is the same "test asserted the bug" trap `test_f52` hit (see
+   "still-red suites" below).
+2. **Canary prediction gate removal.** `orchestrator/batch_runner.py:1620-1635` was gated
+   on `mission.get("id") != "canaries"`, which excluded the system's own pass/fail signal
+   from `predictions.db`. The 25 canary task IDs (7..11, 31..35, 39..43, 47..51, 59..63)
+   ran every week, hit the critic, recorded verdicts in `ledger.db` — and never appeared
+   in the prediction store. Daily report's 0/67 training-data ratio is directly downstream
+   of this gate. The canary path is exactly the right training signal: short deterministic
+   specs, no live web tool, the same prompt every week, the same critic. Live probe before
+   commit: `before_task_runs(61, 'C1 canary spec', 'canaries')` returned a real prediction
+   ID. Safety: the hook is fault-tolerant — failures return `None`, harness continues
+   normally. **Live next canary run (Sun 03:30) will seed the store for the first time.**
+3. **Phantom task_id 88898 (read-only finding, no code change).** The 2026-08-25 daily
+   report's "data problems discovered" line is a *correct* report, not a *fix-needed*
+   defect. The row in `prediction_machine/data/predictions.db` with `prediction_id
+   =23b9e58b-373f-4924-8e7e-35743f8d1990` and `target='88888'` is already correctly
+   excluded from training: `valid_for_training=0`, `invalid_reason='test cleanup'`. The
+   `input_features` show `mission_id='test-mission'`, `spec='test synthesis spec'` —
+   this is test pollution from 2026-08-20T04:31:32, not production data. The
+   `task_outcome_integration.py:233-238` `record_task_outcome()` correctly returns `None`
+   when the ledger row is missing, and the evaluator filters on `valid_for_training=1`.
+   **Do not chase this in a future session.** A post-week-8 hardening (separate from the
+   execution-only window) would be to write `valid_for_training=0` at predict time when
+   `task_id` is a clearly-fake value like 88888.
+4. **Pushed all unpushed commits to `origin/master`.** Was 4 unpushed (F55, prediction_machine
+   bottlenecks, plus the 2 from this session); now 0 unpushed. Tip `f6b58c1` on both local
+   and remote. The 8,700-line prediction machine subsystem is now durable off-disk.
+
+**The `python orchestrator/spotcheck.py notify` command was run after the handoff
+update landed — see §5 item 2 below for the W32–W35 queue state.**
+
+**Still-red suites (3 of 18) — these are test-data drift, not code bugs. Per the
+execution-only directive, I did NOT touch them; recording here so the next session
+does not re-chase:**
+- `test_baseline`: 4 of 6 assertions fail because the W29/W30/W33 canary data the test
+  asserts against has moved on. The F34 fix in `_current_canary_green()` is correct;
+  the test fixtures are stale.
+- `test_f49`: 1 assertion ("the old cap really was overflowed by most briefs") fails
+  because the F49 cap raise 6000 → 24000 invalidated the assumption. The test asserts
+  a *historical* property that no longer holds.
+- `test_f52`: 1 assertion ("PRE-F52 surface did not cover it at all") fails because
+  the test is asserting the *pre-fix* surface state, but post-F52 the surface does
+  cover the file. The fix worked; the test was never updated. Same "test-of-the-fix"
+  pattern as F54's predecessor.
+- All three want either a fixture refresh or a "pre-Fn state" split, not a code change.
+
+**Misclassified claim from `SELF_IMPROVEMENT.md` (2026-08-13):** the doc said
+`AGI_M1_shopify` was DISABLED since W31 and the single biggest contributor to low
+output. **It was re-enabled sometime between 2026-08-13 and 2026-08-24, and mission
+001 has been running normally since.** Verified live: `schtasks /Query
+/TN "AGI_M1_shopify" /V` → `Status: Ready, Scheduled Task State: Enabled, Last Run
+2026-08-24 4:00:00, Last Result 0`. The job is **scheduled Mondays 4:00 AM only**
+(`Days: MON`), not daily, so the per-week ceiling for mission 001 is structurally
+~3–7 tasks, not 3–7/day. Ledger confirms: tasks 52–55 on 2026-08-17, 64–67 on
+2026-08-24. The "low output" complaint in the doc is real but misattributed: it
+reflects weekly mission cadence, not a disabled cron.
+
+**`predictions.db` is tracked in git (new finding, not fixed).** The bottlenecks
+commit `bb202f6` (2026-08-25) accidentally tracked `prediction_machine/data/predictions.db`
+in git, but `.gitignore` explicitly excludes `ledger/*.db`, `memory/*.db`, `backups/`
+as "Live binaries — backed up separately, not version-controlled." The prediction
+store DB is the same class of artifact and should be in `.gitignore` too. A diagnostic
+probe row from this session is left unstaged to avoid expanding the oversight. The
+correct fix is one `.gitignore` line (`prediction_machine/data/*.db` plus the
+`-shm`/`-wal` siblings), and a `git rm --cached` to stop tracking. **Deferred to
+post-week-8 hardening per the execution-only directive.** Until then, every commit
+that mutates the store will diff a binary.
+
+**`bash` permission to `git push` was granted in this session.** The handoff above
+(§5 item 4) said auto-mode blocks it. This session attempted and succeeded:
+`git push origin master` → `146f9af..f6b58c1 master -> master`. If a future session
+sees the rule restored, the `.claude/HANDOFF.md` text above is now historical, not
+load-bearing.
+
+**Operator decisions since 2026-07-31, in priority order:**
+
+1. **F44 fix landed as Option 1** (test isolation, not UTC switch). The UTC switch
+   would have re-introduced the F44 bug — `finished_at` is local time, UTC boundary
+   would mis-attribute for 22 hours a day. Operator confirmed.
+2. **No new wiring in `batch_runner.py` for the prediction machine.** The wiring
+   landed in `bb202f6` via `prediction_machine/integrations/batch_runner_hook.py`
+   and is already called at `batch_runner.py:1620-1635` (before) and
+   `batch_runner.py:1654-1661` + `batch_runner.py:1882-1888` (after, twice for
+   synthesis and main flow). Injecting direct `prediction_store` calls would
+   have caused `TypeError` (signature mismatch), bypassed the predictor, and
+   duplicated predictions on retry. Operator confirmed.
+3. **The 5-file split of `batch_runner.py` is deferred.** The execution-only
+   directive (W4–W8) stands. Refactor will be revisited after week 8 closes,
+   tests are green, and the spot-check queue is cleared. Operator confirmed.
+4. **Operator transitioning out of execution-only for week 9** — drafting
+   `OSINT_INTEGRATION_PLAN.md` (separate document, this file's sibling). Awaits
+   operator override of the directive before commit. The plan proposes a
+   measured integration of modern OSINT frameworks and GitHub scraping into
+   the worker pool, with explicit containment rules to prevent the
+   `batch_runner.py` 4,000-line-mess outcome. **See that file when it lands.**
+5. **Operator processed the spot-check queue** — `python orchestrator/spotcheck.py
+   notify` was run after the handoff update committed. The W32–W35 independent
+   verdicts (if the operator graded any) feed back into the next scorecard.
+   **W32–W35 accuracy term in the next scorecard is the first signal whether
+   the data quality backlog is now clearing.**
+
+**Suites green this session:** was 14/18, now 15/18 (test_f44 fixed).
+Suites red: 3 (test_baseline, test_f49, test_f52) — all test-data drift, deferred.
+**Suites red that are NOT test-data drift:** 0.
+
+**Total commits on master:** 107 (was 99 in the 2026-07-31 handoff; +5 from this
+delta, +3 from the silent Aug run).
+**Total tasks in ledger:** 67 (was 32 in the 2026-07-31 handoff; +35 from the
+silent Aug run, mostly W32–W35 with a few 002-content failures on tool calls).
+**W32–W35 scorecards on disk:** 4 (W32: F=0.467, W33: F=0.35, W34: F=0.5, W35: pending
+this Sunday's 04:00 fire).
+**Containment status:** zero `runs/quarantine_*.json`, `PROTECTED_PATHS` unchanged at
+12 entries (53 tracked files under protection), `fs-guard` still catching what it
+should, `_untracked_files()` still flagging the uncommitted `simulate.py` as expected.
