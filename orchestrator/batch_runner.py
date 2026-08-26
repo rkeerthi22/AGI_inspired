@@ -1619,13 +1619,20 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
 
     # Prediction Machine: record a prediction BEFORE the task runs (§predict→act→measure→learn).
     # Fault-tolerant: if the prediction machine is unavailable, the harness runs normally.
-    if mission.get("id") != "canaries":
-        try:
-            sys.path.insert(0, str(ROOT.parent))
-            from prediction_machine.integrations.batch_runner_hook import before_task_runs
-            before_task_runs(tid, row["spec"], mission["id"])
-        except Exception:
-            pass  # prediction machine is optional — never block the harness
+    # (Was previously gated on `mission["id"] != "canaries"` -- that excluded the system's own
+    # pass/fail signal from the prediction store, so the canary rows the rest of the harness
+    # uses to detect regressions were never learned from. Removed 2026-08-26: the canary path
+    # produces the most stable prediction targets in the system -- short deterministic specs,
+    # no live web tool, the same prompt every week -- so they are exactly the rows that should
+    # seed a trained model. The hook is fault-tolerant: a canary that fails in the predictor
+    # still runs the harness normally, and `after_task_completes` at the bottom of run_task
+    # already returns None cleanly when no matching prediction exists.)
+    try:
+        sys.path.insert(0, str(ROOT.parent))
+        from prediction_machine.integrations.batch_runner_hook import before_task_runs
+        before_task_runs(tid, row["spec"], mission["id"])
+    except Exception:
+        pass  # prediction machine is optional — never block the harness
 
     worker_cfg = roles["worker"]
     wk = week_key()
@@ -1732,9 +1739,15 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
         f"evidence. Mark any fact that could only be sourced from a failed tool call as "
         f"confidence 1 and note the tool failure. An empty deliverable or one containing only "
         f"error text is a FAIL.\n\n"
+        f"If you fail to find sources after exhausting your web_search tool limits, DO NOT give "
+        f"up. Immediately fallback to using the requests tool to query known endpoints, or use "
+        f"yt-dlp if applicable.\n\n"
         f"IMPORTANT: this is a research-only task. Use ONLY web/browser tools to look things up. "
-        f"Do NOT use any file, terminal, code-execution, or memory tool for ANY reason — do not "
-        f"create, write, or edit any file, and do not run any command. A separate system persists "
+        f"The only exceptions are the requests and yt-dlp fallbacks above after web_search is "
+        f"exhausted. Otherwise, do NOT use any file, terminal, code-execution, or memory tool for "
+        f"ANY reason — do not "
+        f"create, write, or edit any file, and do not run any command except the requests/yt-dlp "
+        f"fallbacks above. A separate system persists "
         f"your output; your job is only to research and reply with the deliverable markdown as "
         f"your final message text, nothing else."
         + (f"\n\n{compliance_block}" if compliance_block else "")
