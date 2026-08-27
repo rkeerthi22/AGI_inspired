@@ -40,10 +40,8 @@ DB isolation strategy:
     file-content checks.
 
 Stubbing strategy (lesson from F57):
-  - `from prompts import foo` and `from integrity import bar` CAPTURE
-    the reference at module load; `prompts.foo = ...` alone is not
-    enough -- must also patch `batch_runner.foo` (or wherever the
-    capture lives).
+  - workflow.py uses module-qualified dependencies. Patch the canonical
+    owning module; compatibility exports are verified separately by identity.
   - `execution.ollama_chat(model, prompt, timeout=300, trace_path=...)`
     is module-qualified by evaluation.py -- patching execution IS the
     load-bearing patch.
@@ -80,6 +78,7 @@ import prompts  # noqa: E402
 import promote  # noqa: E402  -- F58 patches this in §6 to keep canary auto-rollback inert
 import runtime_context as rc  # noqa: E402
 import scheduler  # noqa: E402
+import workflow as wf  # noqa: E402
 from _silence import silence_log  # noqa: E402
 
 # Current ISO week, sourced from the same helper _check_repeated_failure uses.
@@ -117,22 +116,13 @@ class _P:
         setattr(target, attr, value)
         self._undo.append((target, attr, old))
 
-    def dual(self, name, stub):
-        """Set `name` on the canonical module AND on `br` (re-export capture)."""
+    def prompt(self, name, stub):
+        """Patch a module-qualified prompts dependency at its canonical owner."""
         self.set(prompts, name, stub)
-        self.set(br, name, stub)
 
-    def trinity(self, name, stub):
-        """Set `name` on execution AND on every module that captured it.
-
-        `from execution import <name>` (in batch_runner, evaluation) binds
-        a separate reference. Patching execution alone leaves those calls
-        reaching the original function. Tests must patch the binding on
-        every owning module.
-        """
+    def execution(self, name, stub):
+        """Patch a module-qualified execution dependency at its canonical owner."""
         self.set(execution, name, stub)
-        self.set(br, name, stub)
-        self.set(ev, name, stub)
 
     def undo(self):
         for target, attr, old in reversed(self._undo):
@@ -171,10 +161,7 @@ def stub_swfail(reply, exhausted=False, model_used=None,
     Mirrors the real signature: returns (out, model_used_cfg, exhausted)
     and writes usage to usage_out (a dict passed by the caller).
 
-    Lesson (Move 5c'): `from execution import synthesis_with_failover`
-    captures the reference at module load. Patching only `execution` is
-    NOT enough -- `batch_runner` and `evaluation` hold their own
-    bindings that must be patched too.
+    workflow.py calls this through the canonical execution module.
     """
     calls = []
 
@@ -198,8 +185,7 @@ def stub_worker_failover(reply, exhausted=False, model_used=None,
     Signature: (prompt, worker_cfg, usage_path, log_prefix="",
                 allow_local=True) -> (out, usage, model_used_cfg, exhausted).
 
-    Same captured-reference gotcha as stub_swfail: must be patched on
-    every owning module.
+    workflow.py calls this through the canonical execution module.
     """
     calls = []
 
@@ -273,8 +259,8 @@ ALL_ROLLBACK_ATTEMPTS: list[dict] = []
 def suite_snapshot():
     """Capture the load-bearing live state for the before/after invariant.
 
-    Returns a dict with: head, status_porcelain, skill_paths, skill_hashes,
-    ledger_count, runs_set, esc_sha. Every field must be unchanged when
+    Returns a dict with: head, status_porcelain, skill paths/hashes, task-row
+    count, run artifacts, policy-state hash, and escalation hash. Every field must be unchanged when
     F58 finishes -- if any field drifts, F58 fails loudly with the diff.
     """
     skill_paths = []
@@ -309,6 +295,9 @@ def suite_snapshot():
             runs_set.add(p.name)
         for p in live_runs.glob("task*_critic_reasoning.txt"):
             runs_set.add(p.name)
+    policy_state = live_runs / "policy_state.json"
+    policy_state_sha = (hashlib.sha256(policy_state.read_bytes()).hexdigest()
+                        if policy_state.exists() else None)
     live_esc = ORCH.parent / "workspace" / "ESCALATIONS.md"
     esc_sha = hashlib.sha256(live_esc.read_bytes()).hexdigest() \
         if live_esc.exists() else None
@@ -324,6 +313,7 @@ def suite_snapshot():
         "skill_hashes": skill_hashes,
         "ledger_count": ledger_count,
         "runs_set": sorted(runs_set),
+        "policy_state_sha": policy_state_sha,
         "esc_sha": esc_sha,
     }
 
@@ -357,10 +347,8 @@ def assert_snapshot_invariant(label, before, after):
 def temp_root_with_ledger():
     """Clone the live ledger into a temp ROOT, redirect every read/write path.
 
-    ROOT / RUNS / ESCALATIONS are bound at module-load via `from runtime_context
-    import ROOT`. They live as independent name bindings on batch_runner,
-    evaluation, integrity, and runtime_context. Patching only the
-    runtime_context module is NOT enough -- every owner needs its own patch.
+    workflow resolves ROOT/RUNS through runtime_context at call time. Evaluation
+    still owns captured ROOT/RUNS bindings, so its critic paths are redirected too.
 
     Returns (tmp_root_path, cleanup_fn).
     """
@@ -376,9 +364,8 @@ def temp_root_with_ledger():
 
     # Snapshot original values per (module, attr) -- duplicates are intentional.
     assignments = [
-        (rc, "ROOT", tmp_root), (br, "ROOT", tmp_root), (ev, "ROOT", tmp_root),
-        (rc, "RUNS", tmp_root / "runs"), (br, "RUNS", tmp_root / "runs"),
-        (ev, "RUNS", tmp_root / "runs"),
+        (rc, "ROOT", tmp_root), (ev, "ROOT", tmp_root),
+        (rc, "RUNS", tmp_root / "runs"), (ev, "RUNS", tmp_root / "runs"),
     ]
     real = {}
     for mod, attr, val in assignments:
@@ -386,11 +373,16 @@ def temp_root_with_ledger():
         setattr(mod, attr, val)
     real_ledger_db = ledger.LEDGER_DB
     ledger.LEDGER_DB = temp_lb
+    # The critic budget uses policy's own DB binding for its UTC date key and
+    # writes its counter to STATE_PATH. Both must be temporary; otherwise F58
+    # consumes the live manager-call budget while leaving task-row counts unchanged.
+    real_policy_ledger_db = policy.LEDGER_DB
+    real_policy_state_path = policy.STATE_PATH
+    policy.LEDGER_DB = temp_lb
+    policy.STATE_PATH = tmp_root / "runs" / "policy_state.json"
 
     temp_esc = tmp_root / "workspace" / "ESCALATIONS.md"
-    esc_assignments = [(integrity, "ESCALATIONS", temp_esc),
-                       (br, "ESCALATIONS", temp_esc),
-                       (rc, "ESCALATIONS", temp_esc)]
+    esc_assignments = [(integrity, "ESCALATIONS", temp_esc)]
     for mod, attr, val in esc_assignments:
         real[(mod, attr)] = getattr(mod, attr)
         setattr(mod, attr, val)
@@ -399,6 +391,8 @@ def temp_root_with_ledger():
         for (mod, attr), val in real.items():
             setattr(mod, attr, val)
         ledger.LEDGER_DB = real_ledger_db
+        policy.LEDGER_DB = real_policy_ledger_db
+        policy.STATE_PATH = real_policy_state_path
         shutil.rmtree(tmpdir, ignore_errors=True)
 
     return tmp_root, cleanup
@@ -448,10 +442,10 @@ def standard_prompts_stub():
 
 
 def install_prompts_stubs(mp, stubs=None):
-    """Patch every prompt helper on prompts AND br."""
+    """Patch every workflow prompt helper at the canonical prompts module."""
     stubs = stubs or standard_prompts_stub()
     for name, stub in stubs.items():
-        mp.dual(name, stub)
+        mp.prompt(name, stub)
 
 
 # ── §1 _strip_tool_chatter pre-move verification ─────────────────────────
@@ -497,15 +491,14 @@ try:
     long_reply = "# S\n\n" + ("content paragraph. " * 30)
     swfail = stub_swfail(long_reply, exhausted=False)
     critic = make_critic_stub(["VERDICT: PASS\nLooks good."])
-    mp.trinity("synthesis_with_failover", swfail)
-    mp.trinity("ollama_chat", critic)
-    mp.set(br, "worker_failed", lambda out, usage: False)
+    mp.execution("synthesis_with_failover", swfail)
+    mp.execution("ollama_chat", critic)
+    mp.execution("worker_failed", lambda out, usage: False)
     mp.set(citecheck, "verify", lambda _: [])
     mp.set(citecheck, "summarize",
            lambda e: {"dead": 0, "checked": 0, "dead_frac": 0.0})
     mp.set(citecheck, "is_hard_fail", lambda s: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
 
     tid = insert_task(tmp_root, mission_id="001-test",
@@ -557,15 +550,14 @@ try:
 
     install_prompts_stubs(mp)
     mp.set(policy, "token_budget_breached", lambda: False)
-    mp.trinity("synthesis_with_failover", stub_swfail("too short", exhausted=False))
+    mp.execution("synthesis_with_failover", stub_swfail("too short", exhausted=False))
     critic = make_critic_stub(["NEVER CALLED"])
-    mp.trinity("ollama_chat", critic)
+    mp.execution("ollama_chat", critic)
     mp.set(citecheck, "verify", lambda _: [])
     mp.set(citecheck, "summarize",
            lambda e: {"dead": 0, "checked": 0, "dead_frac": 0.0})
     mp.set(citecheck, "is_hard_fail", lambda s: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
 
     tid = insert_task(tmp_root, mission_id="001-test",
@@ -606,15 +598,14 @@ try:
 
     install_prompts_stubs(mp)
     mp.set(policy, "token_budget_breached", lambda: False)
-    mp.trinity("synthesis_with_failover", stub_swfail("anything", exhausted=True))
+    mp.execution("synthesis_with_failover", stub_swfail("anything", exhausted=True))
     critic = make_critic_stub(["NEVER CALLED"])
-    mp.trinity("ollama_chat", critic)
+    mp.execution("ollama_chat", critic)
     mp.set(citecheck, "verify", lambda _: [])
     mp.set(citecheck, "summarize",
            lambda e: {"dead": 0, "checked": 0, "dead_frac": 0.0})
     mp.set(citecheck, "is_hard_fail", lambda s: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
 
     tid = insert_task(tmp_root, mission_id="001-test",
@@ -651,15 +642,14 @@ try:
     install_prompts_stubs(mp)
     mp.set(policy, "token_budget_breached", lambda: False)
     long_reply = "# S\n" + ("content paragraph. " * 30)
-    mp.trinity("synthesis_with_failover", stub_swfail(long_reply, exhausted=False))
+    mp.execution("synthesis_with_failover", stub_swfail(long_reply, exhausted=False))
     critic = make_critic_stub(["VERDICT: FAIL\nMissing required section."])
-    mp.trinity("ollama_chat", critic)
+    mp.execution("ollama_chat", critic)
     mp.set(citecheck, "verify", lambda _: [])
     mp.set(citecheck, "summarize",
            lambda e: {"dead": 0, "checked": 0, "dead_frac": 0.0})
     mp.set(citecheck, "is_hard_fail", lambda s: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
 
     tid = insert_task(tmp_root, mission_id="001-test",
@@ -699,10 +689,9 @@ try:
     install_prompts_stubs(mp)
     mp.set(policy, "token_budget_breached", lambda: True)
     worker_stub = stub_worker_failover("anything", exhausted=False)
-    mp.trinity("worker_with_failover", worker_stub)
-    mp.set(br, "worker_failed", lambda out, usage: False)
+    mp.execution("worker_with_failover", worker_stub)
+    mp.execution("worker_failed", lambda out, usage: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     attempts = install_promote_safety(mp)
     ALL_ROLLBACK_ATTEMPTS.extend(attempts)
@@ -737,10 +726,9 @@ try:
     pass_reply = (
         "2006 https://en.wikipedia.org/wiki/Shopify\n"
     )
-    mp.trinity("worker_with_failover", stub_worker_failover(pass_reply, exhausted=False))
-    mp.set(br, "worker_failed", lambda out, usage: False)
+    mp.execution("worker_with_failover", stub_worker_failover(pass_reply, exhausted=False))
+    mp.execution("worker_failed", lambda out, usage: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     attempts = install_promote_safety(mp)
     ALL_ROLLBACK_ATTEMPTS.extend(attempts)
@@ -792,10 +780,9 @@ try:
         # Budget breach after the first canary so the loop ends quickly.
         breaker["called"] += 1
         return ("", {}, worker_cfg, False)
-    mp.trinity("worker_with_failover", path_worker)
-    mp.set(br, "worker_failed", lambda out, usage: False)
+    mp.execution("worker_with_failover", path_worker)
+    mp.execution("worker_failed", lambda out, usage: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     attempts = install_promote_safety(mp)
     ALL_ROLLBACK_ATTEMPTS.extend(attempts)
@@ -918,7 +905,6 @@ try:
         insert_task(tmp_root, mission_id="001-test",
                     spec=f"[{WK}][seed {i+1}] topic {i}")
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     with silence_log():
         br._check_repeated_failure("001-test")
@@ -938,7 +924,6 @@ try:
         insert_task(tmp_root, mission_id="001-test",
                     spec=f"[{WK}][seed {i+1}] topic {i}")
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     with silence_log():
         br._check_repeated_failure("001-test")
@@ -964,7 +949,6 @@ try:
         insert_task(tmp_root, mission_id="001-test",
                     spec=f"[{WK}][seed {i+1}] topic {i}")
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     with silence_log():
         # Two calls in a row -- neither fires because n never equals the
@@ -989,7 +973,6 @@ try:
         insert_task(tmp_root, mission_id="001-test",
                     spec=f"[{WK}][seed {i+1}] topic {i}")
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
     with silence_log():
         br._check_repeated_failure("001-test")
@@ -1118,14 +1101,13 @@ try:
     install_prompts_stubs(mp)
     mp.set(policy, "token_budget_breached", lambda: False)
     long_reply = "# S\n\n" + ("content paragraph. " * 30)
-    mp.trinity("synthesis_with_failover", stub_swfail(long_reply, exhausted=False))
-    mp.trinity("ollama_chat", make_critic_stub(["VERDICT: PASS\nok."]))
+    mp.execution("synthesis_with_failover", stub_swfail(long_reply, exhausted=False))
+    mp.execution("ollama_chat", make_critic_stub(["VERDICT: PASS\nok."]))
     mp.set(citecheck, "verify", lambda _: [])
     mp.set(citecheck, "summarize",
            lambda e: {"dead": 0, "checked": 0, "dead_frac": 0.0})
     mp.set(citecheck, "is_hard_fail", lambda s: False)
     esc_cap = make_escalation_capture()
-    mp.set(br, "escalate", esc_cap)
     mp.set(integrity, "escalate", esc_cap)
 
     tid = insert_task(tmp_root, mission_id="001-test",

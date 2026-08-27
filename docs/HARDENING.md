@@ -2251,3 +2251,24 @@ F57 also locks the dependency shape: the patch point is the owning module
 (`execution`), not the compatibility alias (`batch_runner`). The move is
 behaviour-preserving — measured across the deterministic gate, not
 assumed. · `orchestrator/evaluation.py` · `tests/test_f57.py`
+
+### F58 workflow extraction (Move 5c′ behaviour and state isolation)
+`run_synthesis`, `run_canaries`, `retry_failed_this_fire`, and
+`_check_repeated_failure` moved from `batch_runner.py` to the new
+`orchestrator/workflow.py`; `batch_runner.py` retains explicit compatibility
+re-exports. Workflow resolves mutable runtime paths and logging through
+`runtime_context` at call time and receives `run_task` through the approved
+`run_task_fn` injection seam, so it imports neither `batch_runner` nor
+`task_runner`. C4/C5 canary definitions were restored byte-for-byte to their
+pre-extraction values from `4d1a401` after the mechanical move altered them.
+
+`tests/test_f58.py` now patches canonical owning modules after extraction and
+protects the real repository during canary characterization: promotion rollback
+is intercepted fail-closed, live policy state is redirected, and whole-suite
+snapshots cover HEAD/status, active skill paths and hashes, ledger state, run
+artifacts, escalation state, and policy state. Two repeat runs completed with
+zero drift and zero rollback attempts. The complete deterministic gate then
+passed 21/21 suites with only `test_baseline` quarantined as the designated
+live-data check. The aggregate gate intentionally creates preserved rollback
+and escalation artifacts in its integrity suites; F58 itself remains
+side-effect-free. · `orchestrator/workflow.py` · `tests/test_f58.py`

@@ -16,6 +16,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 import ledger  # noqa: E402
 import batch_runner as br  # noqa: E402
+import workflow  # noqa: E402
 
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
 shutil.copy2(ROOT / "ledger" / "ledger.db", tmp)
@@ -93,21 +94,21 @@ with sqlite3.connect(tmp) as c:
                   (tid, MISSION["id"], spec, status, cv, "x"))
 
 calls.clear(); seq = {}
-out = br.retry_failed_this_fire(ids, MISSION, {})
+out = br.retry_failed_this_fire(ids, MISSION, {}, run_task_fn=fake_run_task)
 check("retries only content failures (not done, not infra_failed)",
       sorted(calls), [201, 204, 205])
 check("synthesis retried LAST, after the briefs it rebuilds from",
       calls, [201, 205, 204])
 check("returns one status per retry", len(out), 3)
 
-br.MAX_RETRIES_PER_FIRE = 2
+workflow.MAX_RETRIES_PER_FIRE = 2
 calls.clear()
-br.retry_failed_this_fire(ids, MISSION, {})
+br.retry_failed_this_fire(ids, MISSION, {}, run_task_fn=fake_run_task)
 check("respects MAX_RETRIES_PER_FIRE cap", calls, [201, 205])
-br.MAX_RETRIES_PER_FIRE = 3
+workflow.MAX_RETRIES_PER_FIRE = 3
 
 calls.clear(); seq = {201: "chain_exhausted"}
-br.retry_failed_this_fire(ids, MISSION, {})
+br.retry_failed_this_fire(ids, MISSION, {}, run_task_fn=fake_run_task)
 check("retry pass stops when the fallback chain is exhausted", calls, [201])
 
 # ---------------------------------------------------------------- F32

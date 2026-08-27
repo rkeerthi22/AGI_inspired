@@ -26,6 +26,9 @@ import ledger  # noqa: E402
 import policy  # noqa: E402
 import promote  # noqa: E402
 import batch_runner as br  # noqa: E402
+import execution  # noqa: E402
+import integrity  # noqa: E402
+import workflow  # noqa: E402
 from _silence import silence_log  # noqa: E402
 
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
@@ -38,11 +41,11 @@ fails = []
 WK = br.week_key()
 
 # ── stubs: nothing leaves this process ────────────────────────────────────────
-br.escalate = lambda *a, **k: None
-br.db_integrity_snapshot = lambda *a, **k: {}
-br.db_integrity_check = lambda *a, **k: None
-br.fs_integrity_snapshot = lambda *a, **k: {}
-br.fs_integrity_check = lambda *a, **k: None
+integrity.escalate = lambda *a, **k: None
+integrity.db_integrity_snapshot = lambda *a, **k: {}
+integrity.db_integrity_check = lambda *a, **k: None
+integrity.fs_integrity_snapshot = lambda *a, **k: {}
+integrity.fs_integrity_check = lambda *a, **k: None
 policy.token_budget_breached = lambda *a, **k: False
 promote.newest_skill_below_baseline = lambda *a, **k: None
 promote.cmd_rollback = lambda *a, **k: None
@@ -92,9 +95,9 @@ def fake_chain(usage, out="Canberra — https://example.org", exhausted=False):
 
 def run_one(name, usage, out="Canberra — https://example.org", exhausted=False,
             infra=False):
-    br.CANARIES = [(name, "q", lambda t: "canberra" in t.lower())]
-    br.worker_with_failover = fake_chain(usage, out, exhausted)
-    br.worker_failed = lambda o, u: infra
+    workflow.CANARIES = [(name, "q", lambda t: "canberra" in t.lower())]
+    execution.worker_with_failover = fake_chain(usage, out, exhausted)
+    execution.worker_failed = lambda o, u: infra
     br.run_canaries(ROLES)
     return row_for(name)
 
