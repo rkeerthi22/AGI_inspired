@@ -18,7 +18,6 @@ is the cheap, honest check.
 """
 import subprocess
 import sys
-import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -42,12 +41,15 @@ def main() -> int:
         return 2
 
     quarantine = set()
-    qfile = TESTS / "QUARANTINE.md"
+    qfile = TESTS / "quarantine.txt"
     if qfile.is_file():
         for line in qfile.read_text(encoding="utf-8").splitlines():
-            m = re.search(r"`?(test_[a-zA-Z0-9_]+)" + r"`?", line)
-            if m:
-                quarantine.add(m.group(1))
+            line = line.strip()
+            if not line or line.startswith("#"):
+                continue
+            # accept either "test_baseline" or "baseline"
+            stem = line if line.startswith("test_") else f"test_{line}"
+            quarantine.add(stem)
 
     results = []
     quarantined = []

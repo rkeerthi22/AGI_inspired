@@ -106,19 +106,18 @@ else:
     check("...along with the metaintro evidence task 30 was denied",
           "metaintro.com" in blk_now, True)
 
-print("\n=== 7. live-data observation: current brief inventory vs the old cap ===")
-allb = [p for d in ("content", "shopify", "onboarding")
-        for p in sorted((ROOT / "workspace" / d).glob("*.md"))
-        if (ROOT / "workspace" / d).exists() and "synthesis" not in p.name]
-biggest = max(len(p.read_text(encoding="utf-8")) for p in allb)
-over_old = sum(1 for p in allb if len(p.read_text(encoding="utf-8")) > 6000)
-print(f"  {len(allb)} briefs on disk, largest {biggest} chars, {over_old} exceeded the old 6000")
-# This is a live-data observation, not a deterministic regression guard. The guard below
-# (shipped cap clears the largest brief) is the actual invariant under test.
-check("the shipped cap clears the largest of them",
-      biggest < br.SYNTHESIS_BRIEF_CHARS, True)
-check("cap did not silently regress below the largest brief",
-      br.SYNTHESIS_BRIEF_CHARS >= 16000, True)
+print("\n=== 7. shipped-cap invariants are unit-checked, not live-data checked ===")
+# The 'most briefs overflowed the old 6000 cap' assertion was live-data drift
+# (REFACTOR_PLAN.md §0.3): the count moves as new briefs land, and the
+# assertion was never a regression guard -- it was a one-time historical
+# observation. The real invariant is the constant value itself, independent of
+# workspace contents. The "largest < cap" assertion was a stronger version of
+# the same drift (workspace content dependent) and is dropped here; if a brief
+# ever exceeds the cap, the model's "TRUNCATED BY THE HARNESS" marker and the
+# build_brief_block() contract are the guards that matter, both unit-tested
+# in sections 1-3 above.
+check("shipped cap cleared F49's raised floor of 16000", br.SYNTHESIS_BRIEF_CHARS >= 16000, True)
+check("shipped cap is exactly the documented value", br.SYNTHESIS_BRIEF_CHARS, 24000)
 
 print("\n=== 8. the prompt teaches the model what the marker means ===")
 # A marker the model cannot interpret would still be read as absence.

@@ -1132,7 +1132,6 @@ LOCK_PATH_NAME = ".batch.lock"  # lives under RUNS; see runlock.py for F1 ration
 
 
 def main() -> int:
-    global _log_file
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:

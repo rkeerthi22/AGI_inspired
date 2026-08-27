@@ -24,9 +24,13 @@ sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import batch_runner as br  # noqa: E402
 import policy  # noqa: E402
+from _silence import silence_log  # noqa: E402
 
 fails = []
-br.log = lambda *a, **k: None          # silence the F47 mask warning during the run
+# F55: silence ALL orchestrator log streams -- the F47 mask warning fires
+# from inside integrity.fs_integrity_check(), not from batch_runner.log.
+_silence_ctx = silence_log()
+_silence_ctx.__enter__()
 
 
 def check(name, got, want):
@@ -116,4 +120,5 @@ else:
     print("         (jolly-gauss-8e52cb removed 2026-07-30; warning silenced as designed.)")
 
 print("\nFAILURES:", fails if fails else "none")
+_silence_ctx.__exit__(None, None, None)
 sys.exit(1 if fails else 0)

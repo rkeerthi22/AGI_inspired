@@ -26,10 +26,11 @@ import execution  # noqa: E402  -- Move 2: ollama_chat / hermes_worker /
                    #                     execution's globals. Patching batch_runner.X
                    #                     would rebind the public name but not redirect
                    #                     the internal call -- so monkey-patch on execution.
+from _silence import capture_log  # noqa: E402  -- F55: capture via the shared logger proxy
 
 fails = []
-logs = []
-execution.log = lambda *a, **k: logs.append(" ".join(str(x) for x in a))
+sink, capture_ctx = capture_log()
+capture_ctx.__enter__()
 
 
 def check(name, got, want):
@@ -79,12 +80,11 @@ def fake_chat(model, prompt, timeout=300, trace_path=None, usage_out=None):
 
 execution.ollama_chat = fake_chat
 execution.load_fallback_chain = lambda: [SMALL]
-logs.clear()
 out, cfg_used, exhausted = br.synthesis_with_failover(synth, SMALL, log_prefix="t")
 check("the too-small rung was never called", calls, [])
 check("reported as exhausted, so the caller parks", exhausted, True)
 check("no output invented", out, None)
-skip = [m for m in logs if "declares only 4096" in m]
+skip = [m for m in sink if "declares only 4096" in m]
 check("logged WHY, with the numbers", len(skip), 1)
 if skip:
     print(f"         log: {skip[0]}")
@@ -108,7 +108,6 @@ print("\n=== 5. worker_with_failover got the same guard ===")
 wcalls = []
 execution.hermes_worker = lambda prompt, cfg, path, timeout=None: (wcalls.append(cfg["model"]), ("", {}))[1]
 execution.load_fallback_chain = lambda: [SMALL]
-logs.clear()
 out, usage, cfg_used, exhausted = br.worker_with_failover(
     synth, SMALL, ROOT / "runs" / "t.usage.json", log_prefix="t")
 check("worker path also skips a rung that cannot fit", wcalls, [])
@@ -132,4 +131,5 @@ check("pre-F50 the 4k rung passed every existing gate", pre_fix_would_call, True
 check("...and post-F50 it is stopped by the size gate", br._fits_context(SMALL, synth), False)
 
 print("\nFAILURES:", fails if fails else "none")
+capture_ctx.__exit__(None, None, None)
 sys.exit(1 if fails else 0)

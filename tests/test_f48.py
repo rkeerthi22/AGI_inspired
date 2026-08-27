@@ -26,6 +26,7 @@ import ledger  # noqa: E402
 import policy  # noqa: E402
 import promote  # noqa: E402
 import batch_runner as br  # noqa: E402
+from _silence import silence_log  # noqa: E402
 
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
 shutil.copy2(ROOT / "ledger" / "ledger.db", tmp)
@@ -38,7 +39,6 @@ WK = br.week_key()
 
 # ── stubs: nothing leaves this process ────────────────────────────────────────
 br.escalate = lambda *a, **k: None
-br.log = lambda *a, **k: None
 br.db_integrity_snapshot = lambda *a, **k: {}
 br.db_integrity_check = lambda *a, **k: None
 br.fs_integrity_snapshot = lambda *a, **k: {}
@@ -46,6 +46,11 @@ br.fs_integrity_check = lambda *a, **k: None
 policy.token_budget_breached = lambda *a, **k: False
 promote.newest_skill_below_baseline = lambda *a, **k: None
 promote.cmd_rollback = lambda *a, **k: None
+
+# F55: silence ALL orchestrator log streams (not just batch_runner.log).
+# See tests/_silence.py for why the helper exists.
+_silence_ctx = silence_log()
+_silence_ctx.__enter__()
 
 ROLES = {"worker": {"provider": "ollama", "model": "test-model"}}
 
@@ -172,4 +177,5 @@ print("\n=== 8. the real ledger was never touched ===")
 check("test wrote only to the temp copy", ledger.LEDGER_DB, tmp)
 
 print("\nFAILURES:", fails if fails else "none")
+_silence_ctx.__exit__(None, None, None)
 sys.exit(1 if fails else 0)

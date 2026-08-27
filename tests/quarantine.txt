@@ -1,0 +1,17 @@
+# One test stem per line. Lines starting with `#` are comments.
+# These suites exercise real repository state or live data; their pass/fail
+# status depends on data that changes from week to week, so they are NOT part
+# of the deterministic regression gate. Run them with:
+#
+#     python tests/run_all.py --live-data
+#
+# The deterministic suites (everything else) must all be green before any
+# refactor or mission fire is considered safe.
+#
+# Format notes:
+#   - Stems only (no `test_` prefix required, but accepted). `test_baseline`
+#     and `baseline` both work.
+#   - Whitespace stripped; empty lines ignored.
+#   - Reasons live in tests/QUARANTINE.md so the configuration file stays
+#     parseable and the rationale stays human-readable.
+test_baseline
