@@ -1,59 +1,50 @@
 {
   "schema_version": 1,
-  "brief_revision": 5,
-  "created_at": "2026-08-27T22:44:11.768939+00:00",
+  "brief_revision": 6,
+  "created_at": "2026-08-27T23:22:12.882452+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
-    "head": "13edecad4af3dbf34bbf10a2a4657a076afe174d",
+    "head": "a6c791d0b6590163983f7d7582e10a2d87b0f3ec",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
-      "docs/HARDENING.md",
-      "orchestrator/prompts.py",
-      "tests/test_f53.py",
       "docs/VALIDATION.md",
-      "tests/test_f62.py"
+      "experiments/retrieval_switch_aiprm.md"
     ]
   },
   "task": {
-    "id": "REAL-VALIDATION-1",
-    "phase": "retrieval-strategy-validation",
+    "id": "REAL-VALIDATION-2",
+    "phase": "capability-enforcement-validation",
     "status": "in_progress",
-    "next_action": "Run bounded retrieval-strategy and capability-selection validation; do not resume schedules"
+    "next_action": "Design a bounded evidence-novelty enforcement experiment outside model self-report; do not resume schedules"
   },
   "completed": [
-    "W35 Shopify mission independently audited and failed mission-level usefulness gate",
-    "task 64 recovered through production retry path under batch lock",
-    "18/18 recovered-brief citation checks reachable with literals present",
-    "F62 fixed lost task-scope dependency",
-    "full deterministic gate passed 24/24; test_baseline quarantined"
+    "matched AIPRM early-switch treatment executed and session trace exported",
+    "treatment violated 3-search limit with 8 searches and made 46 tool calls",
+    "treatment produced no deliverable and used 2,157,798 tokens, 3.44x control",
+    "prompt-only adaptive retrieval hypothesis rejected"
   ],
   "locked_constraints": [
-    "W9 is complete; no further structural refactoring",
-    "schedules remain paused until validation gates pass",
-    "5-10 mission proof is the final graduation test, not the current step",
-    "do not claim USD efficiency while cost_status is unknown"
+    "do not rely on model self-report for tool counts or switching",
+    "schedules remain paused",
+    "next control must enforce or externally measure evidence novelty",
+    "do not launch another unconstrained mission"
   ],
   "gate": {
-    "status": "partial",
-    "detail": "recovery useful but manager critic blocked at 40/40; retrieval/capability/efficiency gates incomplete"
+    "status": "failed",
+    "detail": "prompt-only early switch failed: 46 calls, 2.16M tokens, no result"
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "real-world evidence and gate ledger",
-      "sha256": "7b24611c07cef84236e39de7e2c6435ef603dba6b30b233aa6979ccbe2fd6371"
+      "purpose": "retrieval experiment evidence and verdict",
+      "sha256": "26651e56d4904c5b731abffd8a8083d703b962a01c1086ec12ab472528c71778"
     },
     {
-      "path": "docs/HARDENING.md",
-      "purpose": "F62 production regression record",
-      "sha256": "332d5516e154e6a8c1e8bad88078a98558e3c1b12ea97b822e710809cfa1721b"
-    },
-    {
-      "path": "tests/test_f62.py",
-      "purpose": "task-scope recovery regression",
-      "sha256": "6eb9293776f2c5773db437f6e9c9cac2577666e0d020e65ff05a42946c2c7e6c"
+      "path": "experiments/retrieval_switch_aiprm.md",
+      "purpose": "predeclared treatment prompt",
+      "sha256": "bd3ec4f38dadf0ed47ec225f7cd87234422cebea027e29292b5383fc449c4a6a"
     }
   ]
 }
