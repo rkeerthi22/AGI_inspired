@@ -15,10 +15,16 @@ This module depends only on:
     - runtime_context.ROOT / runtime_context.log
 
 What does NOT live here:
-    - _strip_tool_chatter: a string cleaner used by both run_task (scheduler) and
-      run_critic (evaluation). It is NOT execution-specific, so it stays in
-      batch_runner.py for now and will move to a shared utilities module if a
-      third caller emerges.
+    - run_critic / extract_facts / seed_is_synthesis: pure evaluation, lives in
+      evaluation.py (Move 5c).
+    - queue_mission_tasks / expire_stale_parked / week_key: scheduler state,
+      lives in scheduler.py (Move 5b).
+
+What lives here for utility reasons:
+    - _strip_tool_chatter: a string cleaner used by run_task (in batch_runner)
+      and run_synthesis (in workflow.py, future). Moved here in Move 5c' as a
+      worker-output post-processor; the regex strips lines like
+      '[tool] ( ͡° ͜ʖ ͡°) brainstorming...' that bleed into stdout.
 """
 
 
@@ -359,3 +365,17 @@ def worker_failed(out: str, usage: dict) -> bool:
     low = out.lower()
     return any(s in low for s in ("api call failed", "connection error",
                                   "connection refused", "traceback (most recent"))
+
+
+# ── Worker-output post-processing ─────────────────────────────────────────────
+
+def _strip_tool_chatter(text: str) -> str:
+    """Remove Hermes tool-invocation UI lines that bleed into stdout.
+    e.g. '[tool] ( ͡° ͜ʖ ͡°) brainstorming...' -- cosmetic noise, not deliverable content.
+
+    Moved from batch_runner.py in Move 5c' (the utility is shared between
+    run_task there and run_synthesis in the future workflow.py, so neither
+    can be the canonical owner). Idempotent: a second call is a no-op
+    because the regex only matches lines that already begin with '[tool]'.
+    """
+    return re.sub(r'^\[tool\].*$', '', text, flags=re.MULTILINE).strip()

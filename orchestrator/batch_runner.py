@@ -58,11 +58,6 @@ def load_roles() -> dict:
 
 
 # ── model calls ────────────────────────────────────────────────────────────────
-def _strip_tool_chatter(text: str) -> str:
-    """Remove Hermes tool-invocation UI lines that bleed into stdout.
-    e.g. '[tool] ( ͡° ͜ʖ ͡°) brainstorming...' — cosmetic noise, not deliverable content."""
-    return re.sub(r'^\[tool\].*$', '', text, flags=re.MULTILINE).strip()
-
 
 from integrity import (  # noqa: E402,F401
     escalate, _db_snapshot, db_integrity_snapshot, db_integrity_check,
@@ -71,11 +66,11 @@ from integrity import (  # noqa: E402,F401
     fs_integrity_snapshot, fs_integrity_check, preflight,
     PROTECTED_PATHS, _PROVENANCE_TABLES,
 )
-from execution import (  # noqa: E402,F401
+from execution import (  # noqa: E402,F401  -- _strip_tool_chatter added in Move 5c'
     hermes_worker, ollama_chat, _is_local_model, load_fallback_chain,
     _quota_group, _fits_context, _context_skip_note,
     _failover_candidates, worker_with_failover, synthesis_with_failover,
-    is_quota_error, worker_failed,
+    is_quota_error, worker_failed, _strip_tool_chatter,
     WORKER_TIMEOUT_S, LOCAL_FALLBACK_TIMEOUT_S, LOCAL_PROVIDERS,
     CHARS_PER_TOKEN, RESPONSE_RESERVE_TOKENS,
 )
