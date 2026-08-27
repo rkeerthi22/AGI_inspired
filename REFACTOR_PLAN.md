@@ -1,5 +1,5 @@
 # Refactor Plan — `batch_runner.py` split (Week 9, revised)
-**Status: IN PROGRESS — Moves 5a, 5b, 5c, and 5c′ landed; Move 5d has not begun**
+**Status: IN PROGRESS — Moves 5a through 5d landed; Move 5e has not begun**
 **Author: AGI_like agent, 2026-08-26**
 **Revised: 2026-08-26 after operator review of Move 4 + review.txt**
 
@@ -89,7 +89,9 @@ real separation of concerns, no duplicated helpers, no wildcard imports, and no
 | Move 5a | `orchestrator/runtime_context.py` | shared logger (proxy) + path constants | committed (`7631221`) |
 | Move 5b | `orchestrator/scheduler.py` | scheduler state service | committed (`e8fde3c`) |
 | Move 5c | `orchestrator/evaluation.py` | critic + fact extraction service | committed (`5331f2c`) |
-| Move 5c′ | `orchestrator/workflow.py` | synthesis, canaries, retries, repeated-failure coordination | completed and verified; commit pending this checkpoint |
+| Move 5c′ | `orchestrator/workflow.py` | synthesis, canaries, retries, repeated-failure coordination | committed (`c3f78bf`) |
+| Move 5d | `orchestrator/task_runner.py` | single-task preparation, execution, classification, and outcome recording | completed and verified; commit pending this checkpoint |
+| Move 5e | composition cleanup | remaining approved composition-layer assessment | not begun |
 
 Move 4 was intentionally leaf-only: the full evaluation layer (`run_critic`,
 `run_synthesis`, `run_canaries`, `extract_facts`) depends on scheduler helpers

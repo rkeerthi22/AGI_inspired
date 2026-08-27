@@ -2272,3 +2272,19 @@ passed 21/21 suites with only `test_baseline` quarantined as the designated
 live-data check. The aggregate gate intentionally creates preserved rollback
 and escalation artifacts in its integrity suites; F58 itself remains
 side-effect-free. · `orchestrator/workflow.py` · `tests/test_f58.py`
+
+### F60 task-runner extraction (Move 5d behaviour and state isolation)
+`run_task(tid, mission, roles)` moved to `orchestrator/task_runner.py`;
+`batch_runner.py` remains the composition layer and explicitly re-exports the
+same function object. The canonical runner uses module-qualified dependencies,
+resolves runtime root/run/log bindings at call time, keeps prediction hooks
+fail-soft, and preserves the established persistence and classification order.
+
+`tests/test_f60.py` patches canonical owning modules and pins prompt inputs,
+prior-review and baseline text, skill/compliance injection, synthesis and
+research ownership, both budget gates, raw-output persistence before
+classification, deliverable creation before criticism, token accumulation,
+fact writes, compatibility identity, and AST dependency boundaries. Two repeat
+runs preserve HEAD, status, ledger, escalation, and policy hashes exactly. The
+focused F48/F57/F58/F59/F60/throughput gate passes 6/6. Move 5e remains
+unstarted. · `orchestrator/task_runner.py` · `tests/test_f60.py`

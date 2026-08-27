@@ -1,60 +1,58 @@
 {
   "schema_version": 1,
-  "brief_revision": 2,
-  "created_at": "2026-08-27T06:04:25.338523+00:00",
+  "brief_revision": 3,
+  "created_at": "2026-08-27T19:29:59.762320+00:00",
   "status": "checkpointed",
   "repository": {
     "branch": "master",
-    "head": "4d1a40156679d428ec82e13c800dcb6c91236045",
+    "head": "c3f78bfcd1306165c64f8a66bc0ff52e4b8ddcc9",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       "REFACTOR_PLAN.md",
       "docs/HARDENING.md",
       "orchestrator/batch_runner.py",
-      "tests/test_f48.py",
-      "tests/test_f58.py",
-      "tests/test_throughput.py",
-      "orchestrator/workflow.py"
+      "orchestrator/task_runner.py",
+      "tests/test_f60.py"
     ]
   },
   "task": {
-    "id": "W9-Move-5c-prime",
-    "phase": "post-extraction-review",
+    "id": "W9-Move-5d",
+    "phase": "pre-commit-checkpoint",
     "status": "checkpointed",
-    "next_action": "Independent review; do not begin Move 5d without operator approval"
+    "next_action": "Commit and push Move 5d; then stop with Move 5e unstarted"
   },
   "completed": [
-    "Move 5c-prime extracted four workflow functions with compatibility identities preserved",
-    "C4 and C5 restored to pre-extraction behavior from 4d1a401",
-    "F58 passed twice with zero protected-state drift and zero rollback attempts",
-    "Complete deterministic gate passed 21/21; test_baseline remains quarantined"
+    "run_task extracted to task_runner with compatibility identity",
+    "F60 passed twice with zero protected-state drift",
+    "focused gate passed 6/6",
+    "complete deterministic gate passed 22/22; test_baseline quarantined"
   ],
   "locked_constraints": [
-    "workflow.py must not import batch_runner or task_runner",
-    "retry coordination receives run_task_fn by dependency injection",
-    "runtime paths and logging resolve through runtime_context at call time",
-    "Do not begin Move 5d without operator approval"
+    "workflow imports neither task_runner nor batch_runner",
+    "batch_runner.run_task is task_runner.run_task",
+    "runtime paths and logging resolve at call time",
+    "do not begin Move 5e"
   ],
   "gate": {
     "status": "green",
-    "detail": "21/21 deterministic suites green; test_baseline quarantined; F58 repeatably zero-drift"
+    "detail": "22/22 deterministic suites green; F60 repeatably zero-drift"
   },
   "references": [
     {
       "path": "REFACTOR_PLAN.md",
-      "purpose": "approved W9 module boundaries and move status",
-      "sha256": "82634a18b2ef78aa208fc21209a5bb06a659c7f95dc7f13274b51bfbd7e805f1"
+      "purpose": "move status and boundaries",
+      "sha256": "65ab2118fc32edfa752004e61844081d08f09182f33fcbdd83060763351104c6"
     },
     {
       "path": "docs/HARDENING.md",
-      "purpose": "F58 safety and regression record",
-      "sha256": "37bb1f6b312a4092155d326542bd5de67be1ad52476b9aaf7dae6b80f627b92c"
+      "purpose": "F60 verification record",
+      "sha256": "f4c88b0206f380b7def0938e747a681f3a74582c794edaf0e917069ca2e79914"
     },
     {
-      "path": ".claude/HANDOFF.md",
-      "purpose": "historical session record",
-      "sha256": "113e156a743f41594bbb5f50e914c4880b49c61524e193ba752aae4d8c129297"
+      "path": "tests/test_f60.py",
+      "purpose": "Move 5d characterization",
+      "sha256": "6436ae9e312e4b748ffbcb868693171d25654f81a4cb3820f9a9472412a1a4c4"
     }
   ]
 }
