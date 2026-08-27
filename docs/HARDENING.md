@@ -2212,3 +2212,42 @@ Task 30's re-run as a true synthesis is **done** and was removed from this list 
 completed at 18:02:46 with `status='done'`, `critic_verdict='pass'`, 10/10 citations reachable and an
 honest DATA GAP where the source brief was short. It is described as completed at F32 and F33 above,
 so this list had been contradicting the same document two sections earlier.
+
+### F55 worker partial-output resilience
+Worker prompt-side instruction added so that on tool failure (HTTP 503/403,
+timeouts, browser-blocked pages) the worker emits a partial deliverable with
+an explicit `PARTIAL OUTPUT` marker rather than a silently empty one. Does NOT
+address `loop_web_search_cap` separately — that cap is a structural ceiling,
+not a recovery mechanism. Committed 2026-08-26; F55 number reserved since.
+
+### F56 orchestrator logging proxy
+Three logger implementations (`batch_runner.log`, `integrity.log`,
+`execution.log`) had silently captured the same function object across the
+Move 1/2 era, but module-global rebinding (`br.log = lambda`) only silenced
+the binding on the patched module — `integrity` and `execution` kept writing
+to stdout and to `runs/schtask_last.log`. Re-export shims do not redirect
+module-global lookups inside function bodies. The proxy in
+`runtime_context.log` delegates to `_logger` at call time, so a single
+`_logger` patch is visible to every orchestrator module. `tests/_silence.py`
+exposes `silence_log()` / `capture_log()` as the truthful patch points;
+legacy `br.log = lambda` no longer suffices and was updated across the
+regression suites. Fixed 2026-08-27 · `orchestrator/runtime_context.py:25-64`
+· `tests/test_f56.py` (18 assertions)
+
+### F57 evaluation extraction (Move 5c behaviour preservation)
+`run_critic`, `extract_facts`, `_parse_json_array`, `ENTITY_TYPES` lived in
+`batch_runner.py` (alongside the Move 4 leaves `seed_is_synthesis`,
+`retract_facts` already in `evaluation.py`). Move 5c moves them all into
+`orchestrator/evaluation.py` as a single evaluation-and-memory service;
+`batch_runner.py` retains explicit re-exports for backwards compatibility.
+The dependent model call is module-qualified (`execution.ollama_chat(...)`,
+not `from execution import ollama_chat`) so tests and future capability
+injection can patch `execution.ollama_chat` truthfully. `tests/test_f57.py`
+(36 assertions) pins every observable behaviour before extraction: parsing
+tolerance, validation, normalisation, budget gating, hard-fail short-circuit,
+PASS/FAIL parsing, unparseable → needs_review, baseline + scope injection,
+trace path, and the identity check `br.X is ev.X` for all six names.
+F57 also locks the dependency shape: the patch point is the owning module
+(`execution`), not the compatibility alias (`batch_runner`). The move is
+behaviour-preserving — measured across the deterministic gate, not
+assumed. · `orchestrator/evaluation.py` · `tests/test_f57.py`

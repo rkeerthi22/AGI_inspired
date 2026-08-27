@@ -2,10 +2,11 @@
 extract_facts, and _parse_json_array so the Move 5c extraction into
 orchestrator/evaluation.py is verifiably behaviour-preserving.
 
-These tests run against the current code path (batch_runner.py, where the
-functions live today). Move 5c re-exports them through batch_runner, so a
-single `br.X is evaluation.X` assertion at the top of every section
-becomes the regression guard against a drift during extraction.
+These tests run against the post-Move-5c code path: `evaluation.py` owns
+the four functions and constants; `batch_runner.py` re-exports them for
+backwards compatibility. The identity section (§5) verifies `br.X is
+ev.X` -- a regression on that is the smoking gun for accidental
+duplication during a future refactor.
 
 Three concerns, six sections:
   - §1 _parse_json_array: parsing tolerance (plain, fenced, think-block,
@@ -84,10 +85,27 @@ def stub_chat_factory(replies):
 
 
 def patch_chat(mp, replies):
-    """Patch ollama_chat on every reference known to matter."""
+    """Patch ollama_chat on every module known to own the call.
+
+    After Move 5c, `evaluation.py` is the owner and reaches the model via
+    `execution.ollama_chat(...)` module-qualified. Patching the captured
+    reference on `batch_runner` is no longer required (the import path
+    `from evaluation import ollama_chat` is forbidden by the operator's
+    pre-Move-5c instruction -- evaluation uses module-qualified calls).
+    We still patch both for belt-and-braces, so a test that runs against
+    a partially-extracted module tree does not silently miss the call.
+    """
     stub = stub_chat_factory(replies)
     mp.set(execution, "ollama_chat", stub)
-    mp.set(br, "ollama_chat", stub)  # captured reference pre-Move-5c
+    # evaluation.py uses module-qualified `execution.ollama_chat(...)`,
+    # so the patch on `execution` is the load-bearing one. The legacy
+    # `batch_runner.ollama_chat` is left alone here -- Move 5c removed
+    # those definitions from batch_runner, so a `mp.set(br, "ollama_chat",
+    # ...)` would now create an attribute that no production code reads.
+    # Tests of evaluation directly import evaluation and patch via
+    # `execution.ollama_chat`. If a future refactor reintroduces a
+    # captured-reference caller, the test should patch that caller,
+    # not evaluation.
     return stub
 
 
@@ -144,23 +162,35 @@ def temp_root_with_ledgerbook():
         with sqlite3.connect(temp_lb, timeout=30) as c:
             c.executescript(schema)
 
-    # Patch ROOT on every module that may read it. PATCH FIRST, then return
-    # cleanup that restores all of them.
+    # Patch ROOT and RUNS on every module that may read them. Patching only
+    # rc.* is not enough: `batch_runner.ROOT/RUNS` and `evaluation.ROOT/RUNS`
+    # are independent name bindings that hold the *original* Path object
+    # once rc.* is reassigned to a new Path.
     real_root_rc = rc.ROOT
     real_root_br = br.ROOT
     real_root_ev = ev.ROOT if hasattr(ev, "ROOT") else None
+    real_runs_rc = rc.RUNS
+    real_runs_ev = ev.RUNS if hasattr(ev, "RUNS") else None
     rc.ROOT = tmp_root
     br.ROOT = tmp_root
+    rc.RUNS = tmp_root / "runs"
     if real_root_ev is not None:
         ev.ROOT = tmp_root
+    if real_runs_ev is not None:
+        ev.RUNS = tmp_root / "runs"
 
     def cleanup():
         rc.ROOT = real_root_rc
         br.ROOT = real_root_br
         if real_root_ev is not None:
             ev.ROOT = real_root_ev
+        rc.RUNS = real_runs_rc
+        if real_runs_ev is not None:
+            ev.RUNS = real_runs_ev
         shutil.rmtree(tmpdir, ignore_errors=True)
 
+    # Also create the runs dir so trace_path writes don't fail.
+    (tmp_root / "runs").mkdir(exist_ok=True)
     return tmp_root, cleanup
 
 
@@ -222,7 +252,6 @@ try:
     def boom(*a, **k):
         raise RuntimeError("model unavailable")
     mp.set(execution, "ollama_chat", boom)
-    mp.set(br, "ollama_chat", boom)
     with silence_log():
         written = br.extract_facts(tid=9002, deliverable="x" * 50, manager_model="m")
     check("model-call failure returns 0 (does not raise)", written, 0)
@@ -391,7 +420,6 @@ mp.set(citecheck, "is_hard_fail", lambda s: False)
 mp.set(policy, "manager_call_budget_breached", lambda: False)
 mp.set(policy, "record_manager_call", lambda: None)
 mp.set(execution, "ollama_chat", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("net down")))
-mp.set(br, "ollama_chat", lambda *a, **k: (_ for _ in ()).throw(RuntimeError("net down")))
 with silence_log():
     verdict, text = br.run_critic(
         row=stub_row(), out="x", roles={"critic": {"model": "m"}},
@@ -487,8 +515,10 @@ mp.set(policy, "record_manager_call", lambda: None)
 # Use a tmpdir for RUNS so we don't write to the real one.
 tmpdir_runs = tempfile.mkdtemp(prefix="f57_runs_")
 real_runs = br.RUNS
+real_ev_runs = ev.RUNS
 mp.set(br, "RUNS", Path(tmpdir_runs))
 mp.set(rc, "RUNS", Path(tmpdir_runs))
+mp.set(ev, "RUNS", Path(tmpdir_runs))
 
 calls_stub = patch_chat(mp, ["VERDICT: PASS\nok."])
 with silence_log():
