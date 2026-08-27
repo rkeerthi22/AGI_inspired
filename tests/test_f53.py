@@ -7,8 +7,8 @@ Two compounding defects, both required for either fix to matter:
      the one consumption column F21 missed. Invisible because the value was always 0.
 
 Runs against a TEMP ledger, never the live one (F12's lesson: the db path is injectable).
-The live ledger is opened read-only once, to assert the historical fact this fix is
-premised on.
+The historical all-zero premise is recorded in this test's provenance, not asserted
+forever against production history: real interventions are expected after this fix.
 """
 import json
 import sqlite3
@@ -36,12 +36,12 @@ sqlite3.connect(tmp).executescript(
     (ROOT / "ledger" / "schema.sql").read_text(encoding="utf-8"))
 ledger.LEDGER_DB = tmp
 
-print("=== 1. the premise: the live ledger really does read 0 everywhere ===")
-live = sqlite3.connect(f"file:{ROOT / 'ledger' / 'ledger.db'}?mode=ro", uri=True)
-rows = live.execute("SELECT DISTINCT interventions FROM tasks").fetchall()
-check("every historical row has interventions=0 (the bug this fixes)",
-      sorted(r[0] for r in rows), [0])
-live.close()
+print("=== 1. a fresh task starts with the historical zero default ===")
+premise_tid = ledger.queue_task("m-premise", "spec", "criteria")
+with sqlite3.connect(tmp) as c:
+    premise = c.execute("SELECT interventions FROM tasks WHERE task_id=?",
+                        (premise_tid,)).fetchone()[0]
+check("fresh row has interventions=0 before any recorded event", premise, 0)
 
 print("\n=== 2. record_intervention increments and names the kind ===")
 tid = ledger.queue_task("m-test", "spec", "criteria")

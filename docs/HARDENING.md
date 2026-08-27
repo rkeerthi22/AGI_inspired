@@ -2302,3 +2302,13 @@ live-state drift. W9 ends here. The next phase is real end-to-end harness
 validation—missions, recovery, efficiency, capability selection, and outcome
 quality—not further refactoring. · `orchestrator/batch_runner.py` ·
 `tests/test_f61.py`
+
+### F62 task-scope dependency lost during W9 extraction
+The first production recovery after W9 reached `prompts.task_scope_note()` and
+raised `NameError: seed_is_synthesis is not defined` before the worker call.
+The function retained a bare reference after the predicate moved to
+`evaluation.py`. It now resolves through the canonical owner as
+`evaluation.seed_is_synthesis(...)`; `tests/test_f62.py` covers both research
+and synthesis scope routes. The failed recovery left task 64 recoverable and
+spent no worker tokens. The subsequent retry completed normally. ·
+`orchestrator/prompts.py` · `tests/test_f62.py`

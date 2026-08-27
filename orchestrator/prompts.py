@@ -32,6 +32,8 @@ import sqlite3
 import sys
 from pathlib import Path
 
+import evaluation
+
 # Mirrors batch_runner.ROOT: the repo root, computed from this file's location.
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -243,7 +245,7 @@ def task_scope_note(spec: str, mission: dict) -> str:
     n = len(mission["seeds"])
 
 
-    if seed_is_synthesis(spec):
+    if evaluation.seed_is_synthesis(spec):
 
 
         return (
