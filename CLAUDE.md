@@ -56,6 +56,9 @@ also land in OneDrive on every nightly backup — two independent off-disk copie
   containment, clock-domain, canary accounting); `python tests/run_all.py` runs all of it
 - `.claude/HANDOFF.md` — running session-handoff doc: architectural decisions, unresolved
   action items, environment facts — read this first when picking work back up
+- `AGENTS.md` (repo root) — universal agent-discovery pointer for the continuity protocol.
+  Claude Code is a discoverable instance; Aider/Codex/Cursor/Continue pick it up the same way.
+  Lean recovery command: `python orchestrator/continuity.py recover`. Live state always wins.
 - `.harness/continuity/current.json` — small current recovery checkpoint. After context
   compaction, model switch, crash recovery, or resume: read and validate this first with
   `python orchestrator/continuity.py recover`; verify live Git/runtime/database state and

@@ -107,6 +107,46 @@ check("continuity directory protected", ".harness" in integrity.PROTECTED_PATHS,
 live = continuity.load_current()
 check("tracked current brief validates", live["schema_version"], 1)
 
+# ── AGENTS.md: cross-agent discovery pointer ──────────────────────────
+
+# AGENTS.md is the industry-convention file at the project root that Aider,
+# Codex, Cursor, and Continue auto-discover. After it is committed (rather
+# than only referenced in CLAUDE.md) it becomes a supervising-agent
+# instruction surface, so the same argument F52 made for `.claude` applies:
+# it must be in PROTECTED_PATHS and its hash must be tracked.
+
+agents_path = ROOT / "AGENTS.md"
+check("AGENTS.md exists at repo root", agents_path.is_file(), True)
+check("AGENTS.md is Git-tracked",
+      bool(subprocess.run(["git", "-C", str(ROOT), "ls-files", "--error-unmatch",
+                           "AGENTS.md"], capture_output=True).returncode == 0), True)
+check("AGENTS.md in PROTECTED_PATHS",
+      "AGENTS.md" in integrity.PROTECTED_PATHS, True)
+# _tracked_hashes() walks PROTECTED_PATHS so AGENTS.md must appear.
+tracked = integrity._tracked_hashes()
+check("_tracked_hashes() includes AGENTS.md",
+      "AGENTS.md" in tracked, True)
+check("AGENTS.md <= 2 KB",
+      agents_path.stat().st_size <= 2048, True)
+
+# Content checks: must name the real recover command, must say live wins,
+# must NOT advertise `continuity.py write` (the CLI has only `validate` and
+# `recover`; `write` was never implemented and would mislead the next agent).
+content = agents_path.read_text(encoding="utf-8")
+check("AGENTS.md names python orchestrator/continuity.py recover",
+      "python orchestrator/continuity.py recover" in content, True)
+check("AGENTS.md says live state wins",
+      any(needle in content.lower() for needle in
+          ("live state wins", "live wins", "live always wins")), True)
+check("AGENTS.md does NOT advertise continuity.py write",
+      "continuity.py write" not in content, True)
+check("AGENTS.md does NOT duplicate the full protocol",
+      "validate_brief" not in content
+      and "write_current" not in content
+      and "inspect_repository" not in content, True)
+check("AGENTS.md points to the canonical Compact Brief path",
+      ".harness/continuity/current.json" in content, True)
+
 print("\n=== FAILURES ===")
 if fails:
     for failure in fails:

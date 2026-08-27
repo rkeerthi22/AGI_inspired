@@ -15,3 +15,11 @@
 #   - Reasons live in tests/QUARANTINE.md so the configuration file stays
 #     parseable and the rationale stays human-readable.
 test_baseline
+# F58 quarantined 2026-08-27: this suite invokes br.run_canaries against
+# the LIVE ledger; the auto-rollback code path in promote.cmd_rollback()
+# then deletes operator-approved skills from skills_analyst/ and creates
+# real Git commits. The suite is WIP pending the isolation work in
+# Phase 3.12-3.14. Do NOT re-enable until that work lands and the test
+# carries whole-suite snapshots for git HEAD, status, ledger, runs/,
+# and the active-skill path list+hashes.
+test_f58

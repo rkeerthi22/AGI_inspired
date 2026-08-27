@@ -216,7 +216,14 @@ PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
                    # the supervising agent after context loss, so it belongs on the same
                    # tracked-hash containment surface. Truth still comes from live Git/DB
                    # state; protection only makes unexpected edits visible.
-                   ".harness"]
+                   ".harness",
+                   # Cross-agent instruction file at repo root. The industry convention
+                   # (Aider/Codex/Cursor/Continue auto-discover an `AGENTS.md` at the
+                   # project root) means a written edit here can steer any supervising
+                   # agent, not just one. Same argument F52 made for `.claude`. Listed
+                   # explicitly rather than by directory so a worker cannot drop a
+                   # sibling `AGENTS.local.md` to evade the guard.
+                   "AGENTS.md"]
 
 # F42: PROTECTED_PATHS covers files that EXIST. A brand-new file at the repo root matched
 # nothing in it and was therefore invisible -- found 2026-07-30 when a 699-line
