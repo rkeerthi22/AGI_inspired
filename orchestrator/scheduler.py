@@ -1,4 +1,4 @@
-"""orchestrator/scheduler.py -- pure scheduling and task-lifecycle state (Move 5b).
+"""orchestrator/scheduler.py -- scheduler state service (Move 5b).
 
 Extracted from batch_runner.py as Move 5b of the W9 5-file split (see
 REFACTOR_PLAN.md). This module owns task-lifecycle state in `ledger.db`:
@@ -11,11 +11,19 @@ Dependency direction (per the W9 plan, section 3):
                     ↑
                   workflow (5c')
 
-Allowed dependencies:
+Module category: SCHEDULER STATE SERVICE.
+    Reads + writes SQLite state in `ledger.db`. No LLM calls, no
+    evaluation. Allowed dependencies:
     - `runtime_context` (paths, log)
     - `ledger`
     - `policy`
     - `prompts` (`pass_criteria_for`)
+
+It is described as a "scheduler state service" rather than "pure"
+because it reads and writes SQLite state in `ledger.db`: queueing,
+expiration, crash recovery, and resume dedup are durable operations
+(F2, F6, F35, F43). The only "pure" surface is `accumulated_tokens()`,
+which is an arithmetic helper over its inputs.
 
 NOT in scope (the operator's pre-5b gate):
     - No model calls, no model routing, no failover.
@@ -39,11 +47,11 @@ from datetime import datetime
 
 import yaml
 
-from runtime_context import ROOT, MISSIONS, log
+from runtime_context import MISSIONS, log
 
 import ledger  # noqa: E402  -- orchestrator sibling; lazy-importable
-import policy  # noqa: E402  -- ditto
 from prompts import pass_criteria_for  # noqa: E402  -- only pass_criteria_for is needed
+
 
 def parse_mission(mission_id: str) -> dict:
     path = MISSIONS / f"{mission_id}.md"
@@ -58,16 +66,8 @@ def parse_mission(mission_id: str) -> dict:
     # merge numbered continuation lines (seeds wrap across lines in the files)
     return {"id": mission_id, "frontmatter": fm, "body": text, "seeds": seeds, "path": path}
 
-
-
-
-
 def week_key() -> str:
     return datetime.now().strftime("%Y-W%V")
-
-
-
-
 
 def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
     """Queue this week's tasks (dedup on mission+seed#+week). Returns task_ids to run,
@@ -106,10 +106,6 @@ def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
     rows.sort(key=lambda r: (r[1] is not None, r[0]))
     return [tid for tid, _ in rows]
 
-
-
-
-
 def is_first_run_for_mission(mission_id: str) -> bool:
     """True if this mission has never completed a task in an earlier week. A mission's
     week-1 run structurally cannot satisfy a 'changes since last week' criterion -- there
@@ -123,12 +119,6 @@ def is_first_run_for_mission(mission_id: str) -> bool:
             "SELECT 1 FROM tasks WHERE mission_id=? AND status='done' AND spec NOT LIKE ? LIMIT 1",
             (mission_id, f"[{wk}]%")).fetchone()
     return row is None
-
-
-# ── memory-update stage (§2.1) -- orchestrator-only ledgerbook writes ──────────
-
-
-
 
 def expire_stale_parked() -> None:
     """Previous-ISO-week rows that can never run again are marked 'stale', which
@@ -170,10 +160,6 @@ def expire_stale_parked() -> None:
             log(f"expired {cur.rowcount} task(s) from previous weeks "
                 f"({never} never attempted) — they now count as dropped, not invisible")
 
-
-
-
-
 def reconcile_interrupted_tasks() -> int:
     """H3 (docs/HARDENING.md, fixes F2): on every process start, before any new queueing,
     find 'running' rows whose lease has expired -- the owning process crashed, was killed,
@@ -214,11 +200,6 @@ def reconcile_interrupted_tasks() -> int:
            f"{n_gave_up} gave up after {ledger.MAX_TASK_ATTEMPTS} interruptions")
     return n_recovered + n_gave_up
 
-
-# ── execution ──────────────────────────────────────────────────────────────────
-
-
-
 def accumulated_tokens(usage: dict, prior_in, prior_out) -> tuple[int, int]:
     """This attempt's consumption ADDED to whatever the row already carried.
 
@@ -237,13 +218,7 @@ def accumulated_tokens(usage: dict, prior_in, prior_out) -> tuple[int, int]:
     return (int(usage.get("input_tokens") or 0) + int(prior_in or 0),
             int(usage.get("output_tokens") or 0) + int(prior_out or 0))
 
-
-
-
-
 RESUMABLE_STATUSES = ("quota_wait", "queued", "interrupted", "infra_failed")
-
-
 
 def mission_workspace(mission_id: str) -> str:
     return {"001-shopify-competitor-intel": "shopify",
@@ -251,4 +226,3 @@ def mission_workspace(mission_id: str) -> str:
             "003-adforge-local-market": "adforge"}.get(mission_id, "onboarding")
 
 
-# ── canaries (deterministic grading, no critic) ───────────────────────────────
