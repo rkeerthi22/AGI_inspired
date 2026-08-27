@@ -1,4 +1,4 @@
-"""F55: orchestrator logging regression — every module must write through the
+"""F56: orchestrator logging regression — every module must write through the
 same logger, and a single patch must silence every call site.
 
 Three concerns, three assertions:
@@ -16,7 +16,7 @@ Three concerns, three assertions:
 
   3. Truthful patch semantics: a single `silence_log()` (or `capture_log()`)
      invocation silences every orchestrator module, not just the one whose
-     `log` reference was originally captured. The pre-F55 pattern of
+     `log` reference was originally captured. The pre-F56 pattern of
      `br.log = lambda` only silenced `batch_runner`'s own reference and
      looked like it worked because of the import-time capture — but the
      regression test asserts the routing is in `_logger`, not in `log`.
@@ -103,9 +103,9 @@ with ctx:
     integrity.log("capture me from integrity")
     execution.log("capture me from execution")
 check("captured br line", any("capture me from br" in m for m in sink), True)
-check("captured integrity line (pre-F55 this would have been missed)",
+check("captured integrity line (pre-F56 this would have been missed)",
       any("capture me from integrity" in m for m in sink), True)
-check("captured execution line (pre-F55 this would have been missed)",
+check("captured execution line (pre-F56 this would have been missed)",
       any("capture me from execution" in m for m in sink), True)
 
 print("\n=== 5. the silence is scoped -- logging resumes after the context ===")
@@ -124,7 +124,7 @@ check("no leak inside the silence block", any("inside" == m for m in captured), 
 check("logging resumed after the block", any("outside" == m for m in captured), True)
 
 print("\n=== 6. validated against the defect ===")
-# Pre-F55: `br.log = lambda` only silenced batch_runner. integrity.log and
+# Pre-F56: `br.log = lambda` only silenced batch_runner. integrity.log and
 # execution.log still pointed at the original function. If a future refactor
 # accidentally removes the proxy and goes back to direct imports, this is the
 # failure mode: silence_log() silences nothing.

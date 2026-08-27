@@ -26,7 +26,7 @@ import execution  # noqa: E402  -- Move 2: ollama_chat / hermes_worker /
                    #                     execution's globals. Patching batch_runner.X
                    #                     would rebind the public name but not redirect
                    #                     the internal call -- so monkey-patch on execution.
-from _silence import capture_log  # noqa: E402  -- F55: capture via the shared logger proxy
+from _silence import capture_log  # noqa: E402  -- F56: capture via the shared logger proxy
 
 fails = []
 sink, capture_ctx = capture_log()

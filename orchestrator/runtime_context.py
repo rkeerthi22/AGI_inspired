@@ -12,7 +12,7 @@ and, when a run has opened a log file, appends the same line to it. Tests
 that want to silence or capture every orchestrator log line patch `_logger`
 directly (see `tests/_silence.py` for the helper).
 
-The proxy is the answer to the F55 defect: when each orchestrator module
+The proxy is the answer to the F56 defect: when each orchestrator module
 imported `log` from `runtime_context` directly, patching `br.log = lambda`
 only silenced `batch_runner`'s own `log` reference. `integrity.log` and
 `execution.log` had already captured the same function object -- so the patch

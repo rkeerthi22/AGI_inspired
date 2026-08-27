@@ -7,52 +7,64 @@
 
 ## 0. Pre-5b cleanups (operator-specified)
 
-Before Move 5b begins, the following are in scope as small atomic edits:
+Before Move 5b begins, the following were in scope as small atomic edits.
+Each is now landed or superseded.
 
 1. **Remove stale `global _log_file` from `batch_runner.main()`.** `_log_file` is no
    longer defined in `batch_runner`'s module globals (Move 5a moved it to
    `runtime_context`); the `global` declaration is harmless but misleading.
-   *Done locally on this branch, pending commit.*
+   *Done in commit `80c4f01`.*
 
 2. **Update this plan's status** from `DRAFT` to `APPROVED`, marking which moves
-   have landed and which are operator-approved vs pending.
+   have landed and which are operator-approved vs pending. *Done.*
 
 3. **Remove live workspace sizing from the F49 deterministic gate.** Section 7
-   of `test_f49.py` prints a live-data observation (`{n} briefs on disk,
-   largest {x} chars, {y} exceeded the old 6000`). Even as a print, it reads
-   like a check and drifts as new briefs land. Drop the section; the real
-   invariants (shipped cap clears the largest brief, cap did not regress) move
-   into the dedicated cap regression test instead of the F49 file.
+   of `test_f49.py` was a live-data drift observation (`{n} briefs on disk,
+   largest {x} chars, {y} exceeded the old 6000`); dropped. Section 7 now
+   asserts only the constant value (`SYNTHESIS_BRIEF_CHARS >= 16000` and
+   `== 24000`), independent of workspace contents. *Done in `80c4f01`.*
 
 4. **Replace Markdown-driven quarantine configuration.** The parser in
-   `tests/run_all.py` extracts `test_*` names from `tests/QUARANTINE.md` via a
-   regex; that is brittle and conflates documentation with configuration. Move
-   to `tests/quarantine.txt` (one stem per line, `#`-comments allowed).
+   `tests/run_all.py` used to extract `test_*` names from `tests/QUARANTINE.md`
+   via a regex. Now `tests/quarantine.txt` (one stem per line, `#`-comments)
+   is the configuration; `QUARANTINE.md` is rationale only. *Done in `80c4f01`.*
 
-5. **Add a shared-logging regression test.** New `test_f55.py` asserts that
-   `runtime_context.log` writes to the active run log when one is set, and
-   that internal calls from `integrity` and `execution` resolve to the SAME
-   function object so they cannot silently diverge.
+5. **Add a shared-logging regression test.** New `test_f56.py` asserts the
+   proxy indirection, the active run log capture for every module, the
+   silence/capture semantics, and a validated-against-the-defect section.
+   *Done in `80c4f01`.*
 
-6. **Make logger patch semantics truthful.** Today `br.log = lambda` only
-   silences `batch_runner.log`; `integrity` and `execution` keep logging because
-   their internal references look up `log` in their own globals. The
-   regression in #5 is the cause. Fix: `runtime_context.log` becomes a thin
-   proxy to a module-level `_log` callable, and the proxy itself is patched in
-   tests via a single helper `tests/_silence.py: silence_log()`. All
-   orchestrator modules will see the patch.
+6. **Make logger patch semantics truthful.** `runtime_context.log` is now a
+   thin proxy that delegates to `_logger` at call time. `tests/_silence.py`
+   exposes `silence_log()` and `capture_log()` as the truthful patch points;
+   the legacy `br.log = lambda` pattern no longer suffices and the suites that
+   used it (`test_f48`, `test_f50`, `test_f52`) now go through the helpers.
+   *Done in `80c4f01`.*
 
 7. **Resolve the scheduler↔evaluation cycle before 5c.** Pure evaluation
    (critic scoring, fact extraction, leaf predicates) stays in
    `evaluation.py`. Orchestration that mixes scheduler state with grading
-   (synthesis pipeline, canary pass-fail accounting, retry ordering of graded
-   failures) goes in a new `task_runner.py` (Move 5d) or a dedicated
-   `workflow.py` if a separate boundary helps. The exact home is decided
-   during 5c/5d; the rule is *no cycles*.
+   (synthesis pipeline, canary pass-fail accounting, retry ordering of
+   graded failures, repeat-failure heuristic) goes in a dedicated
+   `workflow.py`. The decision is locked: see §2 / 5c′ below. *Done in
+   this revision.*
+
+8. **Plan contradiction fix (operator, this revision).** Earlier drafts of
+   §2 / 5b listed `retry_failed_this_fire`, `_check_repeated_failure`, and
+   the `evaluation` (`seed_is_synthesis`) dependency under scheduler, while
+   §2 / 5c′ listed `retry_failed_this_fire` under workflow — and §3's
+   narrative said scheduler must not import evaluation. All three of those
+   moves are now consolidated in `workflow.py`. Scheduler is pure state with
+   no evaluation import. *Done in this revision.*
+
+9. **Logging-test number renamed (operator, this revision).** `test_f55.py`
+   was originally created for the logging proxy; F55 is already assigned to
+   worker partial-output resilience, so the test is renamed to
+   `test_f56.py`. F55 stays reserved. *Done in this revision.*
 
 ---
 
-## 0. Why this revision exists
+## 1. Why this revision exists
 
 The original plan proposed a 1,300-line Move 5 (`scheduler.py`) that would
 have contained every function left in `batch_runner.py`: scheduling, evaluation,
@@ -66,7 +78,7 @@ real separation of concerns, no duplicated helpers, no wildcard imports, and no
 
 ---
 
-## 1. What has already landed
+## 2. What has already landed
 
 | Move | File | What moved | Status |
 |---|---|---|---|
@@ -88,18 +100,19 @@ gives every module a single shared logger.
 
 ---
 
-## 2. The remaining moves (5b–5e)
+## 3. The remaining moves (5b–5e)
 
 ### 5b — Scheduler state functions
 **File:** `orchestrator/scheduler.py`
 
-Pure scheduling helpers that manage task lifecycle state in `ledger.db`:
+Pure scheduling helpers that manage task lifecycle state in `ledger.db`.
+No orchestration logic (no grading, no retry decisions, no canary
+accounting) — that goes to `workflow.py` (5c′) so the scheduler/evaluation
+cycle the operator flagged stays broken.
 
 - `queue_mission_tasks`
 - `expire_stale_parked`
 - `reconcile_interrupted_tasks`
-- `retry_failed_this_fire`
-- `_check_repeated_failure`
 - `mission_workspace`
 - `accumulated_tokens`
 - `is_first_run_for_mission`
@@ -111,9 +124,8 @@ Dependencies:
 - `ledger`
 - `policy`
 - `prompts` (`pass_criteria_for`)
-- `evaluation` (`seed_is_synthesis`)
 
-No model calls, no integrity guards, no CLI.
+No model calls, no integrity guards, no CLI, no evaluation imports.
 
 ### 5c — Pure evaluation services
 **File:** `orchestrator/evaluation.py` (extends existing file)
@@ -137,15 +149,19 @@ Dependencies:
 **File:** `orchestrator/workflow.py` (new)
 
 Functions that mix pure evaluation with scheduler state — synthesis
-routing, canary pass/fail accounting, retry ordering of graded failures.
-These don't belong in `evaluation.py` because they touch `ledger.QUEUE`
-state, and they don't belong in `task_runner.py` because they coordinate
-across multiple tasks (a synthesis consumes prior-week briefs; a canary
-pass produces a roll-back signal).
+routing, canary pass/fail accounting, retry ordering of graded failures,
+and the repeat-failure heuristic that decides when to stop retrying a
+seed. These don't belong in `evaluation.py` because they touch
+`ledger.QUEUE` state, and they don't belong in `task_runner.py` because
+they coordinate across multiple tasks (a synthesis consumes prior-week
+briefs; a canary pass produces a roll-back signal; a retry pass touches
+many tasks at once).
 
 - `run_synthesis` — synthesis pipeline (brief gather → critic → finish)
 - `run_canaries` — canary pipeline (per-spec grade → finish + week tally)
 - `retry_failed_this_fire` — same-fire retry of graded failures
+- `_check_repeated_failure` — heuristic that decides whether a seed has
+  hit its retry budget
 
 Dependencies: `evaluation`, `execution`, `prompts`, `integrity`, `ledger`,
 `policy`, `promote`, `runtime_context`.
@@ -188,7 +204,7 @@ Only the command-line surface and `_run` dispatch remain:
 
 ---
 
-## 3. The corrected dependency graph
+## 4. The corrected dependency graph
 
 After Move 5a (and the 5c / 5c′ / 5d split locked above):
 
@@ -217,7 +233,7 @@ canaries) and `evaluation` (critic, fact extraction) directly; the public
 
 ---
 
-## 4. AST-level findings that shaped this split
+## 5. AST-level findings that shaped this split
 
 Function sizes (after Move 5a) from `batch_runner.py`:
 
@@ -236,7 +252,7 @@ Function sizes (after Move 5a) from `batch_runner.py`:
 | `accumulated_tokens` | 17 | `scheduler.py` |
 | `is_first_run_for_mission` | 13 | `scheduler.py` |
 | `_parse_json_array` | 13 | `scheduler.py` or `runtime_context.py` utilities |
-| `_check_repeated_failure` | 13 | `scheduler.py` |
+| `_check_repeated_failure` | 13 | `workflow.py` |
 | `parse_mission` | 12 | `scheduler.py` |
 | `mission_workspace` | 4 | `scheduler.py` |
 | `week_key` | 2 | `scheduler.py` |
@@ -277,7 +293,7 @@ them where needed.
 
 ---
 
-## 5. Test gate after each move
+## 6. Test gate after each move
 
 After every move:
 
@@ -297,7 +313,7 @@ No move proceeds until the deterministic gate is green.
 
 ---
 
-## 6. What this plan is NOT
+## 7. What this plan is NOT
 
 - **Not a 1,300-line leftovers module.** Move 5 of the original plan is dead.
 - **Not adding capability.** Moves 5b–5e are purely organizational.
@@ -308,13 +324,21 @@ and tests are stable.
 
 ---
 
-## 7. Operator approval required
+## 8. Operator approval required
 
-Before starting Move 5b, confirm:
+The operator's pre-5b message locks the gate:
 
-1. The 5a–5e split boundary is correct.
-2. `task_runner.py` decomposition (5d) is acceptable as a separate move after
-   5b and 5c.
-3. The test gate above is the right gate.
+> The 18/18 gate and logging proxy are independently verified. Before
+> Move 5b, fix the plan contradiction: remove retry_failed_this_fire,
+> _check_repeated_failure, and the evaluation dependency from scheduler;
+> place both functions in workflow.py. Rename the logging test because
+> F55 is already assigned to worker partial-output resilience. Correct
+> the stale Move 5b/test-helper wording and push the three existing
+> commits. Then Move 5b is approved.
 
-Do not begin Move 5b until approved.
+All four conditions are now met by this revision: the contradiction is
+fixed in §3 / 5b and 5c′, the test is renamed to `test_f56.py`, the stale
+wording is corrected, and the three prior commits are pushed.
+
+Move 5b may begin once the operator confirms the working tree is clean
+and the 18/18 deterministic gate is green.

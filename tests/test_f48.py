@@ -47,7 +47,7 @@ policy.token_budget_breached = lambda *a, **k: False
 promote.newest_skill_below_baseline = lambda *a, **k: None
 promote.cmd_rollback = lambda *a, **k: None
 
-# F55: silence ALL orchestrator log streams (not just batch_runner.log).
+# F56: silence ALL orchestrator log streams (not just batch_runner.log).
 # See tests/_silence.py for why the helper exists.
 _silence_ctx = silence_log()
 _silence_ctx.__enter__()

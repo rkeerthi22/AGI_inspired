@@ -27,7 +27,7 @@ import policy  # noqa: E402
 from _silence import silence_log  # noqa: E402
 
 fails = []
-# F55: silence ALL orchestrator log streams -- the F47 mask warning fires
+# F56: silence ALL orchestrator log streams -- the F47 mask warning fires
 # from inside integrity.fs_integrity_check(), not from batch_runner.log.
 _silence_ctx = silence_log()
 _silence_ctx.__enter__()
