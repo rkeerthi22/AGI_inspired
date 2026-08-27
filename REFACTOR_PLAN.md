@@ -1,5 +1,5 @@
 # Refactor Plan — `batch_runner.py` split (Week 9, revised)
-**Status: IN PROGRESS — Moves 5a through 5d landed; Move 5e has not begun**
+**Status: COMPLETE — Moves 5a through 5e landed; next phase is end-to-end harness validation**
 **Author: AGI_like agent, 2026-08-26**
 **Revised: 2026-08-26 after operator review of Move 4 + review.txt**
 
@@ -91,7 +91,7 @@ real separation of concerns, no duplicated helpers, no wildcard imports, and no
 | Move 5c | `orchestrator/evaluation.py` | critic + fact extraction service | committed (`5331f2c`) |
 | Move 5c′ | `orchestrator/workflow.py` | synthesis, canaries, retries, repeated-failure coordination | committed (`c3f78bf`) |
 | Move 5d | `orchestrator/task_runner.py` | single-task preparation, execution, classification, and outcome recording | committed (`ef95498`), outcome boundary tightened in follow-up |
-| Move 5e | composition cleanup | remaining approved composition-layer assessment | not begun |
+| Move 5e | composition cleanup | CLI dispatch plus intentional compatibility surface | completed and verified; commit pending this checkpoint |
 
 Move 4 was intentionally leaf-only: the full evaluation layer (`run_critic`,
 `run_synthesis`, `run_canaries`, `extract_facts`) depends on scheduler helpers
@@ -105,7 +105,7 @@ gives every module a single shared logger.
 
 ---
 
-## 3. The remaining moves (5b–5e)
+## 3. Completed moves (5b–5e)
 
 ### 5b — Scheduler state functions
 **File:** `orchestrator/scheduler.py`

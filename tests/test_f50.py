@@ -18,7 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import yaml  # noqa: E402
-import batch_runner as br  # noqa: E402
 import execution  # noqa: E402  -- Move 2: ollama_chat / hermes_worker /
                    #                     load_fallback_chain / log now live here, and
                    #                     internal calls inside synthesis_with_failover
@@ -50,24 +49,24 @@ shopify = "Q" * 60_420      # measured size of a real W31 shopify synthesis prom
 
 print("=== 1. the unit decision: declared context vs prompt size ===")
 check("undeclared rung is NEVER skipped (F39's opt-in rule)",
-      br._fits_context(UNDECLARED, shopify), True)
+      execution._fits_context(UNDECLARED, shopify), True)
 check("4k rung rejects a real content synthesis prompt",
-      br._fits_context(SMALL, synth), False)
+      execution._fits_context(SMALL, synth), False)
 check("4k rung rejects a real shopify synthesis prompt",
-      br._fits_context(SMALL, shopify), False)
+      execution._fits_context(SMALL, shopify), False)
 check("4k rung still ACCEPTS a small prompt (not banned wholesale)",
-      br._fits_context(SMALL, tiny), True)
+      execution._fits_context(SMALL, tiny), True)
 check("a large-context LOCAL rung is accepted — locality is not the test",
-      br._fits_context(BIG_LOCAL, synth), True)
+      execution._fits_context(BIG_LOCAL, synth), True)
 
 print("\n=== 2. the reply reserve is real, not decorative ===")
 # 4096 tok context, 1500 reserved => at most ~2596 tok => ~10384 chars of prompt.
-just_fits = "Q" * (( 4096 - br.RESPONSE_RESERVE_TOKENS) * br.CHARS_PER_TOKEN)
-just_over = just_fits + "Q" * br.CHARS_PER_TOKEN
-check("a prompt exactly at the budget fits", br._fits_context(SMALL, just_fits), True)
-check("one token more does not", br._fits_context(SMALL, just_over), False)
+just_fits = "Q" * (( 4096 - execution.RESPONSE_RESERVE_TOKENS) * execution.CHARS_PER_TOKEN)
+just_over = just_fits + "Q" * execution.CHARS_PER_TOKEN
+check("a prompt exactly at the budget fits", execution._fits_context(SMALL, just_fits), True)
+check("one token more does not", execution._fits_context(SMALL, just_over), False)
 check("reserve is non-zero (a prompt that fills the context must NOT pass)",
-      br._fits_context(SMALL, "Q" * (4096 * br.CHARS_PER_TOKEN)), False)
+      execution._fits_context(SMALL, "Q" * (4096 * execution.CHARS_PER_TOKEN)), False)
 
 print("\n=== 3. synthesis_with_failover skips the rung instead of stalling on it ===")
 calls = []
@@ -80,7 +79,7 @@ def fake_chat(model, prompt, timeout=300, trace_path=None, usage_out=None):
 
 execution.ollama_chat = fake_chat
 execution.load_fallback_chain = lambda: [SMALL]
-out, cfg_used, exhausted = br.synthesis_with_failover(synth, SMALL, log_prefix="t")
+out, cfg_used, exhausted = execution.synthesis_with_failover(synth, SMALL, log_prefix="t")
 check("the too-small rung was never called", calls, [])
 check("reported as exhausted, so the caller parks", exhausted, True)
 check("no output invented", out, None)
@@ -100,7 +99,7 @@ def ok_chat(model, prompt, timeout=300, trace_path=None, usage_out=None):
 
 execution.ollama_chat = ok_chat
 execution.load_fallback_chain = lambda: [SMALL]
-out, cfg_used, exhausted = br.synthesis_with_failover(tiny, SMALL, log_prefix="t")
+out, cfg_used, exhausted = execution.synthesis_with_failover(tiny, SMALL, log_prefix="t")
 check("small prompt DOES run on the 4k rung", served, ["gemma4:12b-ctx4k"])
 check("not exhausted", exhausted, False)
 
@@ -108,7 +107,7 @@ print("\n=== 5. worker_with_failover got the same guard ===")
 wcalls = []
 execution.hermes_worker = lambda prompt, cfg, path, timeout=None: (wcalls.append(cfg["model"]), ("", {}))[1]
 execution.load_fallback_chain = lambda: [SMALL]
-out, usage, cfg_used, exhausted = br.worker_with_failover(
+out, usage, cfg_used, exhausted = execution.worker_with_failover(
     synth, SMALL, ROOT / "runs" / "t.usage.json", log_prefix="t")
 check("worker path also skips a rung that cannot fit", wcalls, [])
 check("and reports exhausted", exhausted, True)
@@ -126,9 +125,9 @@ check("cloud rungs deliberately declare NOTHING (never skipped by inference)",
 
 print("\n=== 7. validated against the defect ===")
 # Before F50 the only gate was quota_group; a 4k rung sailed straight through it.
-pre_fix_would_call = br._quota_group(SMALL) is None   # no group => not skipped pre-F50
+pre_fix_would_call = execution._quota_group(SMALL) is None   # no group => not skipped pre-F50
 check("pre-F50 the 4k rung passed every existing gate", pre_fix_would_call, True)
-check("...and post-F50 it is stopped by the size gate", br._fits_context(SMALL, synth), False)
+check("...and post-F50 it is stopped by the size gate", execution._fits_context(SMALL, synth), False)
 
 print("\nFAILURES:", fails if fails else "none")
 capture_ctx.__exit__(None, None, None)

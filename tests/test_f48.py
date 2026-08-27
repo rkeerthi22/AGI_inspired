@@ -25,7 +25,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import ledger  # noqa: E402
 import policy  # noqa: E402
 import promote  # noqa: E402
-import batch_runner as br  # noqa: E402
+import scheduler  # noqa: E402
 import execution  # noqa: E402
 import integrity  # noqa: E402
 import workflow  # noqa: E402
@@ -34,11 +34,11 @@ from _silence import silence_log  # noqa: E402
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
 shutil.copy2(ROOT / "ledger" / "ledger.db", tmp)
 ledger.LEDGER_DB = tmp
-br.ledger.LEDGER_DB = tmp
+ledger.LEDGER_DB = tmp
 policy.LEDGER_DB = tmp
 
 fails = []
-WK = br.week_key()
+WK = scheduler.week_key()
 
 # ── stubs: nothing leaves this process ────────────────────────────────────────
 integrity.escalate = lambda *a, **k: None
@@ -98,21 +98,21 @@ def run_one(name, usage, out="Canberra — https://example.org", exhausted=False
     workflow.CANARIES = [(name, "q", lambda t: "canberra" in t.lower())]
     execution.worker_with_failover = fake_chain(usage, out, exhausted)
     execution.worker_failed = lambda o, u: infra
-    br.run_canaries(ROLES)
+    workflow.run_canaries(ROLES)
     return row_for(name)
 
 
 print("=== 1. accumulated_tokens() arithmetic ===")
 check("fresh attempt returns this run's usage",
-      br.accumulated_tokens({"input_tokens": 5, "output_tokens": 7}, 0, 0), (5, 7))
+      scheduler.accumulated_tokens({"input_tokens": 5, "output_tokens": 7}, 0, 0), (5, 7))
 check("resume ADDS to the row's prior total",
-      br.accumulated_tokens({"input_tokens": 5, "output_tokens": 7}, 100, 200), (105, 207))
+      scheduler.accumulated_tokens({"input_tokens": 5, "output_tokens": 7}, 100, 200), (105, 207))
 check("NULL prior (first run) is a no-op, not a crash",
-      br.accumulated_tokens({"input_tokens": 5, "output_tokens": 7}, None, None), (5, 7))
+      scheduler.accumulated_tokens({"input_tokens": 5, "output_tokens": 7}, None, None), (5, 7))
 check("missing/None usage keys degrade to 0",
-      br.accumulated_tokens({"input_tokens": None}, 3, None), (3, 0))
+      scheduler.accumulated_tokens({"input_tokens": None}, 3, None), (3, 0))
 check("empty usage dict (no-candidates chain) is 0",
-      br.accumulated_tokens({}, None, None), (0, 0))
+      scheduler.accumulated_tokens({}, None, None), (0, 0))
 
 print("\n=== 2. validate against the DEFECT: the pre-fix call shape ===")
 # This is exactly what run_canaries() used to do -- finish_task with no tokens.
@@ -173,7 +173,7 @@ for usage, prow in [({"input_tokens": 9, "output_tokens": 1}, {"tokens_in": 4, "
                     ({"input_tokens": 0, "output_tokens": 0}, {"tokens_in": 7, "tokens_out": 8})]:
     old = (int(usage.get("input_tokens") or 0) + int(prow.get("tokens_in") or 0),
            int(usage.get("output_tokens") or 0) + int(prow.get("tokens_out") or 0))
-    new = br.accumulated_tokens(usage, prow.get("tokens_in"), prow.get("tokens_out"))
+    new = scheduler.accumulated_tokens(usage, prow.get("tokens_in"), prow.get("tokens_out"))
     check(f"helper == old inline expression for {usage}/{prow}", new, old)
 
 print("\n=== 8. the real ledger was never touched ===")

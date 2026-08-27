@@ -167,12 +167,12 @@ def temp_root_with_ledgerbook():
     # are independent name bindings that hold the *original* Path object
     # once rc.* is reassigned to a new Path.
     real_root_rc = rc.ROOT
-    real_root_br = br.ROOT
+    real_root_rc = rc.ROOT
     real_root_ev = ev.ROOT if hasattr(ev, "ROOT") else None
     real_runs_rc = rc.RUNS
     real_runs_ev = ev.RUNS if hasattr(ev, "RUNS") else None
     rc.ROOT = tmp_root
-    br.ROOT = tmp_root
+    rc.ROOT = tmp_root
     rc.RUNS = tmp_root / "runs"
     if real_root_ev is not None:
         ev.ROOT = tmp_root
@@ -181,7 +181,7 @@ def temp_root_with_ledgerbook():
 
     def cleanup():
         rc.ROOT = real_root_rc
-        br.ROOT = real_root_br
+        rc.ROOT = real_root_rc
         if real_root_ev is not None:
             ev.ROOT = real_root_ev
         rc.RUNS = real_runs_rc
@@ -514,7 +514,7 @@ mp.set(policy, "record_manager_call", lambda: None)
 
 # Use a tmpdir for RUNS so we don't write to the real one.
 tmpdir_runs = tempfile.mkdtemp(prefix="f57_runs_")
-real_runs = br.RUNS
+real_runs = rc.RUNS
 real_ev_runs = ev.RUNS
 mp.set(br, "RUNS", Path(tmpdir_runs))
 mp.set(rc, "RUNS", Path(tmpdir_runs))

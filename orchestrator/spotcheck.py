@@ -150,7 +150,7 @@ def cmd_verdict(verdict: str, task_id: int, note: str) -> None:
     # and must not persist as current truths (see second-opinion review G1).
     if verdict == "fail":
         sys.path.insert(0, str(Path(__file__).resolve().parent))
-        from batch_runner import retract_facts
+        from evaluation import retract_facts
         n = retract_facts(task_id)
         if n:
             print(f"  retracted {n} fact(s) from ledgerbook.db (validity windows closed)")

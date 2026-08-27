@@ -14,12 +14,7 @@ Built around what the live runs exposed (HARNESS_DESIGN.md §1.6 + ledgerbook):
 - policy caps enforced: max worker calls per run, escalations to workspace/ESCALATIONS.md.
 Stdlib + PyYAML only."""
 import argparse
-import hashlib
 import json
-import os
-import re
-import shutil
-import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -27,28 +22,14 @@ from pathlib import Path
 import yaml
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-import citecheck  # noqa: E402
 import ledger  # noqa: E402
 import policy  # noqa: E402
 
 from runtime_context import (  # noqa: E402
-    ROOT, RUNS, MISSIONS, ESCALATIONS, log, set_log_file,
+    ROOT, RUNS, log, set_log_file,
 )
 
 MAX_WORKER_CALLS_PER_RUN = 12          # policy cost cap proxy (Ollama returns no $)
-# Raised 900 -> 1800 on 2026-07-28. 900s was calibrated against UNDER-SPECIFIED tasks: before
-# F20 the worker never received the mission's done-definition, so it did far less research
-# than it was graded on (mission 001 seed 1 finished in ~4.6 min / 35 api_calls that way).
-# Handing it the real spec -- >=2 product URLs per competitor, NEW-vs-last-week flags, promo
-# check, review sentiment with rating AND recurring theme, plus a diff section, plus "address
-# each prior objection" -- multiplies the browser work, and the first post-F20 run of that
-# same seed hit the 900s ceiling with zero output (task 24, infra_failed, no usage file).
-# CAUSATION IS UNCONFIRMED: no usage file, session dump, or partial output survived the kill,
-# so a hermes hang or cloud slowness are still live alternatives. This raise is the cheap
-# discriminating test -- if a task now completes in 15-25 min the size hypothesis holds; if it
-# still dies at 1800s the cause is elsewhere and the ceiling is not the problem.
-# COUPLED: ledger.LEASE_SECONDS must stay > this + ~360s (raised to 2400 in the same commit).
-WORKER_TIMEOUT_S = 1800
 
 
 def load_roles() -> dict:
@@ -59,36 +40,16 @@ def load_roles() -> dict:
 
 # ── model calls ────────────────────────────────────────────────────────────────
 
-from integrity import (  # noqa: E402,F401
-    escalate, _db_snapshot, db_integrity_snapshot, db_integrity_check,
-    _untracked_files, _local_exclude_sources, _local_exclude_state,
-    _masked_under_protected, _untracked_of, _tracked_hashes,
-    fs_integrity_snapshot, fs_integrity_check, preflight,
-    PROTECTED_PATHS, _PROVENANCE_TABLES,
-)
-from execution import (  # noqa: E402,F401  -- _strip_tool_chatter added in Move 5c'
-    hermes_worker, ollama_chat, _is_local_model, load_fallback_chain,
-    _quota_group, _fits_context, _context_skip_note,
-    _failover_candidates, worker_with_failover, synthesis_with_failover,
-    is_quota_error, worker_failed, _strip_tool_chatter,
-    WORKER_TIMEOUT_S, LOCAL_FALLBACK_TIMEOUT_S, LOCAL_PROVIDERS,
-    CHARS_PER_TOKEN, RESPONSE_RESERVE_TOKENS,
-)
-from prompts import (  # noqa: E402,F401
-    pass_criteria_for, deliverable_requirements, task_scope_note,
-    mission_objective, _recent_fact_lines, build_brief_block,
-    SYNTHESIS_BRIEF_CHARS, SYNTHESIS_MAX_BRIEFS, FACT_LEDGER_CAP,
-    _INTERNAL_CRITERIA_RE,
-)
+from integrity import escalate, preflight, PROTECTED_PATHS  # noqa: E402
+from execution import _strip_tool_chatter  # noqa: E402,F401 -- compatibility
 from evaluation import (  # noqa: E402,F401  -- Move 5c re-exports
     ENTITY_TYPES, _parse_json_array, extract_facts, run_critic,
     seed_is_synthesis, retract_facts,
 )
 from scheduler import (  # noqa: E402,F401
     parse_mission, week_key, queue_mission_tasks,
-    is_first_run_for_mission, expire_stale_parked,
-    reconcile_interrupted_tasks, accumulated_tokens, mission_workspace,
-    RESUMABLE_STATUSES,
+    expire_stale_parked,
+    reconcile_interrupted_tasks,
 )
 
 # ── Move 5c' compatibility re-exports ──────────────────────────────────
@@ -107,26 +68,19 @@ from workflow import (  # noqa: E402,F401  -- Move 5c' re-exports
 
 
 
-# F49, second half (2026-07-30): raised 6000 -> 24000 after measuring, not guessing.
-# At 6000, **11 of the 13 briefs on disk overflowed** -- truncation was the normal case,
-# not an edge case, and the largest brief (15,968 chars) lost 9,968 of them. 24000 clears
-# every observed brief with ~50% headroom.
-#
-# Measured cost, against a 20,000,000-token daily cap: a shopify synthesis prompt grows
-# ~25,200 -> ~39,000 chars (~+3,400 tok) and a content one ~11,500 -> ~17,700 (~+1,500).
-# That is the previously-withheld research finally reaching the model, which is the point.
-# Worst case at these caps (6 briefs x 24,000 + the fact block) is ~41k tokens, inside every
-# cloud rung's context.
-#
-# NOT a constraint, though it looks like one: the last fallback rung `gemma4:12b-ctx4k` has
-# a 4,096-token context and therefore could never run a synthesis -- measured at the OLD cap
-# it already needed 8,226 (content) to 11,662 (shopify) tokens. Raising the cap does not
-# break that rung; it has been decorative for this path all along. See the note in
-# docs/HARDENING.md F49.
-SYNTHESIS_MAX_BRIEFS = 6         # how many of this week's briefs are supplied
-
 # Move 5d compatibility re-export; task_runner is the canonical owner.
 from task_runner import run_task  # noqa: E402,F401
+
+# Deliberate compatibility surface. Everything else in this module exists only
+# to compose the CLI and may move without preserving a batch_runner alias.
+__all__ = [
+    "main", "load_roles", "run_task",
+    "ENTITY_TYPES", "_parse_json_array", "extract_facts", "run_critic",
+    "seed_is_synthesis", "retract_facts",
+    "run_synthesis", "run_canaries", "retry_failed_this_fire",
+    "_check_repeated_failure", "CANARIES", "MAX_RETRIES_PER_FIRE",
+    "REPEATED_FAILURE_THRESHOLD", "_strip_tool_chatter",
+]
 
 
 # Directive-1 (2026-07-29): a task can park for three very different reasons, and the

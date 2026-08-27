@@ -168,7 +168,8 @@ def cmd_review(notify: bool, dry: bool) -> int:
                 print(f"    #{l['id']} [{l['kind']} x{l['times_seen']}] {l['lesson'][:90]}")
         return 0
 
-    from batch_runner import load_roles, ollama_chat  # late import: model deps only here
+    from batch_runner import load_roles  # late import: CLI-owned role loading
+    from execution import ollama_chat
     manager = load_roles()["manager"]["model"]
     CANDIDATES.mkdir(parents=True, exist_ok=True)
     drafted = []

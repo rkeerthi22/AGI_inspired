@@ -16,17 +16,17 @@ sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import ledger  # noqa: E402
 import promote  # noqa: E402
-import batch_runner as br  # noqa: E402
+import integrity  # noqa: E402
 
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
 shutil.copy2(ROOT / "ledger" / "ledger.db", tmp)
 ledger.LEDGER_DB = tmp
-br.ledger.LEDGER_DB = tmp
+ledger.LEDGER_DB = tmp
 promote.ledger.LEDGER_DB = tmp
 WK = datetime.now().strftime("%Y-W%V")
 fails = []
 rollbacks = []
-br.escalate = lambda *a, **k: None
+integrity.escalate = lambda *a, **k: None
 promote.cmd_rollback = lambda relpath, reason="": rollbacks.append(relpath)
 
 

@@ -42,13 +42,13 @@ def fake_worker(quota_for):
 
 WORKER = br.load_roles()["worker"]
 print(f"worker role: {WORKER['provider']}/{WORKER['model']} "
-      f"quota_group={br._quota_group(WORKER)}")
+      f"quota_group={execution._quota_group(WORKER)}")
 
 # ------------------------------------------------------------------ F39
 print("\n=== F39: a 429 on one cloud rung skips its same-account siblings ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud"})
-out, usage, cfg, exhausted = br.worker_with_failover("p", WORKER, Path("x.json"), "test")
+out, usage, cfg, exhausted = execution.worker_with_failover("p", WORKER, Path("x.json"), "test")
 check("kimi 429 -> glm SKIPPED (same group), falls straight to local",
       attempted, ["kimi-k2.7-code:cloud", "gemma4:12b-ctx4k"])
 check("completed on the local rung, not exhausted", (cfg["model"], exhausted),
@@ -57,31 +57,31 @@ check("completed on the local rung, not exhausted", (cfg["model"], exhausted),
 print("\n=== F39: no 429 means no skipping at all ===")
 attempted.clear()
 execution.hermes_worker = fake_worker(set())
-out, usage, cfg, exhausted = br.worker_with_failover("p", WORKER, Path("x.json"), "test")
+out, usage, cfg, exhausted = execution.worker_with_failover("p", WORKER, Path("x.json"), "test")
 check("first rung succeeds, nothing else tried", attempted, ["kimi-k2.7-code:cloud"])
 
 print("\n=== F39: a rung with NO quota_group is never skipped by inference ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud",
                                        "gemma4:12b-ctx4k"})
-out, usage, cfg, exhausted = br.worker_with_failover("p", WORKER, Path("x.json"), "test")
+out, usage, cfg, exhausted = execution.worker_with_failover("p", WORKER, Path("x.json"), "test")
 check("local still attempted despite cloud group being dead",
       attempted, ["kimi-k2.7-code:cloud", "gemma4:12b-ctx4k"])
 check("only now is the chain exhausted", exhausted, True)
 
 # ------------------------------------------------------------------ F40
 print("\n=== F40: graded work (canaries) never touches a local model ===")
-cands = [c["model"] for c in br._failover_candidates(WORKER, allow_local=False)]
+cands = [c["model"] for c in execution._failover_candidates(WORKER, allow_local=False)]
 check("no local rung offered when allow_local=False", cands,
       ["kimi-k2.7-code:cloud", "glm-5.2:cloud"])
 check("local IS offered for ordinary work",
-      [c["model"] for c in br._failover_candidates(WORKER, allow_local=True)],
+      [c["model"] for c in execution._failover_candidates(WORKER, allow_local=True)],
       ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "gemma4:12b-ctx4k"])
 
 print("\n=== F40: quota-exhausted canary PARKS instead of degrading ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud"})
-out, usage, cfg, exhausted = br.worker_with_failover(
+out, usage, cfg, exhausted = execution.worker_with_failover(
     "p", WORKER, Path("x.json"), "canary C2", allow_local=False)
 check("never reached the local model", "gemma4:12b-ctx4k" in attempted, False)
 check("reports exhausted -> caller parks it (week_pending rises, gate shuts)",
@@ -96,7 +96,7 @@ execution.load_fallback_chain = lambda: [
 ]
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud"})
-out, usage, cfg, exhausted = br.worker_with_failover(
+out, usage, cfg, exhausted = execution.worker_with_failover(
     "p", WORKER, Path("x.json"), "canary C2", allow_local=False)
 check("skips the dead ollama sibling, reaches the separate provider",
       attempted, ["kimi-k2.7-code:cloud", "claude-sonnet-5"])

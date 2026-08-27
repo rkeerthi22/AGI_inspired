@@ -12,9 +12,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-import batch_runner as br  # noqa: E402
+import integrity  # noqa: E402
 
-br.escalate = lambda *a, **k: None          # never a real alert from a test
+integrity.escalate = lambda *a, **k: None          # never a real alert from a test
 fails = []
 VICTIM = ROOT / "config" / "policy.yaml"     # protected, tracked, NOT touched by "worker"
 TARGET = ROOT / "orchestrator" / "runlock.py"  # protected, tracked, the "worker" edits this
@@ -59,10 +59,10 @@ try:
     print("=== 1. an UNRELATED dirty file must survive (the blast-radius defect) ===")
     victim_original = VICTIM.read_text(encoding="utf-8")
     VICTIM.write_text(victim_original + "\n# operator edit, in flight\n", encoding="utf-8")
-    before = br.fs_integrity_snapshot()                 # snapshot WITH victim already dirty
+    before = integrity.fs_integrity_snapshot()                 # snapshot WITH victim already dirty
     target_original = TARGET.read_text(encoding="utf-8")
     TARGET.write_text(target_original + "\n# WORKER TAMPER\n", encoding="utf-8")
-    br.fs_integrity_check(before, context="F36 test 1")
+    integrity.fs_integrity_check(before, context="F36 test 1")
     check("worker's edit reverted", "WORKER TAMPER" in TARGET.read_text(encoding="utf-8"), False)
     check("UNRELATED operator edit SURVIVED",
           "operator edit, in flight" in VICTIM.read_text(encoding="utf-8"), True)
@@ -70,9 +70,9 @@ try:
 
     # ---------------------------------------------------------------- recoverability
     print("\n=== 2. the discarded content is recoverable, not gone ===")
-    before = br.fs_integrity_snapshot()
+    before = integrity.fs_integrity_snapshot()
     TARGET.write_text(target_original + "\n# SECOND TAMPER\n", encoding="utf-8")
-    br.fs_integrity_check(before, context="F36 test 2")
+    integrity.fs_integrity_check(before, context="F36 test 2")
     stashes = sorted((ROOT / "runs").glob("reverted_*"))
     recovered = ""
     if stashes:
@@ -85,27 +85,27 @@ try:
     # ---------------------------------------------------------------- detection
     print("\n=== 3. re-modifying an ALREADY-dirty file is now detected ===")
     TARGET.write_text(target_original + "\n# pre-existing dirt\n", encoding="utf-8")
-    before = br.fs_integrity_snapshot()                 # already dirty at snapshot time
+    before = integrity.fs_integrity_snapshot()                 # already dirty at snapshot time
     TARGET.write_text(target_original + "\n# pre-existing dirt\n# WORKER SNUCK IN\n",
                       encoding="utf-8")
-    porcelain_blind = before["porcelain"] == br.fs_integrity_snapshot()["porcelain"]
+    porcelain_blind = before["porcelain"] == integrity.fs_integrity_snapshot()["porcelain"]
     check("porcelain alone is blind to it (why the old guard missed it)",
           porcelain_blind, True)
-    br.fs_integrity_check(before, context="F36 test 3")
+    integrity.fs_integrity_check(before, context="F36 test 3")
     check("hash-based detection caught and reverted it",
           "WORKER SNUCK IN" in TARGET.read_text(encoding="utf-8"), False)
 
     # ---------------------------------------------------------------- untracked
     print("\n=== 4. new untracked files still removed ===")
-    before = br.fs_integrity_snapshot()
+    before = integrity.fs_integrity_snapshot()
     UNTRACKED.write_text("# planted\n", encoding="utf-8")
-    br.fs_integrity_check(before, context="F36 test 4")
+    integrity.fs_integrity_check(before, context="F36 test 4")
     check("planted untracked file removed", UNTRACKED.exists(), False)
 
     print("\n=== 5. no violation => no stash, no churn ===")
     n_before = len(list((ROOT / "runs").glob("reverted_*")))
-    before = br.fs_integrity_snapshot()
-    br.fs_integrity_check(before, context="F36 test 5")
+    before = integrity.fs_integrity_snapshot()
+    integrity.fs_integrity_check(before, context="F36 test 5")
     check("clean call creates no stash dir",
           len(list((ROOT / "runs").glob("reverted_*"))), n_before)
 finally:

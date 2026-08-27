@@ -11,12 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 import ledger  # noqa: E402
-import batch_runner as br  # noqa: E402
+import scheduler  # noqa: E402
 
 tmp = Path(tempfile.mkdtemp()) / "ledger.db"
 shutil.copy2(ROOT / "ledger" / "ledger.db", tmp)
 ledger.LEDGER_DB = tmp
-br.ledger.LEDGER_DB = tmp
+ledger.LEDGER_DB = tmp
 WK = datetime.now().strftime("%Y-W%V")
 fails = []
 
@@ -49,7 +49,7 @@ print("=== the five real stranded rows ===")
 with sqlite3.connect(tmp) as c:
     before = [r[0] for r in c.execute("SELECT task_id FROM tasks WHERE status='queued'")]
 print(f"  queued before: {before}")
-br.expire_stale_parked()
+scheduler.expire_stale_parked()
 with sqlite3.connect(tmp) as c:
     after = [r[0] for r in c.execute("SELECT task_id FROM tasks WHERE status='queued'")]
     now_stale = [r[0] for r in c.execute(
@@ -66,19 +66,19 @@ check("the one row that WAS attempted (4) is not mislabelled",
 print("\n=== current-week work must NOT be touched ===")
 seed(9501, WK, "queued")
 seed(9502, WK, "quota_wait", started="2026-07-29T01:00:00")
-br.expire_stale_parked()
+scheduler.expire_stale_parked()
 check("current-week queued survives", status_of(9501), "queued")
 check("current-week quota_wait survives", status_of(9502), "quota_wait")
 
 print("\n=== previously-attempted rows get the OTHER note ===")
 seed(9503, "2026-W28", "quota_wait", started="2026-07-14T01:00:00")
-br.expire_stale_parked()
+scheduler.expire_stale_parked()
 check("attempted-then-parked expires too", status_of(9503), "stale")
 check("but is not labelled never-attempted", "NEVER ATTEMPTED" in note_of(9503), False)
 
 print("\n=== interrupted is left alone (--resume can still reach it) ===")
 seed(9504, "2026-W28", "interrupted")
-br.expire_stale_parked()
+scheduler.expire_stale_parked()
 check("interrupted untouched", status_of(9504), "interrupted")
 
 print("\n=== the honesty half: they now count as dropped ===")

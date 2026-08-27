@@ -2286,5 +2286,19 @@ research ownership, both budget gates, raw-output persistence before
 classification, deliverable creation before criticism, token accumulation,
 fact writes, compatibility identity, and AST dependency boundaries. Two repeat
 runs preserve HEAD, status, ledger, escalation, and policy hashes exactly. The
-focused F48/F57/F58/F59/F60/throughput gate passes 6/6. Move 5e remains
-unstarted. · `orchestrator/task_runner.py` · `tests/test_f60.py`
+focused F48/F57/F58/F59/F60/throughput gate passed 6/6 before Move 5e.
+· `orchestrator/task_runner.py` · `tests/test_f60.py`
+
+### F61 CLI composition cleanup (Move 5e / W9 completion)
+`batch_runner.py` now defines only `load_roles`, `main`, and `_run`. Accidental
+aliases into integrity, execution, prompts, and scheduler were removed; affected
+tests patch the canonical owner instead. The retained compatibility identities
+are declared explicitly in `__all__`. Production callers now import
+`ollama_chat` from `execution` and `retract_facts` from `evaluation` directly.
+
+F61 verifies the function inventory, removed aliases, compatibility identities,
+CLI wiring, explicit retry injection, canonical production imports, and zero
+live-state drift. W9 ends here. The next phase is real end-to-end harness
+validation—missions, recovery, efficiency, capability selection, and outcome
+quality—not further refactoring. · `orchestrator/batch_runner.py` ·
+`tests/test_f61.py`

@@ -1,58 +1,73 @@
 {
   "schema_version": 1,
-  "brief_revision": 3,
-  "created_at": "2026-08-27T19:29:59.762320+00:00",
+  "brief_revision": 4,
+  "created_at": "2026-08-27T20:15:17.262725+00:00",
   "status": "checkpointed",
   "repository": {
     "branch": "master",
-    "head": "c3f78bfcd1306165c64f8a66bc0ff52e4b8ddcc9",
+    "head": "61a723adb2d4bf4ad9e085158b2c047068fef2d9",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       "REFACTOR_PLAN.md",
       "docs/HARDENING.md",
       "orchestrator/batch_runner.py",
-      "orchestrator/task_runner.py",
-      "tests/test_f60.py"
+      "orchestrator/promote.py",
+      "orchestrator/spotcheck.py",
+      "tests/test_f35.py",
+      "tests/test_f36.py",
+      "tests/test_f37.py",
+      "tests/test_f39_f40.py",
+      "tests/test_f42.py",
+      "tests/test_f47.py",
+      "tests/test_f48.py",
+      "tests/test_f49.py",
+      "tests/test_f50.py",
+      "tests/test_f51.py",
+      "tests/test_f52.py",
+      "tests/test_f57.py",
+      "tests/test_throughput.py",
+      "tests/test_f61.py"
     ]
   },
   "task": {
-    "id": "W9-Move-5d",
-    "phase": "pre-commit-checkpoint",
+    "id": "W9-Move-5e",
+    "phase": "completed-independent-review",
     "status": "checkpointed",
-    "next_action": "Commit and push Move 5d; then stop with Move 5e unstarted"
+    "next_action": "Commit and push Move 5e; next phase is real end-to-end harness validation"
   },
   "completed": [
-    "run_task extracted to task_runner with compatibility identity",
-    "F60 passed twice with zero protected-state drift",
-    "focused gate passed 6/6",
-    "complete deterministic gate passed 22/22; test_baseline quarantined"
+    "batch_runner reduced to CLI composition and intentional shims",
+    "F61 passed twice with zero live-state drift",
+    "focused Move 5e gate passed 17/17",
+    "complete deterministic gate passed 23/23; test_baseline quarantined",
+    "independent W9 review found no remaining refactor blocker"
   ],
   "locked_constraints": [
-    "workflow imports neither task_runner nor batch_runner",
-    "batch_runner.run_task is task_runner.run_task",
-    "runtime paths and logging resolve at call time",
-    "do not begin Move 5e"
+    "no further structural refactoring after W9",
+    "preserve CLI and run_task_fn dependency injection",
+    "next phase validates real missions, recovery, efficiency, capability selection, and outcome quality",
+    "live mission execution is not part of Move 5e"
   ],
   "gate": {
     "status": "green",
-    "detail": "22/22 deterministic suites green; F60 repeatably zero-drift"
+    "detail": "23/23 deterministic suites green; F61 repeatably zero-drift; independent review clean"
   },
   "references": [
     {
       "path": "REFACTOR_PLAN.md",
-      "purpose": "move status and boundaries",
-      "sha256": "65ab2118fc32edfa752004e61844081d08f09182f33fcbdd83060763351104c6"
+      "purpose": "completed W9 boundary and next phase",
+      "sha256": "fe5eab168c6e3292d7781f7a99e280dd5c703203e8ba2440f8584744b4aa9cdc"
     },
     {
       "path": "docs/HARDENING.md",
-      "purpose": "F60 verification record",
-      "sha256": "f4c88b0206f380b7def0938e747a681f3a74582c794edaf0e917069ca2e79914"
+      "purpose": "F61 and final review record",
+      "sha256": "b414ed636ef480ea729de75ff3931809f9f940e288f68fad54f5fb74e5cc685e"
     },
     {
-      "path": "tests/test_f60.py",
-      "purpose": "Move 5d characterization",
-      "sha256": "6436ae9e312e4b748ffbcb868693171d25654f81a4cb3820f9a9472412a1a4c4"
+      "path": "tests/test_f61.py",
+      "purpose": "Move 5e composition contract",
+      "sha256": "9ab2e7dcfa3850f64740e169963899ced53d95bb7e167d2cceb01809207d9920"
     }
   ]
 }

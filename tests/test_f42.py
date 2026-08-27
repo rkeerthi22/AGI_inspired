@@ -12,10 +12,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 sys.stdout.reconfigure(encoding="utf-8", errors="replace")
-import batch_runner as br  # noqa: E402
+import integrity  # noqa: E402
 import policy  # noqa: E402
 
-br.escalate = lambda *a, **k: None
+integrity.escalate = lambda *a, **k: None
 fails = []
 ROOT_FILE = ROOT / "_f42_planted_at_root.md"
 IGNORED_ROOT = ROOT / "extensive_research.md"
@@ -40,36 +40,36 @@ GITIGNORE_ORIGINAL = GITIGNORE.read_text(encoding="utf-8")
 
 try:
     print("=== 1. a new file at the repo ROOT is now detected and removed ===")
-    before = br.fs_integrity_snapshot()
+    before = integrity.fs_integrity_snapshot()
     ROOT_FILE.write_text("# planted by a worker\n", encoding="utf-8")
-    br.fs_integrity_check(before, context="F42 test 1")
+    integrity.fs_integrity_check(before, context="F42 test 1")
     check("root-level plant removed", ROOT_FILE.exists(), False)
 
     print("\n=== 2. .gitignore is now protected (the self-hiding attack) ===")
     original = GITIGNORE.read_text(encoding="utf-8")
-    before = br.fs_integrity_snapshot()
+    before = integrity.fs_integrity_snapshot()
     GITIGNORE.write_text(original + "\n_f42_planted_at_root.md\n", encoding="utf-8")
-    br.fs_integrity_check(before, context="F42 test 2")
+    integrity.fs_integrity_check(before, context="F42 test 2")
     check("tampered .gitignore reverted",
           "_f42_planted_at_root.md" in GITIGNORE.read_text(encoding="utf-8"), False)
-    check(".gitignore is in PROTECTED_PATHS", ".gitignore" in br.PROTECTED_PATHS, True)
-    check("IDENTITY.md is in PROTECTED_PATHS", "IDENTITY.md" in br.PROTECTED_PATHS, True)
+    check(".gitignore is in PROTECTED_PATHS", ".gitignore" in integrity.PROTECTED_PATHS, True)
+    check("IDENTITY.md is in PROTECTED_PATHS", "IDENTITY.md" in integrity.PROTECTED_PATHS, True)
 
     print("\n=== 3. LEGITIMATE agent output must NOT be flagged ===")
     DEEP.parent.mkdir(parents=True, exist_ok=True)
-    before = br.fs_integrity_snapshot()
+    before = integrity.fs_integrity_snapshot()
     DEEP.write_text("# a normal deliverable\n", encoding="utf-8")
-    br.fs_integrity_check(before, context="F42 test 3")
+    integrity.fs_integrity_check(before, context="F42 test 3")
     check("workspace/ deliverable survives (gitignored, not protected)", DEEP.exists(), True)
 
     print("\n=== 4. an ALREADY-ignored root file is not re-flagged every run ===")
     check("extensive_research.md is gitignored now",
           subprocess.run(["git", "-C", str(ROOT), "check-ignore", "-q",
                           "extensive_research.md"], capture_output=True).returncode, 0)
-    before = br.fs_integrity_snapshot()
+    before = integrity.fs_integrity_snapshot()
     check("it does not appear in the untracked snapshot",
-          "extensive_research.md" in br._untracked_of(before), False)
-    br.fs_integrity_check(before, context="F42 test 4")
+          "extensive_research.md" in integrity._untracked_of(before), False)
+    integrity.fs_integrity_check(before, context="F42 test 4")
     check("and it still exists (never treated as tampering)", IGNORED_ROOT.exists(), True)
 
     # F46 replaces F42's depth-0 root scan. The assertion that used to live here — "root
@@ -80,22 +80,22 @@ try:
     print("\n=== 5. F46: files inside an untracked DIRECTORY are visible ===")
     F46_DIR.mkdir(exist_ok=True)
     F46_SEED.write_text("seed\n", encoding="utf-8")
-    base = br.fs_integrity_snapshot()
+    base = integrity.fs_integrity_snapshot()
     check("the seed file itself is listed, not the collapsed dir",
-          "_f46_untracked_dir/seed.md" in br._untracked_of(base), True)
+          "_f46_untracked_dir/seed.md" in integrity._untracked_of(base), True)
     check("the collapsed directory entry is NOT what we track",
-          "_f46_untracked_dir/" in br._untracked_of(base), False)
+          "_f46_untracked_dir/" in integrity._untracked_of(base), False)
 
     F46_PLANT.write_text("# payload\n", encoding="utf-8")
-    after = br.fs_integrity_snapshot()
-    planted = set(br._untracked_of(after)) - set(br._untracked_of(base))
+    after = integrity.fs_integrity_snapshot()
+    planted = set(integrity._untracked_of(after)) - set(integrity._untracked_of(base))
     check("a file planted inside it is DETECTED (was invisible pre-F46)",
           sorted(planted), ["_f46_untracked_dir/payload.py"])
 
     print("\n=== 5b. F46: in-place rewrite of an already-untracked file ===")
     F46_SEED.write_text("seed\nrewritten by a worker\n", encoding="utf-8")
-    after2 = br.fs_integrity_snapshot()
-    ub, ua = br._untracked_of(base), br._untracked_of(after2)
+    after2 = integrity.fs_integrity_snapshot()
+    ub, ua = integrity._untracked_of(base), integrity._untracked_of(after2)
     tampered = sorted(p for p in set(ua) & set(ub) if ua[p] != ub[p])
     check("the rewrite is DETECTED by hash (identical '??' line pre-F46)",
           tampered, ["_f46_untracked_dir/seed.md"])
@@ -103,21 +103,21 @@ try:
     print("\n=== 5c. F46: policy-writable untracked paths are excluded ===")
     F46_WRITABLE.write_text("# a legitimate scorecard\n", encoding="utf-8")
     check("memory/ write is not flagged (policy.yaml, not a second hardcoded list)",
-          "memory/scorecards/_f46_probe.md" in br._untracked_of(br.fs_integrity_snapshot()),
+          "memory/scorecards/_f46_probe.md" in integrity._untracked_of(integrity.fs_integrity_snapshot()),
           False)
 
     print("\n=== 5d. F46: a pre-F46 snapshot is still readable ===")
     check("F42's bare set degrades to {path: None}, no crash",
-          br._untracked_of({"root": {"a.md"}}), {"a.md": None})
+          integrity._untracked_of({"root": {"a.md"}}), {"a.md": None})
 
     print("\n=== 6. policy.yaml / fs-guard drift check still consistent ===")
-    check("validate_paths clean", policy.validate_paths(br.PROTECTED_PATHS) or "consistent",
+    check("validate_paths clean", policy.validate_paths(integrity.PROTECTED_PATHS) or "consistent",
           "consistent")
 
     print("\n=== 7. a clean call is still a no-op ===")
     n = len(list((ROOT / "runs").glob("reverted_*")))
-    before = br.fs_integrity_snapshot()
-    br.fs_integrity_check(before, context="F42 test 7")
+    before = integrity.fs_integrity_snapshot()
+    integrity.fs_integrity_check(before, context="F42 test 7")
     check("no stash created when nothing changed",
           len(list((ROOT / "runs").glob("reverted_*"))), n)
 finally:
