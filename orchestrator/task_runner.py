@@ -49,10 +49,6 @@ def _run_synthesis_task(context: _TaskContext, out_dir, wk, baseline, baseline_n
                                   context.roles, out_dir, wk, baseline, baseline_note)
 
 
-def _record_outcome(result: _TaskResult) -> str:
-    return result.status
-
-
 def _run_research_task(context: _TaskContext) -> str:
     """Execute a prepared research task through worker, critic, and ledger."""
     tid, mission, roles, row = (context.tid, context.mission,
@@ -286,6 +282,16 @@ def _run_research_task(context: _TaskContext) -> str:
         rc.log(f"task {tid}: failed (deny-list match {deny_hits})")
         return "failed"
 
+    return _record_outcome(context, out, usage, worker_cfg, scope_note,
+                           out_dir, wk, baseline)
+
+
+def _record_outcome(context: _TaskContext, out: str, usage: dict,
+                    worker_cfg: dict, scope_note: str, out_dir, wk: str,
+                    baseline: bool) -> str:
+    """Persist, grade, account for, and learn from a completed worker output."""
+    tid, mission, roles, row = (context.tid, context.mission,
+                                context.roles, context.row)
     # write deliverable
     slug = re.sub(r"[^a-z0-9]+", "-", row["spec"].lower())[:60].strip("-")
     dest = out_dir / f"{wk}_{slug}.md"
@@ -339,8 +345,9 @@ def _run_research_task(context: _TaskContext) -> str:
     return status
 
 
+
 def run_task(tid: int, mission: dict, roles: dict) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
     row = _load_task(tid)
     context = _prepare_task_input(tid, mission, roles, row)
-    return _record_outcome(_TaskResult(_run_research_task(context)))
+    return _run_research_task(context)

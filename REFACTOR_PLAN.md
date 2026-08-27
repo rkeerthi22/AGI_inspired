@@ -90,7 +90,7 @@ real separation of concerns, no duplicated helpers, no wildcard imports, and no
 | Move 5b | `orchestrator/scheduler.py` | scheduler state service | committed (`e8fde3c`) |
 | Move 5c | `orchestrator/evaluation.py` | critic + fact extraction service | committed (`5331f2c`) |
 | Move 5c′ | `orchestrator/workflow.py` | synthesis, canaries, retries, repeated-failure coordination | committed (`c3f78bf`) |
-| Move 5d | `orchestrator/task_runner.py` | single-task preparation, execution, classification, and outcome recording | completed and verified; commit pending this checkpoint |
+| Move 5d | `orchestrator/task_runner.py` | single-task preparation, execution, classification, and outcome recording | committed (`ef95498`), outcome boundary tightened in follow-up |
 | Move 5e | composition cleanup | remaining approved composition-layer assessment | not begun |
 
 Move 4 was intentionally leaf-only: the full evaluation layer (`run_critic`,
