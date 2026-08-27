@@ -569,8 +569,19 @@ MAX_CONSECUTIVE_CHAIN_EXHAUSTED = 2
 MAX_RETRIES_PER_FIRE = 3
 
 
-def retry_failed_this_fire(ids: list[int], mission: dict, roles: dict) -> list[str]:
+def retry_failed_this_fire(ids: list[int], mission: dict, roles: dict,
+                            *, run_task_fn=None) -> list[str]:
     """Directive-2 (2026-07-29): re-attempt this fire's CONTENT failures immediately.
+
+    `run_task_fn` (Move 5c' pre-extraction compatibility shim):
+    Optional injection point for the task runner. When None (the default),
+    falls back to the module-local `run_task` -- the historical behavior.
+    After Move 5c' extracts `retry_failed_this_fire` to workflow.py,
+    callers in batch_runner.main() MUST pass `run_task_fn=run_task`
+    explicitly so the extraction does not introduce a cycle
+    (workflow -> batch_runner). Tests pass a stub. The injection point is
+    keyword-only (no positional use) so the change is signature-compatible
+    with existing callers.
 
     Until now a critic-rejected task was simply left failed. Next week's fire does not
     pick it up either -- queue_mission_tasks() dedups on a spec containing the ISO week,
@@ -604,8 +615,9 @@ def retry_failed_this_fire(ids: list[int], mission: dict, roles: dict) -> list[s
         + (f" ({len(rows) - len(picked)} over the {MAX_RETRIES_PER_FIRE}/fire cap)"
            if len(rows) > len(picked) else ""))
     out = []
+    _task_runner = run_task_fn if run_task_fn is not None else run_task
     for r in picked:
-        st = run_task(r["task_id"], mission, roles)
+        st = _task_runner(r["task_id"], mission, roles)
         log(f"retry task {r['task_id']}: {st}")
         out.append(st)
         if st == "chain_exhausted":
