@@ -211,7 +211,12 @@ PROTECTED_PATHS = ["orchestrator", "config", "ledger/schema.sql", "missions",
                    # steers the SUPERVISING agent, which is exactly why F46 refused to
                    # gitignore it. `.claude/worktrees/` stays out via .git/info/exclude, itself
                    # watched by F47.
-                   ".claude"]
+                   ".claude",
+                   # Compact Brief continuity state. Like HANDOFF.md, this file can steer
+                   # the supervising agent after context loss, so it belongs on the same
+                   # tracked-hash containment surface. Truth still comes from live Git/DB
+                   # state; protection only makes unexpected edits visible.
+                   ".harness"]
 
 # F42: PROTECTED_PATHS covers files that EXIST. A brand-new file at the repo root matched
 # nothing in it and was therefore invisible -- found 2026-07-30 when a 699-line

@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "brief_revision": 1,
+  "created_at": "2026-08-27T05:30:00+02:00",
+  "status": "checkpointed",
+  "repository": {
+    "branch": "master",
+    "head": "7bcc747c7c898ab7da383c1681a66dee6476086e",
+    "upstream": "origin/master",
+    "tree_clean": true,
+    "changed_paths": []
+  },
+  "task": {
+    "id": "W9-Move-5c-prime",
+    "phase": "pre-extraction-characterization",
+    "status": "checkpointed",
+    "next_action": "Repair and verify F58 before extracting workflow.py"
+  },
+  "completed": [
+    "Move 5c verified at 5331f2c",
+    "Pre-Move-5c-prime WIP checkpoint committed at 7bcc747"
+  ],
+  "locked_constraints": [
+    "workflow.py must not import batch_runner or task_runner",
+    "retry coordination receives run_task_fn by dependency injection",
+    "continuity work stays separate from Move 5c-prime"
+  ],
+  "gate": {
+    "status": "known-red",
+    "detail": "F58 is unfinished; last full verified gate before WIP was 19/19 green at 5331f2c"
+  },
+  "references": [
+    {"path": "REFACTOR_PLAN.md", "purpose": "approved W9 module boundaries", "sha256": "3a0c5d5c39011b54acc0dae108bdb7667155cb102d22243d077fafd99fe736cf"},
+    {"path": "docs/HARDENING.md", "purpose": "incident and regression history", "sha256": "aa129a08ed4a420fa8210e626a530c22634007a420db6d6f0f8abbb2be3f8024"},
+    {"path": ".claude/HANDOFF.md", "purpose": "historical session record", "sha256": "113e156a743f41594bbb5f50e914c4880b49c61524e193ba752aae4d8c129297"}
+  ]
+}

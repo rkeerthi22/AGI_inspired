@@ -56,6 +56,11 @@ also land in OneDrive on every nightly backup — two independent off-disk copie
   containment, clock-domain, canary accounting); `python tests/run_all.py` runs all of it
 - `.claude/HANDOFF.md` — running session-handoff doc: architectural decisions, unresolved
   action items, environment facts — read this first when picking work back up
+- `.harness/continuity/current.json` — small current recovery checkpoint. After context
+  compaction, model switch, crash recovery, or resume: read and validate this first with
+  `python orchestrator/continuity.py recover`; verify live Git/runtime/database state and
+  resolve every disagreement in favour of live state; then read only the referenced durable
+  records needed for the next action. The brief is a locator, never a source of truth.
 
 ## When editing here
 Smallest change that works. Prove it by running it. A measurement beats a code-reading. Report failures verbatim.
