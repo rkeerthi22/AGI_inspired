@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from unittest import mock
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -82,5 +83,30 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
     check("onboarding valid command is independently ESTOP-blocked", onboarding.returncode == 75)
     check("ESTOP paths leave DB state unchanged",
           baseline == (digest(LEDGER), digest(PREDICTIONS), task_count()))
+
+    sys.path.insert(0, str(ROOT / "orchestrator"))
+    import execution_pause
+    original_home = os.environ.get("HERMES_HOME")
+    try:
+        # A valid home without ESTOP is the one intentional unpaused state.
+        (home / "config.yaml").write_text("test: true\n", encoding="utf-8")
+        (home / "ESTOP").unlink()
+        os.environ["HERMES_HOME"] = str(home)
+        check("validated home with missing ESTOP means resumed", not execution_pause.pause_engaged())
+        os.environ["HERMES_HOME"] = str(Path(td) / "missing-home")
+        check("missing HERMES_HOME fails closed", execution_pause.pause_engaged())
+        os.environ["HERMES_HOME"] = str(Path(td) / "unrelated")
+        (Path(td) / "unrelated").mkdir()
+        check("misconfigured existing HERMES_HOME fails closed", execution_pause.pause_engaged())
+        os.environ["HERMES_HOME"] = "relative-home"
+        check("relative HERMES_HOME fails closed", execution_pause.pause_engaged())
+        os.environ["HERMES_HOME"] = str(home)
+        with mock.patch.object(Path, "stat", side_effect=PermissionError("denied")):
+            check("unreadable sentinel/home fails closed", execution_pause.pause_engaged())
+    finally:
+        if original_home is None:
+            os.environ.pop("HERMES_HOME", None)
+        else:
+            os.environ["HERMES_HOME"] = original_home
 
 raise SystemExit(1 if failures else 0)
