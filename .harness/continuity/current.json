@@ -1,60 +1,58 @@
 {
   "schema_version": 1,
-  "brief_revision": 15,
-  "created_at": "2026-08-28T07:08:01Z",
+  "brief_revision": 16,
+  "created_at": "2026-08-28T11:15:00Z",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "8645f7652edf6682f3210a7f80ba7b182dad5cd1",
+    "head": "3670c7edf8de17cdc1bf741e47610fc6696c6987",
     "upstream": "origin/master",
     "tree_clean": true,
-    "changed_paths": [
-      ".harness/continuity/current.json",
-      "docs/VALIDATION.md",
-      "experiments/post_f63_access_efficiency.md"
-    ]
+    "changed_paths": []
   },
   "task": {
-    "id": "REAL-VALIDATION-5",
-    "phase": "f66-validation-and-cohort-readiness",
+    "id": "REAL-VALIDATION-6",
+    "phase": "cohort-complete",
     "status": "complete",
-    "next_action": "F66 implementation committed. Matched ME1 rerun (task 74) completed: critic and citation accounting persisted; F63 bounds held (4 executed retrieval, 2 redirects, 1 finalization, 8 total API calls, 164,000 total tokens). Outcome: FAIL on unchanged spec, but failure is at spec-vs-environment (G2/Trustpilot blocked, Chrome Web Store consent redirect, AIPRM pricing partial) NOT at controller. F66 web_extract did successfully fetch real AIPRM content. Cohort readiness: READY (F66 fixed the demonstrated blockers; honest bounded failure is an acceptable outcome)."
+    "next_action": "7-mission validation cohort completed and verified. F63 bounds held (0 failures across 6 retrieval-controlled missions; M4 N/A by design). 3 critic PASS / 4 bounded FAIL (spec-vs-environment: blocked sources, truncated pages, no independent corroboration — not controller defects). All accounting reconciles (0 failures). 47/47 artifact hashes verified. Corrected F63 report at _needs_review/F63_COHORT_COMPLIANCE_CORRECTED.md. Operator decision required before resuming scheduled missions."
   },
   "completed": [
-    "Access diagnosis found explicit AWS WAF behavior at Trustpilot and DataDome plus Cloudflare anti-bot behavior at G2; paced versus burst access did not change outcomes.",
-    "AIPRM pricing remained stable and dynamic: direct HTTP reached the shell, while installed-browser Shadow-DOM traversal recovered exact official prices twice.",
-    "Chrome Web Store consistently redirected to a Poland Google consent interstitial.",
-    "Fresh ME1 task 73 ran once through unchanged production composition: 6 executed retrievals, 2 rejected attempts, exactly 1 finalizer, and 124677 accounted worker tokens.",
-    "ME1 correctly transitioned search to direct to browser and preserved evidence, but production direct extraction was search-only and browser execution required interactive remote-debugging approval.",
-    "ME1 outcome quality failed on authoritative pricing and recurring reviews; critic correctly failed it and no facts were written.",
-    "A seventh critic model call lacks persisted token usage; citecheck fetched 15 citations for 14 unique URLs and does not persist its evidence table.",
-    "No causal F63 controller defect or general model-reasoning defect was demonstrated.",
-    "F63 remains 81/81; full deterministic gate remains 26/26 with test_baseline quarantined.",
+    "F66 implementation committed (3670c7e): unattended retrieval, truthful web_extract, critic usage persistence, citation dedup, mission-wide accounting.",
+    "Matched ME1 rerun (task 74): F63 bounds held, 164,000 total tokens, 8 API calls, honest bounded failure.",
+    "7-mission validation cohort (tasks 76-82) ran with pause engaged: 3 PASS / 4 PARTIAL / 0 FAIL by outcome label; 3 pass / 4 fail by critic verdict.",
+    "F63 bounds held across all 6 retrieval-controlled missions: 0 failures, 0 violations. M4 (synthesis) N/A by design.",
+    "All 47 preserved artifact hashes independently rechecked and matched.",
+    "Aggregate accounting reconciles exactly: 917,060 mission tokens, 39 API calls, 32 executed retrievals, 80 citation fetches, 23 facts written. 0 reconciliation failures.",
+    "Aggregate-field mapping defect in original analyzer corrected with explicit field map in regenerated analyze_cohort.py.",
+    "F63 remains 81/81; F66 remains 33/33; full deterministic gate 27/27 green (test_baseline quarantined).",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
-    "schedules remain paused",
-    "do not automatically retry task 73",
-    "do not start the 5-10 mission cohort",
+    "schedules remain paused until operator decision",
     "no prompt tuning",
     "no controller architecture or tuning without a reproduced causal controller defect",
     "do not bypass CAPTCHAs, authentication, consent, or access controls"
   ],
   "gate": {
     "status": "passed",
-    "detail": "F66 complete and committed; F63 bounds held across ME1 rerun; deterministic gate 27/27 green; mission accounting reconciles exactly (research + finalization + critic = total); unattended browser path wired but not exercised by worker (model self-declared finalization while in direct_fetch strategy)."
+    "detail": "Cohort complete. F63 bounds held (0 failures, 0 violations). All accounting reconciles. 3/7 critic PASS, 4/7 bounded FAIL (environment, not controller). 7/7 useful outcome rate. Deterministic gate 27/27 green."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "post-F63 access, mission-efficiency, outcome, and readiness checkpoint",
-      "sha256": "d81e78eaa3113a2954180f2ee3c44af896061a5696b638e57124263ec9dd9b4f"
+      "purpose": "full validation history including Checkpoint 10 cohort results",
+      "sha256": "a09c55531852643c4b9a5ef1000e1f1620079cfdf8a3404a634b65b91c8d58ec"
     },
     {
       "path": "experiments/post_f63_access_efficiency.md",
       "purpose": "predeclared protocol, reliability table, accounting, recovery, and blocker classification",
       "sha256": "3c7a73631d9f297879ce536bd72dbbda78be56879ced71323bc5e0fb9b83dff3"
+    },
+    {
+      "path": "_needs_review/F63_COHORT_COMPLIANCE_CORRECTED.md",
+      "purpose": "corrected F63 cohort compliance report — authority for all F63 numbers",
+      "sha256": "a2ed6c6b958a8c551306c349c204915161795052f0c2b68694c0e817f2e5e44d"
     }
   ],
-  "timestamp": "2026-08-28T08:00:07.610144+00:00"
+  "timestamp": "2026-08-28T11:15:00+00:00"
 }
