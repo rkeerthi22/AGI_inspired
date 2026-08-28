@@ -77,6 +77,10 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", model_cfg["provider"],
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
     env = dict(os.environ)
+    # F66: this launcher is used only for policy-approved research workers.
+    # Authorize a dedicated local headless browser instead of attaching to the
+    # user's Chrome (which requires interactive remote-debugging approval).
+    env["HARNESS_UNATTENDED_BROWSER"] = "1"
     audit_path = usage_path.with_suffix(".retrieval.jsonl")
     # A retry reuses task<N>_worker.usage.json. Its audit must describe this
     # attempt alone just as the usage file does, not append to the prior run.

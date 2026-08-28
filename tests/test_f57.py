@@ -75,8 +75,10 @@ def stub_chat_factory(replies):
     """
     calls = []
 
-    def stub(model, prompt, trace_path=None):
+    def stub(model, prompt, trace_path=None, usage_out=None):
         calls.append((model, prompt, trace_path))
+        if usage_out is not None:
+            usage_out.update(input_tokens=0, output_tokens=0)
         if replies:
             return replies.pop(0)
         return ""

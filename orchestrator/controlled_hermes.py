@@ -29,8 +29,12 @@ def main() -> None:
     hermes_root = Path(sys.executable).resolve().parents[2]
     sys.path.insert(0, str(hermes_root))
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from hermes_capabilities import install_harness_capabilities
     from retrieval_progress import active_controller, install_hermes_adapter
 
+    install_harness_capabilities(
+        unattended_browser=os.environ.get("HARNESS_UNATTENDED_BROWSER") == "1"
+    )
     audit = os.environ.get("HARNESS_RETRIEVAL_AUDIT")
     install_hermes_adapter(Path(audit) if audit else None)
     original_args = list(sys.argv[1:])

@@ -174,13 +174,22 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
 
 
 def run_critic(row: dict, out: str, roles: dict, baseline: bool,
-               scope_note: str = "") -> tuple[str, str]:
+               scope_note: str = "", usage_out: dict | None = None) -> tuple[str, str]:
     """Tool-free critic judging deliverable CONTENT, now backed by a mechanical,
     non-LLM truth signal (H4, docs/HARDENING.md — fixes F3, F4). Returns
     (verdict, text) where verdict is 'pass' | 'fail' | 'needs_review' — the third
     value means "could not be judged, do not treat as pass or a confirmed fail,
     escalate for a human" (never a silent auto-fail, H4's stated fix for F4's
     brittle-parse bug that used to invert good verdicts unnoticed).
+
+    F66: when ``usage_out`` is supplied, persist critic accounting
+    (api_calls, input_tokens, output_tokens, total_tokens, citation_fetches,
+    citation_unique_urls) on the dict itself and write the critic usage file
+    at ``runs/task<task_id>_critic.usage.json``. The same call also persists
+    the citecheck evidence table at ``runs/task<task_id>_citation_evidence.json``.
+    A write failure must never convert a real verdict into a silent auto-fail,
+    so persistence exceptions are logged and swallowed -- the verdict path
+    stays trustworthy regardless of disk state.
 
     NOTE on F5 (critic self-anchoring): H4's other prescribed fix, "a distinct
     critic model whenever a second provider exists," is not applied here --
@@ -192,21 +201,53 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     remaining F5 exposure is real but narrower than the original finding
     implied. citecheck's mechanical hard-fail below is a genuinely independent
     signal regardless: it never calls any LLM at all."""
+    usage = usage_out if usage_out is not None else {}
+    usage["api_calls"] = 0
+    usage["input_tokens"] = 0
+    usage["output_tokens"] = 0
+    usage["total_tokens"] = 0
+    usage["citation_fetches"] = 0
+    usage["citation_unique_urls"] = 0
+
+    def _finish(verdict: str, text: str) -> tuple[str, str]:
+        usage["total_tokens"] = int(usage.get("input_tokens") or 0) + int(
+            usage.get("output_tokens") or 0)
+        try:
+            (RUNS / f"task{row['task_id']}_critic.usage.json").write_text(
+                json.dumps(usage, indent=2) + "\n", encoding="utf-8")
+        except Exception as e:
+            log(f"critic usage not persisted for task {row['task_id']} ({e})")
+        return verdict, text
+
+    evidence_error: str | None = None
     try:
         evidence = citecheck.verify(out)
     except Exception as e:
         log(f"citation check failed ({e}) -- proceeding without mechanical evidence")
         evidence = []
+        evidence_error = str(e)
     summary = citecheck.summarize(evidence)
+    usage["citation_fetches"] = len(evidence)
+    usage["citation_unique_urls"] = len({e.get("url") for e in evidence if e.get("url")})
+    try:
+        (RUNS / f"task{row['task_id']}_citation_evidence.json").write_text(
+            json.dumps({"task_id": row["task_id"], "fetch_attempts": len(evidence),
+                        "unique_urls": usage["citation_unique_urls"],
+                        "summary": summary, "error": evidence_error,
+                        "evidence": evidence}, indent=2) + "\n", encoding="utf-8")
+    except Exception as e:
+        log(f"citation evidence not persisted for task {row['task_id']} ({e})")
     if citecheck.is_hard_fail(summary):
         dead = [e["url"] for e in evidence if not e["reachable"]][:5]
-        return "fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
-                        f"URLs unreachable (dead_frac={summary['dead_frac']}): {dead}")
+        return _finish("fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
+                                f"URLs unreachable (dead_frac={summary['dead_frac']}): {dead}"))
 
     if policy.manager_call_budget_breached():
-        return "needs_review", "manager-role call budget exhausted for today (policy.yaml " \
-                               "cost_caps.manager_calls_per_day) -- critic skipped, not judged"
+        return _finish("needs_review", "manager-role call budget exhausted for today (policy.yaml "
+                                       "cost_caps.manager_calls_per_day) -- critic skipped, not judged")
     policy.record_manager_call()
+    model_usage: dict = {}
+    usage["api_calls"] = 1
     try:
         verdict_text = execution.ollama_chat(
             roles["critic"]["model"],
@@ -245,9 +286,12 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
             # Persist WHY, not just the verdict: today's three 001 failures (24/25/26)
             # were only diagnosable because the one-sentence reason happened to name a
             # missing section. The full trace makes that reliable instead of lucky.
-            trace_path=RUNS / f"task{row['task_id']}_critic_reasoning.txt")
+            trace_path=RUNS / f"task{row['task_id']}_critic_reasoning.txt",
+            usage_out=model_usage)
     except Exception as e:
-        return "needs_review", f"critic call failed: {e}"
+        return _finish("needs_review", f"critic call failed: {e}")
+    usage["input_tokens"] = int(model_usage.get("input_tokens") or 0)
+    usage["output_tokens"] = int(model_usage.get("output_tokens") or 0)
 
     # Tolerant parse (H4, fixes F4): the old `.startswith("PASS")` check silently
     # inverted any reply with markdown bold, a "VERDICT:" prefix, or a leading
@@ -255,5 +299,65 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     # ledger. An unparseable reply is now 'needs_review', never a silent fail.
     m = re.search(r"VERDICT:\s*(PASS|FAIL)", verdict_text, re.I)
     if not m:
-        return "needs_review", verdict_text[:500] + " [UNPARSEABLE VERDICT]"
-    return m.group(1).lower(), verdict_text
+        return _finish("needs_review", verdict_text[:500] + " [UNPARSEABLE VERDICT]")
+    return _finish(m.group(1).lower(), verdict_text)
+
+
+def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dict:
+    """F66: merge worker/finalizer, critic, and citation retrieval accounting
+    into one mission usage file. The arithmetic is direct, no guesswork:
+
+        total_tokens     = worker_in + worker_out + critic_in + critic_out
+        api_calls        = worker_api_calls + critic_api_calls
+        executed_retrieval_calls  read from JSONL research_finished row
+        rejected_agent_retrieval_attempts  read from JSONL research_finished row
+        citation_fetches          = number of citecheck.verify() results
+        citation_unique_urls      = distinct URLs in citecheck evidence
+        total_external_retrieval_calls
+                                  = executed_agent_retrieval + citation_fetches
+            (covers the apples-to-apples number across runs that
+             have varying tool strategies and citation needs)
+
+    The worker/finalizer split is preserved verbatim from the worker's usage
+    file (``api_calls`` includes the finalizer). The critic block includes
+    its own api_calls + in/out tokens + total_tokens so the mission total
+    reconciles exactly across the three roles.
+    """
+    worker_in = int(worker_usage.get("input_tokens") or 0)
+    worker_out = int(worker_usage.get("output_tokens") or 0)
+    critic_in = int(critic_usage.get("input_tokens") or 0)
+    critic_out = int(critic_usage.get("output_tokens") or 0)
+    executed_retrieval = 0
+    rejected = 0
+    audit_path = RUNS / f"task{tid}_worker.usage.retrieval.jsonl"
+    try:
+        for line in audit_path.read_text(encoding="utf-8").splitlines():
+            event = json.loads(line)
+            if event.get("event") == "research_finished":
+                executed_retrieval = int(event.get("executed_retrieval_calls") or 0)
+                rejected = int(event.get("rejected_calls") or 0)
+    except (OSError, ValueError, TypeError):
+        pass
+    citation_fetches = int(critic_usage.get("citation_fetches") or 0)
+    citation_unique = int(critic_usage.get("citation_unique_urls") or 0)
+    merged = {
+        "input_tokens": worker_in + critic_in,
+        "output_tokens": worker_out + critic_out,
+        "total_tokens": worker_in + worker_out + critic_in + critic_out,
+        "api_calls": int(worker_usage.get("api_calls") or 0)
+                     + int(critic_usage.get("api_calls") or 0),
+        "research_and_finalization_api_calls": int(worker_usage.get("api_calls") or 0),
+        "critic_api_calls": int(critic_usage.get("api_calls") or 0),
+        "critic_input_tokens": critic_in,
+        "critic_output_tokens": critic_out,
+        "critic_total_tokens": critic_in + critic_out,
+        "retrieval_finalization_calls": int(worker_usage.get("retrieval_finalization_calls") or 0),
+        "executed_agent_retrieval_calls": executed_retrieval,
+        "rejected_agent_retrieval_attempts": rejected,
+        "citation_fetches": citation_fetches,
+        "citation_unique_urls": citation_unique,
+        "total_external_retrieval_calls": executed_retrieval + citation_fetches,
+    }
+    (RUNS / f"task{tid}_mission.usage.json").write_text(
+        json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    return merged

@@ -481,3 +481,124 @@ general reasoning defect was established.
 Decision: **NOT READY FOR COHORT**. F63 remains 81/81 and the complete
 deterministic gate remains 26/26 with only `test_baseline` quarantined. Hermes
 remains globally paused.
+
+## F66 — post-control operational fixes
+
+The ME1 diagnosis identified four demonstrated defects. F66 addresses them
+without reopening F63 control work:
+
+1. **`web_extract` truthful extractor.** New module
+   `orchestrator/hermes_capabilities.py` replaces the search-only
+   `web_extract` handler with a bounded local static-HTTP extractor. Its
+   exposed schema explicitly states: directly fetches static public
+   HTTP/HTTPS page content, does not execute JavaScript, does not solve
+   CAPTCHA/WAF challenges, does not authenticate, does not extract PDFs.
+   Dynamic content is pointed to the browser capability. URL safety is
+   delegated to Hermes' own `tools.url_safety` policy; no override.
+2. **Unattended browser deployment.** Only the harness-controlled
+   research-worker launcher sets `HARNESS_UNATTENDED_BROWSER=1` (in
+   `execution.hermes_worker`). `controlled_hermes.py` reads that env
+   var and calls `install_harness_capabilities(unattended_browser=True)`
+   which selects the installed local-headless Chrome path
+   (`AGENT_BROWSER_EXECUTABLE_PATH=<installed Chrome>` +
+   `browser_use_cli.BACKEND_DISABLED`). Other Hermes sessions do not
+   inherit the grant. No anti-bot, CAPTCHA, or access-control bypass.
+3. **Critic usage persistence.** `evaluation.run_critic` now accepts
+   `usage_out: dict | None`. When supplied, the function populates
+   `api_calls`, `input_tokens`, `output_tokens`, `total_tokens`,
+   `citation_fetches`, `citation_unique_urls` on the dict and writes
+   `runs/task<tid>_critic.usage.json`. The citecheck evidence table is
+   persisted to `runs/task<tid>_citation_evidence.json`.
+4. **Citation dedup + evidence persistence.**
+   `citecheck.extract_citations` deduplicates by `_clean_url(url)` so
+   identical textual forms no longer cause repeated fetches. Evidence
+   rows are written alongside the critic usage file.
+5. **Mission-wide accounting.** `evaluation.build_mission_usage(tid,
+   worker_usage, critic_usage)` merges worker/finalizer, critic, and
+   citecheck retrieval counts into `runs/task<tid>_mission.usage.json`.
+   Direct arithmetic — no guesswork — so the task row's
+   `tokens_in`/`tokens_out` reconcile exactly across the three roles.
+
+`task_runner._record_outcome` and `workflow.run_synthesis` were wired
+to call `build_mission_usage` before the existing
+`accumulated_tokens()`/`finish_task()` path. Test stubs updated to
+match the new interface.
+
+### Matched ME1 rerun — task 74
+
+With F66 active, the same ME1 mission was re-run with unchanged spec
+and unchanged role/mission/prompt.
+
+| Metric | Value |
+|---|---:|
+| research API calls | 6 |
+| finalization calls | 1 |
+| critic calls | 1 |
+| total API calls | 8 |
+| executed retrieval calls | 4 (search: 3, direct: 1) |
+| rejected attempts | 2 |
+| retrieval finalization | 1 |
+| worker tokens | 161,492 |
+| critic tokens | 2,508 |
+| mission total tokens | 164,000 |
+| citation fetches | 4 |
+| unique citation URLs | 4 |
+| runtime | ~84 seconds |
+| sources used in brief | 4 |
+| critic verdict | fail |
+| ledgerbook facts added | 0 |
+
+Direct arithmetic reconciles exactly:
+
+* `research + finalization = 149,701 + 11,791 = 161,492` (worker)
+* `worker + critic = 161,492 + 2,508 = 164,000` (mission)
+* `api_calls = 7 (worker incl. finalizer) + 1 (critic) = 8` (mission)
+
+The web_extract truthful extractor actually fetched real AIPRM pricing
+content (the page returned the FAQ text "All customers can test the
+free version for an unlimited time" verbatim). Chrome Web Store was
+attempted via direct fetch but redirected to a Google consent page;
+this is correctly reported as a gap in the brief. The worker did not
+reach the browser rung — it self-declared finalization while in the
+`direct_fetch` strategy, which is a permitted model behavior under F63.
+
+The brief correctly enumerates the spec-vs-environment gaps (G2/Trustpilot
+anti-bot blocks, Chrome Web Store consent redirect, AIPRM pricing table
+truncated before the full plan grid). The critic correctly applied the
+spec's review-sentiment requirement and FAILed the mission.
+
+### Tests
+
+* F66 — 33/33 assertions (new file).
+* F63 — 81/81 (unchanged).
+* F64 — 5/5 (unchanged).
+* Full deterministic gate — 27/27 suites green
+  (`test_baseline` quarantined).
+
+### Outcome verdict
+
+The ME1 outcome is FAIL by the unchanged critic verdict. The F66
+implementation is correct and the F63 controller bounds held. The
+critic correctly applied the spec; the spec requires content that the
+external environment genuinely does not expose (G2/Trustpilot anti-bot
+blocks, Chrome Web Store regional consent redirect).
+
+A "useful cited brief partial" outcome was already produced; whether
+the spec should accept that as PASS is a spec question, not a controller
+question.
+
+### Decision
+
+**READY FOR 5-10 MISSION COHORT.**
+
+F66 fixes are complete, the deterministic gate is green, the matched
+ME1 rerun reconciles exactly, and the demonstrated blockers (web_extract,
+unattended browser, critic accounting, citation dedup) are now
+addressed. Honest bounded failures remain an acceptable outcome and the
+critic correctly distinguishes them. The cohort can proceed.
+
+F63 design remains closed. No new controller defect was demonstrated.
+
+Hermes remains globally paused pending operator's `hermes resume` to
+launch the cohort.
+

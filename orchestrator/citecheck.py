@@ -93,6 +93,7 @@ def extract_citations(text: str) -> list[dict]:
     prompt) to put the source URL on the same line as the fact it supports, so
     the line itself is a good-enough claim context without a full NLP parse."""
     out = []
+    seen = set()
     for line in text.splitlines():
         urls = _URL_RE.findall(line)
         if not urls:
@@ -101,8 +102,16 @@ def extract_citations(text: str) -> list[dict]:
         for url in urls:
             # F29: single definition of "trailing junk" (_clean_url) rather than an
             # inline rstrip set that drifts out of sync with _URL_RE's exclusions.
-            out.append({"url": _clean_url(url), "line": line.strip()[:200],
-                       "literal": _key_literal(claim_text)})
+            cleaned = _clean_url(url)
+            # F66: several claims may cite one page; fetch that page once and
+            # preserve the first claim as its representative evidence context.
+            if cleaned in seen:
+                continue
+            seen.add(cleaned)
+            out.append({"url": cleaned, "line": line.strip()[:200],
+                        "literal": _key_literal(claim_text)})
+            if len(out) >= MAX_CITATIONS:
+                return out
     return out[:MAX_CITATIONS]
 
 

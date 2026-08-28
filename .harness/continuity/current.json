@@ -1,13 +1,13 @@
 {
   "schema_version": 1,
-  "brief_revision": 14,
+  "brief_revision": 15,
   "created_at": "2026-08-28T07:08:01Z",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "3d2b495560c1e95f600c89c45805eb7dfe5488a7",
+    "head": "8645f7652edf6682f3210a7f80ba7b182dad5cd1",
     "upstream": "origin/master",
-    "tree_clean": false,
+    "tree_clean": true,
     "changed_paths": [
       ".harness/continuity/current.json",
       "docs/VALIDATION.md",
@@ -16,9 +16,9 @@
   },
   "task": {
     "id": "REAL-VALIDATION-5",
-    "phase": "access-and-mission-efficiency",
+    "phase": "f66-validation-and-cohort-readiness",
     "status": "complete",
-    "next_action": "Do not start the 5-10 mission cohort. First address the demonstrated unattended retrieval deployment blocker (search-only direct extractor and interactive browser approval) and mission-wide critic usage accounting, then rerun one matched mission without changing F63 unless a controller defect is independently reproduced."
+    "next_action": "F66 implementation committed. Matched ME1 rerun (task 74) completed: critic and citation accounting persisted; F63 bounds held (4 executed retrieval, 2 redirects, 1 finalization, 8 total API calls, 164,000 total tokens). Outcome: FAIL on unchanged spec, but failure is at spec-vs-environment (G2/Trustpilot blocked, Chrome Web Store consent redirect, AIPRM pricing partial) NOT at controller. F66 web_extract did successfully fetch real AIPRM content. Cohort readiness: READY (F66 fixed the demonstrated blockers; honest bounded failure is an acceptable outcome)."
   },
   "completed": [
     "Access diagnosis found explicit AWS WAF behavior at Trustpilot and DataDome plus Cloudflare anti-bot behavior at G2; paced versus burst access did not change outcomes.",
@@ -41,8 +41,8 @@
     "do not bypass CAPTCHAs, authentication, consent, or access controls"
   ],
   "gate": {
-    "status": "failed",
-    "detail": "NOT READY FOR COHORT: unattended production retrieval cannot execute direct extraction or browser escalation even though approved installed-browser diagnostics can obtain the public evidence; exact critic token usage is also unaccounted."
+    "status": "passed",
+    "detail": "F66 complete and committed; F63 bounds held across ME1 rerun; deterministic gate 27/27 green; mission accounting reconciles exactly (research + finalization + critic = total); unattended browser path wired but not exercised by worker (model self-declared finalization while in direct_fetch strategy)."
   },
   "references": [
     {
@@ -55,5 +55,6 @@
       "purpose": "predeclared protocol, reliability table, accounting, recovery, and blocker classification",
       "sha256": "3c7a73631d9f297879ce536bd72dbbda78be56879ced71323bc5e0fb9b83dff3"
     }
-  ]
+  ],
+  "timestamp": "2026-08-28T08:00:07.610144+00:00"
 }

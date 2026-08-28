@@ -124,6 +124,8 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as raw:
         return "pass", "ok"
 
     patch(tr.evaluation, "run_critic", critic)
+    patch(tr.evaluation, "build_mission_usage",
+          lambda tid, worker_usage, critic_usage: worker_usage)
     patch(tr.evaluation, "extract_facts", lambda *a: events.append(("facts",)) or 2)
     patch(tr.evaluation, "seed_is_synthesis", lambda spec: False)
     patch(tr.workflow, "_check_repeated_failure", lambda mid: events.append(("repeat",)))

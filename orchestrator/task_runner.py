@@ -298,7 +298,10 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
     dest.write_text(out + f"\n\n---\n_task {tid} Â· {datetime.now().isoformat(timespec='seconds')}"
                           f" Â· {worker_cfg['model']}_\n", encoding="utf-8")
 
-    verdict, verdict_text = evaluation.run_critic(row, out, roles, baseline, scope_note=scope_note)
+    critic_usage: dict = {}
+    verdict, verdict_text = evaluation.run_critic(
+        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage)
+    mission_usage = evaluation.build_mission_usage(tid, usage, critic_usage)
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                 trigger="pass_criteria_ambiguous", task_id=tid)
@@ -318,7 +321,8 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
     # routine, so it has to be closed first. `row` was read before this attempt started,
     # so it holds exactly the prior total (0/NULL on a first run -- a no-op there).
     # F48: the arithmetic moved to scheduler.accumulated_tokens(), now shared with run_canaries().
-    tok_in, tok_out = scheduler.accumulated_tokens(usage, row.get("tokens_in"), row.get("tokens_out"))
+    tok_in, tok_out = scheduler.accumulated_tokens(
+        mission_usage, row.get("tokens_in"), row.get("tokens_out"))
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(rc.ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status=status)

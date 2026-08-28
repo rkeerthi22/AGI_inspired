@@ -183,7 +183,10 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     dest.write_text(out + f"\n\n---\n_task {tid} · {datetime.now().isoformat(timespec='seconds')}"
                           f" · {worker_cfg['model']} (synthesis, tool-free)_\n",
                     encoding="utf-8")
-    verdict, verdict_text = evaluation.run_critic(row, out, roles, baseline, scope_note=scope_note)
+    critic_usage: dict = {}
+    verdict, verdict_text = evaluation.run_critic(
+        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage)
+    mission_usage = evaluation.build_mission_usage(tid, syn_usage, critic_usage)
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                            trigger="pass_criteria_ambiguous", task_id=tid)
@@ -201,8 +204,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     # task 30: the daily counter sat at exactly 4,640,719 before AND after a real
     # synthesis. Accumulated onto the row's prior total for the same reason as F32 --
     # this path is retried like any other.
-    tok_in = int(syn_usage.get("input_tokens") or 0) + int(row.get("tokens_in") or 0)
-    tok_out = int(syn_usage.get("output_tokens") or 0) + int(row.get("tokens_out") or 0)
+    tok_in = int(mission_usage.get("input_tokens") or 0) + int(row.get("tokens_in") or 0)
+    tok_out = int(mission_usage.get("output_tokens") or 0) + int(row.get("tokens_out") or 0)
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(rc.ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
                        critic_notes=verdict_text[:500], status=status)
