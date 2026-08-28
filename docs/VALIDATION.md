@@ -434,3 +434,50 @@ redirected controller attempts, zero model calls, and zero model tokens.
 the complete deterministic gate remains 26/26 with only `test_baseline`
 quarantined. `git diff --check` is clean and the Hermes global emergency pause
 remains engaged.
+
+## Checkpoint 9 — post-F63 access and mission efficiency
+
+Date: 2026-08-28. The bounded protocol and full method/accounting tables are in
+`experiments/post_f63_access_efficiency.md`. Production code, prompts, roles,
+and F63 policy were unchanged. Task 72 was not retried; ME1 created fresh task
+73 and ran it once through the production composition and lock.
+
+Access probes found explicit defenses rather than inferring them from status
+codes alone. G2 served a DataDome CAPTCHA script plus Cloudflare challenge
+headers/cookies to paced, concurrent, and real-browser requests. Trustpilot
+served an AWS WAF verification interstitial to every direct request, while an
+ordinary browser context rendered the complete review corpus on its first
+HTTP-403 navigation and returned HTTP 200 with the same corpus on its second.
+Neither source showed burst/rate degradation at the tested volume. AIPRM
+pricing remained stable HTTP 200 and reliably exposed its exact table only
+inside an open Shadow DOM. Chrome Web Store consistently redirected to a
+regional (`gl=PL`) Google consent page.
+
+ME1 stayed inside F63 bounds: six executed retrievals (three search, two
+direct, one browser), two rejected/redirected attempts, and exactly one
+finalizer. Five research calls plus finalization consumed 124,677 accounted
+tokens. A separate critic call makes seven total model calls, but critic token
+usage is not persisted, so an exact mission-wide token total cannot be
+reconciled. The mechanical critic also made 15 citation fetches for 14 unique
+URLs because repeated citations are not deduplicated.
+
+The controller correctly moved search → direct → browser, preserved evidence,
+rejected an indirect execute-code escape, and finalized once. The deployed
+direct extractor failed because its DuckDuckGo backend is search-only. The
+browser then failed at an interactive Chrome remote-debugging approval step,
+despite the approved installed-browser diagnostic path having recovered the
+same evidence. The finalizer returned a useful and honest cited bounded failure,
+but it lacked authoritative pricing and recurring-review evidence. The critic
+correctly failed it and ledgerbook received no facts.
+
+Outcome-quality verdict: **FAIL**. No causal F63 controller defect was
+demonstrated. Concrete blockers are unattended retrieval deployment (no working
+direct extractor and browser requiring interactive approval), incomplete
+mission-wide token accounting for the critic, and minor citation-verifier
+duplication/non-persistence. The model made one duplicate direct attempt and
+one bounded escape attempt, but the decisive evidence never reached it, so no
+general reasoning defect was established.
+
+Decision: **NOT READY FOR COHORT**. F63 remains 81/81 and the complete
+deterministic gate remains 26/26 with only `test_baseline` quarantined. Hermes
+remains globally paused.

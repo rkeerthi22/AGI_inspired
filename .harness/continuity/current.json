@@ -1,56 +1,59 @@
 {
   "schema_version": 1,
-  "brief_revision": 13,
-  "created_at": "2026-08-28T06:43:01Z",
+  "brief_revision": 14,
+  "created_at": "2026-08-28T07:08:01Z",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "b00fcf7e6f0aecc737c851528c31e9a4d4e7be86",
+    "head": "3d2b495560c1e95f600c89c45805eb7dfe5488a7",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
       "docs/VALIDATION.md",
-      "experiments/retrieval_method_reliability_aiprm.md"
+      "experiments/post_f63_access_efficiency.md"
     ]
   },
   "task": {
-    "id": "REAL-VALIDATION-4",
-    "phase": "retrieval-method-reliability",
+    "id": "REAL-VALIDATION-5",
+    "phase": "access-and-mission-efficiency",
     "status": "complete",
-    "next_action": "Proceed to independent outcome-quality, recovery-behavior, capability-selection, and cost validation without changing F63 unless a concrete defect is reproduced; do not start scheduled missions while the global pause remains engaged."
+    "next_action": "Do not start the 5-10 mission cohort. First address the demonstrated unattended retrieval deployment blocker (search-only direct extractor and interactive browser approval) and mission-wide critic usage accounting, then rerun one matched mission without changing F63 unless a controller defect is independently reproduced."
   },
   "completed": [
-    "Official pricing PASS: existing browser plus open Shadow-DOM extraction recovered the authoritative current AIPRM table in USD.",
-    "Pricing accounting: 7 retrieval/tool invocations, 0 rejected or redirected controller attempts, 0 model calls, 0 tokens.",
-    "Recent-review themes PASS: three independently authored reviews in the displayed last-12-month set recur on renewal, cancellation, billing, and refund friction.",
-    "Review accounting: 7 retrieval/tool invocations, 0 rejected or redirected controller attempts, 0 model calls, 0 tokens.",
-    "Pricing miss classified as dynamic source-structure and extraction reliability; review miss classified as browser/access reliability plus aggregation.",
-    "No production code or prompt defect was demonstrated; controller and task 72 remained unchanged.",
+    "Access diagnosis found explicit AWS WAF behavior at Trustpilot and DataDome plus Cloudflare anti-bot behavior at G2; paced versus burst access did not change outcomes.",
+    "AIPRM pricing remained stable and dynamic: direct HTTP reached the shell, while installed-browser Shadow-DOM traversal recovered exact official prices twice.",
+    "Chrome Web Store consistently redirected to a Poland Google consent interstitial.",
+    "Fresh ME1 task 73 ran once through unchanged production composition: 6 executed retrievals, 2 rejected attempts, exactly 1 finalizer, and 124677 accounted worker tokens.",
+    "ME1 correctly transitioned search to direct to browser and preserved evidence, but production direct extraction was search-only and browser execution required interactive remote-debugging approval.",
+    "ME1 outcome quality failed on authoritative pricing and recurring reviews; critic correctly failed it and no facts were written.",
+    "A seventh critic model call lacks persisted token usage; citecheck fetched 15 citations for 14 unique URLs and does not persist its evidence table.",
+    "No causal F63 controller defect or general model-reasoning defect was demonstrated.",
     "F63 remains 81/81; full deterministic gate remains 26/26 with test_baseline quarantined.",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
     "schedules remain paused",
-    "do not automatically retry task 72",
+    "do not automatically retry task 73",
+    "do not start the 5-10 mission cohort",
     "no prompt tuning",
-    "no controller architecture work absent a reproduced concrete defect",
-    "do not reinterpret search snippets or third-party summaries as definitive official pricing"
+    "no controller architecture or tuning without a reproduced causal controller defect",
+    "do not bypass CAPTCHAs, authentication, consent, or access controls"
   ],
   "gate": {
-    "status": "passed",
-    "detail": "Both isolated evidence classes passed with reconciled bounded accounting; no harness code defect was demonstrated."
+    "status": "failed",
+    "detail": "NOT READY FOR COHORT: unattended production retrieval cannot execute direct extraction or browser escalation even though approved installed-browser diagnostics can obtain the public evidence; exact critic token usage is also unaccounted."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "retrieval-method reliability checkpoint and verification",
-      "sha256": "34a03cd114e6dc01ddec961f7f14f103b5d7862b6101201fb5739e5f3859c0aa"
+      "purpose": "post-F63 access, mission-efficiency, outcome, and readiness checkpoint",
+      "sha256": "d81e78eaa3113a2954180f2ee3c44af896061a5696b638e57124263ec9dd9b4f"
     },
     {
-      "path": "experiments/retrieval_method_reliability_aiprm.md",
-      "purpose": "predeclared protocol, method tables, accounting, and classification",
-      "sha256": "8a7aca130bc6d9d104960e33d5c1d661ed9ebff8704e828fc9536d063ba15459"
+      "path": "experiments/post_f63_access_efficiency.md",
+      "purpose": "predeclared protocol, reliability table, accounting, recovery, and blocker classification",
+      "sha256": "3c7a73631d9f297879ce536bd72dbbda78be56879ced71323bc5e0fb9b83dff3"
     }
   ]
 }
