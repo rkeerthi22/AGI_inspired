@@ -1,65 +1,68 @@
 {
   "schema_version": 1,
-  "brief_revision": 11,
-  "created_at": "2026-08-28T05:05:00+00:00",
+  "brief_revision": 12,
+  "created_at": "2026-08-28T06:25:00+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
-    "head": "e914068ca1bd81a2fa1ac96f688210c5426e570f",
+    "head": "e6da286",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
       "docs/HARDENING.md",
       "docs/VALIDATION.md",
-      "experiments/recovery_validation_f64.md",
+      "experiments/capability_selection_aiprm.md",
+      "experiments/capability_selection_aiprm_csa2.md",
+      "experiments/capability_selection_aiprm_csa3.md",
       "orchestrator/execution.py",
-      "tests/test_f64.py"
+      "orchestrator/retrieval_progress.py",
+      "tests/test_f63.py"
     ]
   },
   "task": {
     "id": "REAL-VALIDATION-3",
-    "phase": "recovery-and-capability-validation",
+    "phase": "capability-and-outcome-validation",
     "status": "in_progress",
-    "next_action": "Checkpoint RV1/F64, then run a predeclared capability-selection experiment targeting extraction of a required field from an already reachable source. Keep F63 frozen and schedules paused."
+    "next_action": "Checkpoint F65/CSA evidence. Then design a bounded retrieval-method reliability experiment for definitive AIPRM pricing and a recent-review theme; do not automatically retry task 72."
   },
   "completed": [
-    "F63 committed at e914068 and remains frozen.",
-    "RV1 recovered exactly one expired task; second reconciliation changed zero rows and prior token accounting survived.",
-    "RV1 stayed bounded: 7 retrieval executions, 2 rejections, exactly 1 finalizer, and 175237 worker tokens.",
-    "JSONL, redacted session export, and worker usage reconcile exactly.",
-    "RV1 returned a useful cited partial but critic correctly failed the missing current-rating requirement.",
-    "Independent citation retrieval checked 10 citations: 7 reachable and 3 expected HTTP 403 responses.",
-    "RV1 exposed F64 reasoning-trace loss; narrow datetime import fix is covered by test_f64.",
-    "Focused gate passed 6/6 and full deterministic gate passed 26/26; test_baseline remains quarantined.",
+    "Recovery RV1 passed bounded state recovery and exposed F64, committed at e6da286.",
+    "CSA1 reproduced non-retrieval skill_view rejection and cross-attempt audit append defects.",
+    "CSA2 reproduced false repeated-redirect termination inside one parallel search batch.",
+    "Narrow F65 fixes bound skill setup, reset per-attempt audit, and coalesce parallel feedback opportunities without changing prompts or retrieval rung limits.",
+    "CSA3 accounting: 4 research API calls, 6 retrieval calls, 0 rejections, exactly 1 finalizer, 98766 worker tokens.",
+    "CSA3 session, JSONL, and usage reconcile exactly; independent check found 15/15 URLs reachable and 13/15 literals present.",
+    "CSA3 recovered the 3.9/5 rating but failed the required recurring review theme and definitive current price range.",
+    "F63 coverage is 81/81; full deterministic gate is 26/26 with test_baseline quarantined.",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
-    "F63 controller and prompts remain frozen unless a reproduced concrete defect requires a narrow change",
     "schedules remain paused",
-    "do not launch unconstrained missions",
-    "measure tool calls and evidence externally rather than trusting model self-report",
-    "next experiment addresses observed capability selection and outcome quality"
+    "do not automatically retry task 72 again",
+    "no prompt tuning",
+    "no controller architecture work absent another reproduced concrete defect",
+    "next experiment isolates retrieval-method reliability for the two observed evidence gaps"
   ],
   "gate": {
-    "status": "passed",
-    "detail": "Recovery mechanics and bounded terminal-partial gate passed; outcome quality failed because a reachable Chrome Web Store rating was not extracted."
+    "status": "failed",
+    "detail": "Controller defects cleared and original rating gap closed, but capability/outcome quality still failed on a recurring review theme and definitive pricing."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "real validation evidence and gate status",
-      "sha256": "ee80e8abe495b0522bd0cced5f27420b45303e05c038bf7048933094c3b82f39"
+      "purpose": "RV1 and CSA1-CSA3 evidence",
+      "sha256": "6a257c24cb83d42f46610c25b27b540170bf7de15c6a3e04118a4ee3fd1f1de7"
     },
     {
       "path": "docs/HARDENING.md",
-      "purpose": "F64 live defect and narrow repair",
-      "sha256": "42bb993ab24844f76a41e06748e393704308e6633d8bb9149c437ee267cc2729"
+      "purpose": "F64 and F65 defects and repairs",
+      "sha256": "d3ad06fecfa717799fb1096147073e2b6435b42928edfe8d1c90989edd754640"
     },
     {
-      "path": "experiments/recovery_validation_f64.md",
-      "purpose": "predeclared RV1 protocol and acceptance gate",
-      "sha256": "3b51487ea6414d7a3fe47a7155c61a5b23b304dca96619ad14a19c045210c003"
+      "path": "experiments/capability_selection_aiprm_csa3.md",
+      "purpose": "authoritative corrected capability specimen",
+      "sha256": "2e684ca4c59606e001e22a40c308a8cf69a356f117a540f734e0b0be68b7c341"
     }
   ]
 }

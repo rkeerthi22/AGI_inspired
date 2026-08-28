@@ -29,6 +29,7 @@ class RetrievalPolicy:
     min_search_chars: int = 80
     min_content_chars: int = 240
     max_redirect_violations: int = 2
+    max_setup_calls: int = 2
     max_evidence_chars_per_call: int = 5000
     max_evidence_chars_total: int = 30000
 
@@ -47,10 +48,12 @@ class RetrievalState:
     evidence_chars: int = 0
     finalization_calls: int = 0
     rejected_calls: int = 0
+    setup_calls: int = 0
 
 
 STAGE_NAMES = ("search", "direct_fetch", "browser")
 OPAQUE_RETRIEVAL_PROXIES = {"delegate_task"}
+NON_RETRIEVAL_SETUP_TOOLS = {"skill_view"}
 _ACTIVE_CONTROLLERS: list["RetrievalProgressController"] = []
 
 
@@ -116,11 +119,25 @@ class RetrievalProgressController:
 
     @property
     def total_call_ceiling(self) -> int:
-        """Successful research turns + rejected turns + one finalizer."""
-        return sum(self.policy.max_calls) + self.policy.max_redirect_violations + 1
+        """Research, bounded setup, rejected turns, and one finalizer."""
+        return (sum(self.policy.max_calls) + self.policy.max_setup_calls
+                + self.policy.max_redirect_violations + 1)
 
     def before(self, tool_name: str, args: Mapping[str, Any] | None) -> dict | None:
         with self._lock:
+            if tool_name.lower() in NON_RETRIEVAL_SETUP_TOOLS:
+                if self.state.stage >= 3:
+                    return self._redirect(
+                        tool_name, "Research is complete; setup tools are now disabled."
+                    )
+                if self.state.setup_calls >= self.policy.max_setup_calls:
+                    return self._redirect(
+                        tool_name, "The bounded non-retrieval setup allowance is exhausted. "
+                        f"Continue with the required strategy: {self.required_strategy}."
+                    )
+                self.state.setup_calls += 1
+                self._audit("setup", tool=tool_name)
+                return None
             if tool_name.lower() in OPAQUE_RETRIEVAL_PROXIES:
                 return self._redirect(
                     tool_name,
@@ -141,6 +158,7 @@ class RetrievalProgressController:
                     f"Strategy transition is externally enforced. Use {allowed}; "
                     f"{STAGE_NAMES[attempted]} is not currently allowed. Reformulating a query "
                     "does not reset retrieval progress.",
+                    count_violation=self.state.reserved[attempted] == 0,
                 )
             occupied = self.state.calls[attempted] + self.state.reserved[attempted]
             if occupied >= self.policy.max_calls[attempted]:
@@ -230,10 +248,18 @@ class RetrievalProgressController:
         self._audit("transition", source=previous, target=self.required_strategy,
                     reason=reason)
 
-    def _redirect(self, tool_name: str, message: str) -> dict:
+    def _redirect(self, tool_name: str, message: str,
+                  *, count_violation: bool = True) -> dict:
         self.state.rejected_calls += 1
-        self.state.redirect_violations += 1
+        if count_violation:
+            self.state.redirect_violations += 1
         terminal = self.state.rejected_calls >= self.policy.max_redirect_violations
+        # Calls dispatched in one parallel batch cannot react to a redirect
+        # returned to an earlier sibling. Account every blocked call, but do
+        # not call that deliberate repeated noncompliance until the reserved
+        # batch has completed and the model has had a feedback opportunity.
+        if not count_violation:
+            terminal = False
         self._audit("redirect", tool=tool_name, required=self.required_strategy)
         if terminal:
             message += " The transition was ignored repeatedly, so this turn is now terminated."

@@ -335,3 +335,57 @@ RV1 also exposed F64: critic reasoning was silently dropped because
 `execution.ollama_chat` referenced `datetime` without importing it. The narrow
 import-only repair and regression test pass the focused 6/6 gate and full 26/26
 deterministic gate (`test_baseline` remains quarantined).
+
+## Checkpoint 7 — capability selection CSA1–CSA3
+
+Date: 2026-08-28. The production prompt remained unchanged. Each specimen was
+one automatic content retry of task 72 with prior spend preserved. Schedules
+remained paused.
+
+CSA1 failed before retrieval. Hermes attempted two `skill_view` calls for the
+approved Shopify verification technique; F63 treated both non-retrieval setup
+calls as unknown browser escapes, exhausted the two-rejection limit, and sent an
+empty evidence set to the finalizer. It used 22,962 worker tokens and returned an
+honest but non-useful bounded failure. Its audit also appended to RV1 because
+retries reused the same audit filename.
+
+The narrow treatment allows at most two audited `skill_view` setup calls, never
+charges them as retrieval, disables them after research, and deletes the prior
+attempt's audit before launch. No prompt or retrieval-rung budget changed.
+
+CSA2 then executed three searches, but a five-search parallel batch caused two
+over-capacity calls to be treated as two separate ignored redirects before the
+model could receive the first redirect. Research again ended early. The narrow
+concurrency fix still accounts for both rejected calls but treats calls from the
+same outstanding batch as one feedback opportunity. A post-feedback violation
+still terminates deterministically.
+
+CSA3 was the authoritative corrected specimen:
+
+| Measure | CSA3 |
+|---|---:|
+| Research API calls | 4 |
+| Executed retrieval | 6 (3 search, 2 direct, 1 browser) |
+| Rejections | 0 |
+| Finalizers | exactly 1 |
+| Worker tokens | 98,766 |
+| Session tool calls/results | 6 / 6 |
+| Citation reachability | 15/15 |
+| Extracted literals present | 13/15 |
+
+Session research usage (86,838 input + 692 output) plus finalizer usage (4,126
+input + 7,110 output) equals the worker report exactly. JSONL contains only CSA3
+and matches the session rung counts.
+
+The agent closed the original rating gap with a sourced **3.9/5 from 3.4K
+ratings**, but the critic correctly failed the result because it still lacked a
+recurring recent-review theme and could not establish a definitive current
+price range from contradictory snippets. This is useful evidence but not a
+mission-quality pass.
+
+**Capability-selection gate: FAILED on outcome quality after controller defects
+were removed.** Do not run another automatic retry. The next work is a bounded
+retrieval-method reliability experiment for the two missing fields, followed by
+independent outcome evaluation—not prompt tuning or controller architecture.
+Schedules remain paused. F63 regression coverage is now 81/81 assertions; the
+full deterministic gate remains 26/26 with `test_baseline` quarantined.

@@ -97,12 +97,19 @@ check("parallel overshoot blocked", blocked_parallel["code"],
       "retrieval_strategy_redirect")
 check("parallel reservation forces next strategy", parallel.required_strategy,
       "direct_fetch")
+second_parallel = parallel.before("web_search", {"query": "same batch overshoot"})
+check("same parallel batch is not falsely terminal", second_parallel["terminal"], False)
+check("both blocked calls remain accounted", parallel.state.rejected_calls, 2)
+check("parallel batch counts one feedback opportunity",
+      parallel.state.redirect_violations, 1)
 for index in range(3):
     parallel.after("web_search", {"query": str(index)},
                    useful(f"https://parallel.example/{index}", str(index)), False)
 check("parallel completions capped", parallel.state.calls[0], 3)
 check("parallel completions do not double-transition", parallel.required_strategy,
       "direct_fetch")
+post_feedback = parallel.before("web_search", {"query": "ignored after feedback"})
+check("post-feedback repeat terminates", post_feedback["terminal"], True)
 
 proxy = RetrievalProgressController(policy)
 check("delegated retrieval is always blocked",
@@ -111,6 +118,21 @@ check("delegated retrieval is always blocked",
 check("delegation consumes no hidden budget", proxy.executed_calls, 0)
 check("computer use counted as browser/other", tool_stage("computer_use", {}), 2)
 check("future plugin tool cannot escape", tool_stage("mcp_research_magic", {}), 0)
+
+# Approved skill loading is bounded setup, not retrieval. A live feedback retry
+# tried skill_view twice before its first search; charging those as unknown
+# browser escapes exhausted the rejection budget and forced an empty finalizer.
+setup = RetrievalProgressController(policy)
+check("first skill setup allowed", setup.before("skill_view", {"name": "a"}), None)
+check("second skill setup allowed", setup.before("skill_view", {"name": "a"}), None)
+check("setup does not consume retrieval", setup.executed_calls, 0)
+check("setup calls are counted", setup.state.setup_calls, 2)
+check("third setup is redirected", setup.before("skill_view", {"name": "a"})["code"],
+      "retrieval_strategy_redirect")
+setup.state.stage = 3
+check("setup disabled after research",
+      setup.before("skill_view", {"name": "a"})["code"],
+      "retrieval_strategy_halt")
 
 # Full ceiling: eight successful calls, two rejected attempts, one and only
 # one compact evidence-only finalizer. No model-selected tool name can escape.
@@ -127,7 +149,7 @@ check("first post-retrieval tool rejected",
 check("second post-retrieval tool terminates research",
       ceiling.before("write_file", {"path": "escape"})["terminal"], True)
 check("two rejected attempts total", ceiling.state.rejected_calls, 2)
-check("inference call ceiling includes finalizer", ceiling.total_call_ceiling, 11)
+check("inference call ceiling includes setup and finalizer", ceiling.total_call_ceiling, 13)
 ceiling.finalization_started()
 check("exactly one finalization call", ceiling.state.finalization_calls, 1)
 try:
@@ -199,6 +221,8 @@ finally:
 # launcher and gives each attempt an adjacent audit path.
 usage = ROOT / "workspace" / "test_f63.usage.json"
 usage.unlink(missing_ok=True)
+audit_attempt = usage.with_suffix(".retrieval.jsonl")
+audit_attempt.write_text("stale prior attempt\n", encoding="utf-8")
 captured = {}
 real_which = execution.shutil.which
 real_run = execution.subprocess.run
@@ -224,9 +248,11 @@ try:
     check("per-attempt audit injected",
           captured["kwargs"]["env"]["HARNESS_RETRIEVAL_AUDIT"].endswith(
               "test_f63.usage.retrieval.jsonl"), True)
+    check("prior attempt audit removed before launch", audit_attempt.exists(), False)
 finally:
     execution.shutil.which = real_which
     execution.subprocess.run = real_run
     usage.unlink(missing_ok=True)
+    audit_attempt.unlink(missing_ok=True)
 
 print(f"F63 retrieval-progress controller: {checks}/{checks} assertions passed")

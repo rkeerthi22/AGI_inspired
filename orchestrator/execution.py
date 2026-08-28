@@ -77,7 +77,11 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", model_cfg["provider"],
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
     env = dict(os.environ)
-    env["HARNESS_RETRIEVAL_AUDIT"] = str(usage_path.with_suffix(".retrieval.jsonl"))
+    audit_path = usage_path.with_suffix(".retrieval.jsonl")
+    # A retry reuses task<N>_worker.usage.json. Its audit must describe this
+    # attempt alone just as the usage file does, not append to the prior run.
+    audit_path.unlink(missing_ok=True)
+    env["HARNESS_RETRIEVAL_AUDIT"] = str(audit_path)
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
                           errors="replace", timeout=timeout, cwd=str(ROOT), env=env)
     usage = {}

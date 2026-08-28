@@ -2330,6 +2330,26 @@ deterministic gate passes 26/26 with `test_baseline` quarantined. No F63
 controller or prompt changed. · `orchestrator/execution.py` ·
 `tests/test_f64.py`
 
+### F65 bounded retrieval could terminate before the model saw its first redirect
+Capability specimen CSA1 showed that approved `skill_view` setup was classified
+as an unknown retrieval escape. Two parallel skill loads exhausted the rejection
+budget before any search. The retry audit also appended to the previous attempt.
+CSA2 then showed the same feedback-timing defect inside retrieval: a parallel
+five-search batch filled three reservations, and its two blocked siblings were
+counted as two deliberately ignored redirects even though neither could observe
+the earlier response.
+
+Fixed narrowly: at most two `skill_view` calls are audited as bounded
+non-retrieval setup, disabled after research; each retry clears its exact audit
+path before launch; and rejected siblings in one outstanding parallel batch are
+fully accounted but share one feedback opportunity. A later violation remains
+terminal. Retrieval rung limits and prompts are unchanged. CSA3 then executed
+3 search, 2 direct, and 1 browser call with zero rejections and one finalizer.
+F63 coverage is 81/81 and the full deterministic gate is 26/26. CSA3 still
+failed content quality, so schedules remain paused. ·
+`orchestrator/retrieval_progress.py` · `orchestrator/execution.py` ·
+`tests/test_f63.py`
+
 ### F62 task-scope dependency lost during W9 extraction
 The first production recovery after W9 reached `prompts.task_scope_note()` and
 raised `NameError: seed_is_synthesis is not defined` before the worker call.
