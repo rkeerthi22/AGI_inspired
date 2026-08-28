@@ -1,60 +1,62 @@
 {
   "schema_version": 1,
-  "brief_revision": 15,
-  "created_at": "2026-08-28T07:08:01Z",
+  "brief_revision": 17,
+  "created_at": "2026-08-28T11:56:57Z",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "8645f7652edf6682f3210a7f80ba7b182dad5cd1",
+    "head": "9eb0f6e9f40160280de2d62fea5e984b5e4098e1",
     "upstream": "origin/master",
-    "tree_clean": true,
+    "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
       "docs/VALIDATION.md",
-      "experiments/post_f63_access_efficiency.md"
+      "tests/test_f63.py"
     ]
   },
   "task": {
-    "id": "REAL-VALIDATION-5",
-    "phase": "f66-validation-and-cohort-readiness",
+    "id": "REAL-VALIDATION-7",
+    "phase": "f63-halt-propagation-fix",
     "status": "complete",
-    "next_action": "F66 implementation committed. Matched ME1 rerun (task 74) completed: critic and citation accounting persisted; F63 bounds held (4 executed retrieval, 2 redirects, 1 finalization, 8 total API calls, 164,000 total tokens). Outcome: FAIL on unchanged spec, but failure is at spec-vs-environment (G2/Trustpilot blocked, Chrome Web Store consent redirect, AIPRM pricing partial) NOT at controller. F66 web_extract did successfully fetch real AIPRM content. Cohort readiness: READY (F66 fixed the demonstrated blockers; honest bounded failure is an acceptable outcome)."
+    "next_action": "Original cohort truth is preserved: M7 FAILED F63 with 4 redirect_violations against limit 2; M1 and M5 were BORDERLINE from the same halt-propagation defect; M2/M3/M6 HELD; M4 N/A. Hermes tool_executor fix 717b8db propagates pre-call halt decisions to the conversation-loop field. Regression is 85/85 and focused F63/F66 gate is 2/2. Post-fix replay: M1/M5/M7 all HELD at 2/2. Keep execution paused pending operator confirmation."
   },
   "completed": [
-    "Access diagnosis found explicit AWS WAF behavior at Trustpilot and DataDome plus Cloudflare anti-bot behavior at G2; paced versus burst access did not change outcomes.",
-    "AIPRM pricing remained stable and dynamic: direct HTTP reached the shell, while installed-browser Shadow-DOM traversal recovered exact official prices twice.",
-    "Chrome Web Store consistently redirected to a Poland Google consent interstitial.",
-    "Fresh ME1 task 73 ran once through unchanged production composition: 6 executed retrievals, 2 rejected attempts, exactly 1 finalizer, and 124677 accounted worker tokens.",
-    "ME1 correctly transitioned search to direct to browser and preserved evidence, but production direct extraction was search-only and browser execution required interactive remote-debugging approval.",
-    "ME1 outcome quality failed on authoritative pricing and recurring reviews; critic correctly failed it and no facts were written.",
-    "A seventh critic model call lacks persisted token usage; citecheck fetched 15 citations for 14 unique URLs and does not persist its evidence table.",
-    "No causal F63 controller defect or general model-reasoning defect was demonstrated.",
-    "F63 remains 81/81; full deterministic gate remains 26/26 with test_baseline quarantined.",
+    "Reverted incorrect zero-F63-failure documentation in commit 9eb0f6e.",
+    "Minimal model-free reproduction confirmed a halt decision did not set agent._tool_guardrail_halt_decision and a later tool call was accepted.",
+    "Original cohort adjudication: one real F63 failure (M7, 4/2 redirect_violations), two borderline cases (M1/M5), three clean holds (M2/M3/M6), and one N/A synthesis mission (M4).",
+    "Hermes commit 717b8db70fb1f9ca4e477af93043bd1a2e316060 propagates pre-call halt decisions in agent/tool_executor.py.",
+    "F63 integration regression failed before the fix and passes after it; F63 is 85/85.",
+    "Focused deterministic gate is green: F63/F66 2/2 suites.",
+    "Controller-only replay of M1/M5/M7 stops at the propagated halt; all three hold post-fix at 2 redirect violations against limit 2.",
+    "No cohort mission or task was rerun; no model, network, or database execution was used for replay.",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
-    "schedules remain paused",
-    "do not automatically retry task 73",
-    "do not start the 5-10 mission cohort",
+    "task execution and schedules remain paused until operator confirmation",
+    "do not describe the original cohort as F63-held",
+    "preserve original-run and post-fix replay results separately",
+    "do not run a new cohort",
     "no prompt tuning",
-    "no controller architecture or tuning without a reproduced causal controller defect",
     "do not bypass CAPTCHAs, authentication, consent, or access controls"
   ],
   "gate": {
     "status": "passed",
-    "detail": "F66 complete and committed; F63 bounds held across ME1 rerun; deterministic gate 27/27 green; mission accounting reconciles exactly (research + finalization + critic = total); unattended browser path wired but not exercised by worker (model self-declared finalization while in direct_fetch strategy)."
+    "detail": "Controller defect reproduced, patched, and regression-covered. F63 85/85; focused F63/F66 2/2. Original cohort: M7 failed and M1/M5 borderline. Post-fix replay: M1/M5/M7 held. Execution remains paused."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "post-F63 access, mission-efficiency, outcome, and readiness checkpoint",
-      "sha256": "d81e78eaa3113a2954180f2ee3c44af896061a5696b638e57124263ec9dd9b4f"
+      "purpose": "Checkpoint 10 records original cohort failure separately from verified post-fix replay",
+      "sha256": "8a25acfbe5bde150d109f9c38665afb4a3d59d0d253c7a1a81ca687f2cf3bc9c"
     },
     {
-      "path": "experiments/post_f63_access_efficiency.md",
-      "purpose": "predeclared protocol, reliability table, accounting, recovery, and blocker classification",
-      "sha256": "3c7a73631d9f297879ce536bd72dbbda78be56879ced71323bc5e0fb9b83dff3"
+      "path": "tests/test_f63.py",
+      "purpose": "F63 controller plus real Hermes pre-call halt propagation regression"
+    },
+    {
+      "path": "workspace/validation/cohort_f63_replay.json",
+      "purpose": "model-free post-fix replay results for M1, M5, and M7"
     }
   ],
-  "timestamp": "2026-08-28T08:00:07.610144+00:00"
+  "timestamp": "2026-08-28T11:56:57Z"
 }

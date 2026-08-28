@@ -602,3 +602,60 @@ F63 design remains closed. No new controller defect was demonstrated.
 Hermes remains globally paused pending operator's `hermes resume` to
 launch the cohort.
 
+## Checkpoint 10 — cohort F63 violation and verified halt propagation fix
+
+Date: 2026-08-28. The seven-mission cohort ran from 10:26 through 10:39 UTC
+under the pre-fix controller. The final joint audit supersedes the earlier
+zero-failure analysis: that analysis grouped redirect rows as a proxy and
+missed a real conversation-loop enforcement gap.
+
+The final adjudicated cohort outcome was 3 PASS (M2, M3, M6) and 4 FAIL.
+The failures combine F63-adjacent behavior in M1, M5, and M7 with the bounded
+external-environment failures already preserved in the task artifacts. This
+outcome classification is separate from the per-mission F63 gate below.
+
+| Mission | Original F63 result | Evidence |
+|---|---|---|
+| M1 | BORDERLINE | `rejected_calls` exceeded 2; same halt-propagation root cause, while adjudicated `redirect_violations` remained within the limit |
+| M2 | HELD | retrieval controller bounds held cleanly |
+| M3 | HELD | retrieval controller bounds held cleanly |
+| M4 | N/A | tool-free synthesis mission; no retrieval controller |
+| M5 | BORDERLINE | `rejected_calls` exceeded 2; same halt-propagation root cause, while adjudicated `redirect_violations` remained within the limit |
+| M6 | HELD | retrieval controller bounds held cleanly |
+| M7 | **FAILED** | 4 real `redirect_violations` against the limit of 2 |
+
+The root cause was in Hermes' pre-call block path. F63 returned a terminal
+`ToolGuardrailDecision(action="halt")`, and the executor produced a synthetic
+blocked tool result, but `agent/tool_executor.py` did not copy that decision to
+`agent._tool_guardrail_halt_decision`. `conversation_loop.py` checks that field
+to break the conversation turn. Because it remained unset, the tool loop could
+return while the conversation loop continued into another model/tool cycle.
+
+The fix is Hermes commit `717b8db70fb1f9ca4e477af93043bd1a2e316060`:
+the pre-call block path now assigns `agent._tool_guardrail_halt_decision` when
+`guardrail_decision.should_halt` is true, before returning the synthetic blocked
+result.
+
+The new integration regression in `tests/test_f63.py` exercises the real Hermes
+middleware path. It failed before the fix because the conversation-loop field
+was `None` and passes after the fix. F63 is now 85/85. The focused F63/F66 gate
+is 2/2 green.
+
+A controller-only replay of the preserved M1, M5, and M7 post-halt states made
+no model, network, database, or mission calls. With the fixed executor, each
+turn stops as soon as the terminal halt is propagated:
+
+| Mission | Original status | Post-fix redirect violations | Post-fix result |
+|---|---|---:|---|
+| M1 | BORDERLINE | 2/2 | HELD |
+| M5 | BORDERLINE | 2/2 | HELD |
+| M7 | FAILED (4/2) | 2/2 | HELD |
+
+The original cohort therefore had one real F63 failure and two borderline
+cases caused by a reproduced controller defect. The defect is fixed and the
+three affected paths hold under post-fix replay. This does not rewrite the
+original cohort as having held; original-run and post-fix results remain
+explicitly separate.
+
+Hermes task execution and schedules remain paused.
+
