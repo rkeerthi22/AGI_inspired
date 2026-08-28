@@ -1,65 +1,65 @@
 {
   "schema_version": 1,
-  "brief_revision": 10,
-  "created_at": "2026-08-28T02:20:00+00:00",
+  "brief_revision": 11,
+  "created_at": "2026-08-28T05:05:00+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
-    "head": "b7e75dbe36bdcd67dce053bb2e116585983854b9",
+    "head": "e914068ca1bd81a2fa1ac96f688210c5426e570f",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
       "docs/HARDENING.md",
       "docs/VALIDATION.md",
+      "experiments/recovery_validation_f64.md",
       "orchestrator/execution.py",
-      "orchestrator/controlled_hermes.py",
-      "orchestrator/retrieval_progress.py",
-      "tests/test_f63.py"
+      "tests/test_f64.py"
     ]
   },
   "task": {
-    "id": "REAL-VALIDATION-2",
-    "phase": "capability-enforcement-validation",
+    "id": "REAL-VALIDATION-3",
+    "phase": "recovery-and-capability-validation",
     "status": "in_progress",
-    "next_action": "Commit and push the verified atomic F63 controller change; keep Hermes globally paused. Next phase is broader recovery/capability/quality validation, not prompt tuning or architecture work."
+    "next_action": "Checkpoint RV1/F64, then run a predeclared capability-selection experiment targeting extraction of a required field from an already reachable source. Keep F63 frozen and schedules paused."
   },
   "completed": [
-    "Prompt-only retrieval switching failed at 2,157,798 tokens; generic hard-halt also failed to return a useful brief.",
-    "F63 bounded finalization controller passed 70/70 deterministic assertions.",
-    "Matched AIPRM acceptance passed: 6 retrieval executions, 1 rejection, exactly 1 finalizer, and 183,581 tokens.",
-    "The passing run used 55.6% fewer tokens than the prior 413,334-token useful specimen.",
-    "JSONL audit, redacted session export, and merged usage reconcile exactly.",
-    "Citation check: 15 checked, 12 reachable, 3 HTTP 403, and 12/12 literals present.",
-    "Full deterministic gate passed 25/25; test_baseline remains quarantined.",
+    "F63 committed at e914068 and remains frozen.",
+    "RV1 recovered exactly one expired task; second reconciliation changed zero rows and prior token accounting survived.",
+    "RV1 stayed bounded: 7 retrieval executions, 2 rejections, exactly 1 finalizer, and 175237 worker tokens.",
+    "JSONL, redacted session export, and worker usage reconcile exactly.",
+    "RV1 returned a useful cited partial but critic correctly failed the missing current-rating requirement.",
+    "Independent citation retrieval checked 10 citations: 7 reachable and 3 expected HTTP 403 responses.",
+    "RV1 exposed F64 reasoning-trace loss; narrow datetime import fix is covered by test_f64.",
+    "Focused gate passed 6/6 and full deterministic gate passed 26/26; test_baseline remains quarantined.",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
-    "do not rely on model self-report for tool counts or switching",
+    "F63 controller and prompts remain frozen unless a reproduced concrete defect requires a narrow change",
     "schedules remain paused",
-    "do not launch another unconstrained mission",
-    "F63 passed the usefulness-and-bounded-inference gate; atomic commit is authorized",
-    "passing F63 does not authorize schedule resume"
+    "do not launch unconstrained missions",
+    "measure tool calls and evidence externally rather than trusting model self-report",
+    "next experiment addresses observed capability selection and outcome quality"
   ],
   "gate": {
     "status": "passed",
-    "detail": "Matched AIPRM: 6 executed retrieval calls, 1 rejection, exactly 1 finalizer, useful cited partial brief, 183581 tokens (55.6% below 413334), complete JSONL/session/usage reconciliation."
+    "detail": "Recovery mechanics and bounded terminal-partial gate passed; outcome quality failed because a reachable Chrome Web Store rating was not extracted."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "retrieval experiment evidence and verdict",
-      "sha256": "28fb588823f65861219870e583436c8fd5d72dc8ea3afa2c18f1b4e42a4cdde4"
-    },
-    {
-      "path": "experiments/retrieval_switch_aiprm.md",
-      "purpose": "predeclared treatment prompt",
-      "sha256": "bd3ec4f38dadf0ed47ec225f7cd87234422cebea027e29292b5383fc449c4a6a"
+      "purpose": "real validation evidence and gate status",
+      "sha256": "ee80e8abe495b0522bd0cced5f27420b45303e05c038bf7048933094c3b82f39"
     },
     {
       "path": "docs/HARDENING.md",
-      "purpose": "F63 failure mode and fixed controller contract",
-      "sha256": "0d03aae5d2193b97c0fc443a1f1b08dcefaddbda21ba06db39b7abb6d8f92e9c"
+      "purpose": "F64 live defect and narrow repair",
+      "sha256": "42bb993ab24844f76a41e06748e393704308e6633d8bb9149c437ee267cc2729"
+    },
+    {
+      "path": "experiments/recovery_validation_f64.md",
+      "purpose": "predeclared RV1 protocol and acceptance gate",
+      "sha256": "3b51487ea6414d7a3fe47a7155c61a5b23b304dca96619ad14a19c045210c003"
     }
   ]
 }

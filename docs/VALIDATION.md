@@ -289,3 +289,49 @@ F63 deterministic coverage is 70/70 assertions. The complete deterministic gate
 is 25/25 green with only `test_baseline` quarantined. **F63 verdict: PASS.** The
 global Hermes emergency pause remains engaged; passing F63 does not itself resume
 scheduled missions.
+
+## Checkpoint 6 — controlled crash recovery RV1
+
+Date: 2026-08-28. The predeclared protocol is
+`experiments/recovery_validation_f64.md`. F63 stayed frozen and the Hermes global
+pause remained engaged.
+
+Task 72 was started, assigned an expired lease and 1,000 input + 100 output
+tokens representing accounted work before a simulated process loss. The
+production scheduler recovered exactly one row to `interrupted`, incremented
+`attempt_count` to 1, and preserved the marker. A second reconciliation changed
+zero rows, and no unrelated task row changed during either reconciliation. The
+task was retried once through `batch_runner.run_task` under the production lock.
+
+| Measure | Result |
+|---|---:|
+| Reconciliation transitions | 1, then 0 |
+| Retrieval executions | 7 / 8 maximum |
+| Rejected or redirected attempts | 2 / 2 maximum |
+| Evidence-only finalization calls | exactly 1 |
+| Research / worker API calls | 7 / 8 including finalizer |
+| Worker / ledger tokens | 175,237 / 176,337 including marker |
+| Prior useful pre-F63 comparison | 413,334 |
+
+The redacted session has 18 messages and nine attempted tool calls: seven
+executed results and two controller rejections. That reconciles with seven JSONL
+observations, two redirects, and one successful finalization. Session research
+usage (159,805 input + 1,964 output) plus finalizer usage (5,921 input + 7,547
+output) equals the 175,237-token worker report exactly.
+
+The row reached honest terminal `failed/fail`, not a stranded recovery state.
+Its cited bounded partial covered pricing, features, promotions, review themes,
+blocked sources, confidence, and explicit gaps. Independent retrieval checked
+ten citations: seven reachable and three expected G2/Trustpilot HTTP 403s. The
+critic correctly failed it because it omitted the current average rating despite
+a reachable Chrome Web Store source. This is the next capability-selection and
+outcome-quality target; it does not justify prompt tuning or an F63 change.
+
+Recovery gate: **PASS for state recovery and bounded terminal partial; outcome
+quality remains FAILED for the mandatory rating field.** Schedules remain
+paused.
+
+RV1 also exposed F64: critic reasoning was silently dropped because
+`execution.ollama_chat` referenced `datetime` without importing it. The narrow
+import-only repair and regression test pass the focused 6/6 gate and full 26/26
+deterministic gate (`test_baseline` remains quarantined).

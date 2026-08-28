@@ -2316,6 +2316,20 @@ validation—missions, recovery, efficiency, capability selection, and outcome
 quality—not further refactoring. · `orchestrator/batch_runner.py` ·
 `tests/test_f61.py`
 
+### F64 successful critic reasoning was silently not persisted
+Controlled recovery specimen RV1 completed its critic call, but logged
+`reasoning trace not persisted ... (name 'datetime' is not defined)`. The verdict
+still reached the ledger, so ordinary verdict tests missed the lost audit
+evidence. `execution.ollama_chat` formatted trace timestamps with
+`datetime.now()` without importing `datetime`.
+
+Fixed by restoring that single standard-library import. `tests/test_f64.py`
+proves response preservation, trace creation, timestamped reasoning content,
+and unchanged token accounting. Focused suites pass 6/6 and the full
+deterministic gate passes 26/26 with `test_baseline` quarantined. No F63
+controller or prompt changed. · `orchestrator/execution.py` ·
+`tests/test_f64.py`
+
 ### F62 task-scope dependency lost during W9 extraction
 The first production recovery after W9 reached `prompts.task_scope_note()` and
 raised `NameError: seed_is_synthesis is not defined` before the worker call.
