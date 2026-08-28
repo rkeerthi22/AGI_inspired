@@ -3,11 +3,14 @@
 from __future__ import annotations
 
 import os
+import argparse
 import contextlib
 import io
 import json
 from pathlib import Path
 import sys
+
+from execution_pause import pause_engaged
 
 
 def merge_finalization_usage(usage: dict, final_usage: dict) -> dict:
@@ -23,7 +26,21 @@ def merge_finalization_usage(usage: dict, final_usage: dict) -> dict:
     return merged
 
 
-def main() -> None:
+def _parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run one harness-controlled Hermes research turn")
+    parser.add_argument("-z", "--oneshot", required=True, help="research objective")
+    parser.add_argument("--provider")
+    parser.add_argument("-m", "--model")
+    parser.add_argument("-t", "--toolsets")
+    parser.add_argument("--usage-file")
+    return parser
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = _parser().parse_args(argv)
+    if pause_engaged():
+        print("controlled Hermes execution refused: global ESTOP is engaged", file=sys.stderr)
+        return 75
     # The launcher runs with Hermes' venv Python.  Its checkout is two parents
     # above venv/Scripts/python.exe (or venv/bin/python on POSIX).
     hermes_root = Path(sys.executable).resolve().parents[2]
@@ -42,7 +59,11 @@ def main() -> None:
     )
     audit = os.environ.get("HARNESS_RETRIEVAL_AUDIT")
     install_hermes_adapter(Path(audit) if audit else None)
-    original_args = list(sys.argv[1:])
+    original_args = ["-z", args.oneshot]
+    for flag, value in (("--provider", args.provider), ("-m", args.model),
+                        ("-t", args.toolsets), ("--usage-file", args.usage_file)):
+        if value is not None:
+            original_args.extend((flag, value))
     sys.argv = ["hermes", *original_args]
     from hermes_cli.oneshot import run_oneshot
     # One-shot research output is deliberately withheld: the only user-visible
@@ -57,11 +78,8 @@ def main() -> None:
             return None
 
         rc = run_oneshot(
-            _value("-z", "--oneshot") or "",
-            model=_value("-m", "--model"),
-            provider=_value("--provider"),
-            toolsets=_value("-t", "--toolsets"),
-            usage_file=_value("--usage-file"),
+            args.oneshot, model=args.model, provider=args.provider,
+            toolsets=args.toolsets, usage_file=args.usage_file,
         )
 
     controller = active_controller()
@@ -69,7 +87,7 @@ def main() -> None:
         print(captured.getvalue(), end="")
         if rc:
             raise SystemExit(rc)
-        return
+        return int(rc or 0)
 
     prompt_index = original_args.index("-z") + 1
     mission = original_args[prompt_index] if prompt_index < len(original_args) else ""
@@ -120,7 +138,8 @@ def main() -> None:
         usage = merge_finalization_usage(research_usage, final_usage)
         usage_path.write_text(json.dumps(usage, indent=2) + "\n", encoding="utf-8")
     print(final)
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

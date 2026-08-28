@@ -27,6 +27,7 @@ Re-running this command yourself on the same task records a NEW verdict segment;
 earlier one is kept for audit (the write APPENDS, it does not overwrite -- this docstring
 claimed otherwise until F54, 2026-08-01, and the claim was false). Classification reads
 only the LATEST segment, so an operator re-verification does clear the AI flag."""
+import argparse
 import sqlite3
 import sys
 from pathlib import Path
@@ -161,21 +162,28 @@ def cmd_verdict(verdict: str, task_id: int, note: str) -> None:
           f"| fitness: {fit.get('fitness')}")
 
 
-def main() -> None:
+def main(argv=None) -> int:
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:
         pass
-    args = sys.argv[1:]
-    if not args or args[0] == "list":
+    parser = argparse.ArgumentParser(description="Operator spot-check workflow")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("list")
+    sub.add_parser("notify")
+    for verdict in ("pass", "fail"):
+        cmd = sub.add_parser(verdict)
+        cmd.add_argument("task_id", type=int)
+        cmd.add_argument("note", nargs="*")
+    args = parser.parse_args(argv)
+    if args.command == "list":
         cmd_list()
-    elif args[0] == "notify":
+    elif args.command == "notify":
         cmd_notify()
-    elif args[0] in ("pass", "fail") and len(args) >= 2 and args[1].isdigit():
-        cmd_verdict(args[0], int(args[1]), " ".join(args[2:]))
     else:
-        print(__doc__)
+        cmd_verdict(args.command, args.task_id, " ".join(args.note))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

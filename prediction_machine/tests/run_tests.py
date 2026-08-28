@@ -10,6 +10,7 @@ Usage::
 """
 import os
 import sys
+import argparse
 import unittest
 
 # Ensure the repository root is on sys.path so that
@@ -22,8 +23,10 @@ for p in (GRANDPARENT, PARENT):
         sys.path.insert(0, p)
 
 
-def main():
+def main(argv=None):
     """Discover and run all tests in this directory."""
+    parser = argparse.ArgumentParser(description="Run prediction-machine unit tests")
+    parser.parse_args(argv)
     loader = unittest.TestLoader()
     suite = loader.discover(
         start_dir=HERE,

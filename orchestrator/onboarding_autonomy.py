@@ -8,6 +8,7 @@ Direct Ollama API; models come from config/models.yaml (model-agnostic hard cons
 Every raw exchange is saved to runs/onboarding_autonomy/ for audit.
 
 Exit codes: 0 done · 2 quota_wait · 3 infra_failed · 4 failed (no deliverable)."""
+import argparse
 import json
 import re
 import sqlite3
@@ -18,6 +19,7 @@ from datetime import datetime
 from pathlib import Path
 
 import yaml
+from execution_pause import pause_engaged
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ledger  # noqa: E402
@@ -96,7 +98,13 @@ def step(msg: str) -> None:
     print(f"[{datetime.now().strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Run the explicit onboarding autonomy workflow")
+    parser.add_argument("command", choices=("run",))
+    parser.parse_args(argv)
+    if pause_engaged():
+        print("onboarding execution refused: global ESTOP is engaged", file=sys.stderr)
+        return 75
     try:
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
     except Exception:

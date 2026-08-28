@@ -2,6 +2,7 @@
 Stdlib only. The orchestrator and any hand-run go through here so the ledger stays
 the single source of truth (HARNESS_DESIGN.md §3)."""
 import json
+import argparse
 import sqlite3
 import uuid
 from pathlib import Path
@@ -369,7 +370,11 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     }
 
 
-if __name__ == "__main__":
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description="Ledger maintenance utilities")
+    sub = parser.add_subparsers(dest="command", required=True)
+    sub.add_parser("smoke", help="write one explicit ledger smoke-test task")
+    parser.parse_args(argv)
     # Smoke test the ledger without any model: queue -> start -> finish -> fitness.
     tid = queue_task("000-onboarding", "SMOKE: verify ledger write path",
                      "row exists with verdict")
@@ -380,3 +385,8 @@ if __name__ == "__main__":
     add_lesson(tid, "ledger smoke test passes end to end", "worked")
     print(f"queued+finished task_id={tid}")
     print("fitness:", json.dumps(weekly_fitness(), indent=2))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
