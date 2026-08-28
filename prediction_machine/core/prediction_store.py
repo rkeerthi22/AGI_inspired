@@ -23,8 +23,7 @@ This module implements a SQLite-backed store where:
   made strictly before the outcome was recorded) so that a prediction
   cannot be back-dated after the outcome is already known.
 
-* **All times are ISO strings** using ``datetime.now().isoformat(
-  timespec='seconds')``.
+* **All new times are RFC 3339 UTC strings** with a ``Z`` suffix.
 
 The module is stdlib-only — it uses only ``sqlite3``, ``uuid``,
 ``json``, ``datetime`` and ``pathlib`` — matching the discipline of the
@@ -40,11 +39,11 @@ from __future__ import annotations
 import json
 import sqlite3
 import uuid
-from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
 from prediction_machine.paths import PREDICTION_DB
+from prediction_machine.timebase import utc_iso
 
 
 # ---------------------------------------------------------------------------
@@ -114,8 +113,8 @@ CREATE TABLE IF NOT EXISTS model_versions (
 # ---------------------------------------------------------------------------
 
 def _now_iso() -> str:
-    """Return the current UTC-ish local time as an ISO string truncated to seconds."""
-    return datetime.now().isoformat(timespec="seconds")
+    """Return canonical RFC 3339 UTC, truncated to seconds."""
+    return utc_iso()
 
 
 def _json_dumps(value: Any) -> str:

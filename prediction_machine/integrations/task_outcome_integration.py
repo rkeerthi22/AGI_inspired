@@ -15,7 +15,6 @@ import sqlite3
 import subprocess
 import sys
 import traceback
-from datetime import datetime, timedelta
 from typing import Any, Optional
 
 # ---------------------------------------------------------------------------
@@ -27,6 +26,8 @@ _REPO_DIR = os.path.dirname(_PM_DIR)          # repository root
 
 if _REPO_DIR not in sys.path:
     sys.path.insert(0, _REPO_DIR)
+
+from prediction_machine.timebase import utc_after, utc_iso
 
 # ---------------------------------------------------------------------------
 # Lazy imports
@@ -77,11 +78,11 @@ def _git_head(repo_dir: str) -> Optional[str]:
 
 
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    return utc_iso()
 
 
 def _now_plus_hours(hours: float) -> str:
-    return (datetime.now() + timedelta(hours=hours)).isoformat(timespec="seconds")
+    return utc_after(hours)
 
 
 # ---------------------------------------------------------------------------

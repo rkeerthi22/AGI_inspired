@@ -160,6 +160,9 @@ def _run(args) -> int:
             import promote
             promote.cmd_review(notify=args.deliver, dry=False)
         except Exception as e:
+            from health_events import emit as emit_health_event
+            emit_health_event("promotion", "weekly_review", e,
+                              delivery_requested=bool(args.deliver))
             log(f"promotion review skipped ({e}) — retries next Sunday")
         return 0
 

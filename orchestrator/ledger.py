@@ -4,8 +4,8 @@ the single source of truth (HARNESS_DESIGN.md §3)."""
 import json
 import sqlite3
 import uuid
-from datetime import datetime
 from pathlib import Path
+from timebase import utc_iso
 
 ROOT = Path(__file__).resolve().parent.parent
 LEDGER_DB = ROOT / "ledger" / "ledger.db"
@@ -85,13 +85,12 @@ def start_task(task_id: int, model_used: str) -> None:
     # SQL's datetime('now') must be COMPUTED in that same SQL/UTC clock domain, not
     # Python's, or the comparison is silently wrong by the local UTC offset (caught by
     # the H3 test: a "10 minutes ago, local time" lease looked like it hadn't expired
-    # yet from SQLite's UTC point of view). started_at stays Python-local for
-    # human-readable logs; the lease is UTC-only end to end.
+    # yet from SQLite's UTC point of view). Persist every lifecycle timestamp in UTC.
     with _conn() as c:
         c.execute(
             "UPDATE tasks SET status='running', started_at=?, model_used=?, "
             "lease_expires_at=datetime('now', ? || ' seconds') WHERE task_id=?",
-            (datetime.now().isoformat(timespec="seconds"), model_used,
+            (utc_iso(), model_used,
              f"+{LEASE_SECONDS}", task_id),
         )
 
@@ -133,7 +132,7 @@ def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, token
     # tonight -- the counter jumped 7,219,268 -> 15,743,736 with nothing executed, past a
     # 12M cap. Two individually-correct fixes composed into a wrong one; the guard would
     # then refuse all further work on entirely fictional consumption.
-    stamp = (datetime.now().isoformat(timespec="seconds")
+    stamp = (utc_iso()
              if status in TERMINAL_STATUSES else None)
     with _conn() as c:
         c.execute(

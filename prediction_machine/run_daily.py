@@ -18,7 +18,6 @@ import json
 import os
 import sqlite3
 import sys
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
@@ -68,15 +67,18 @@ _MIN_SAMPLE = 10  # below this, we warn about sample size
 # ---------------------------------------------------------------------------
 
 def _now_iso() -> str:
-    return datetime.now().isoformat(timespec="seconds")
+    from prediction_machine.timebase import utc_iso
+    return utc_iso()
 
 
 def _today_str() -> str:
-    return datetime.now().strftime("%Y-%m-%d")
+    from prediction_machine.timebase import utc_date
+    return utc_date()
 
 
 def _yesterday_str() -> str:
-    return (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
+    from prediction_machine.timebase import utc_date
+    return utc_date(-1)
 
 
 def _parse_json(raw: Any) -> dict:

@@ -19,6 +19,7 @@ import prompts
 import runtime_context as rc
 import scheduler
 import workflow
+from health_events import emit as emit_health_event
 
 
 @dataclass(frozen=True)
@@ -68,7 +69,9 @@ def _run_research_task(context: _TaskContext) -> str:
         sys.path.insert(0, str(rc.ROOT.parent))
         from prediction_machine.integrations.batch_runner_hook import before_task_runs
         before_task_runs(tid, row["spec"], mission["id"])
-    except Exception:
+    except Exception as e:
+        emit_health_event("prediction", "before_task_runs", e,
+                          task_id=tid, mission_id=mission["id"])
         pass  # prediction machine is optional â€” never block the harness
 
     worker_cfg = roles["worker"]
@@ -101,7 +104,9 @@ def _run_research_task(context: _TaskContext) -> str:
         try:
             from prediction_machine.integrations.batch_runner_hook import after_task_completes
             after_task_completes(tid)
-        except Exception:
+        except Exception as e:
+            emit_health_event("prediction", "after_synthesis_completes", e,
+                              task_id=tid, mission_id=mission["id"])
             pass
         return synth_status
     # Promoted technique notes (Â§2.4): operator-approved, repo-versioned, capped ~2k.
@@ -343,7 +348,9 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
     try:
         from prediction_machine.integrations.batch_runner_hook import after_task_completes
         after_task_completes(tid)
-    except Exception:
+    except Exception as e:
+        emit_health_event("prediction", "after_task_completes", e,
+                          task_id=tid, mission_id=mission["id"])
         pass  # prediction machine is optional â€” never block the harness
 
     return status
