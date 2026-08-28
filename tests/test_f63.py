@@ -8,7 +8,6 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 
 from retrieval_progress import (  # noqa: E402
-    install_hermes_adapter,
     RetrievalPolicy,
     RetrievalProgressController,
     tool_stage,
@@ -112,6 +111,32 @@ check("parallel completions do not double-transition", parallel.required_strateg
 post_feedback = parallel.before("web_search", {"query": "ignored after feedback"})
 check("post-feedback repeat terminates", post_feedback["terminal"], True)
 
+# Once retrieval is exhausted, parallel siblings from one assistant response
+# still represent one feedback opportunity. The old stage>=3 branch counted
+# every sibling as an independent redirect violation (M7: four calls -> four
+# violations) because rejected calls have no reservation released by after().
+partial_parallel = RetrievalProgressController(policy)
+partial_parallel.state.stage = 3
+partial_parallel.begin_tool_batch()
+partial_decisions = [
+    partial_parallel.before("web_search", {"query": f"sibling-{index}"})
+    for index in range(4)
+]
+partial_parallel.end_tool_batch()
+check("stage-3 parallel siblings all rejected",
+      [decision["code"] for decision in partial_decisions],
+      ["retrieval_strategy_redirect"] * 4)
+check("stage-3 parallel batch counts one redirect violation",
+      partial_parallel.state.redirect_violations, 1)
+check("stage-3 parallel siblings remain accounted",
+      partial_parallel.state.rejected_calls, 4)
+partial_parallel.begin_tool_batch()
+next_feedback = partial_parallel.before("web_search", {"query": "after-feedback"})
+partial_parallel.end_tool_batch()
+check("next stage-3 feedback round is terminal", next_feedback["terminal"], True)
+check("stage-3 feedback rounds stop at limit",
+      partial_parallel.state.redirect_violations, 2)
+
 proxy = RetrievalProgressController(policy)
 check("delegated retrieval is always blocked",
       proxy.before("delegate_task", {"prompt": "research this"})["code"],
@@ -199,81 +224,6 @@ separated.after("web_search", {"query": "progress"},
 second_reject = separated.before("terminal", {"command": "escape"})
 check("second separated rejection terminates", second_reject["terminal"], True)
 check("global rejected count pinned at two", separated.state.rejected_calls, 2)
-
-# Regression: a pre-call F63 halt must propagate through Hermes' actual
-# tool-executor block path to the field conversation_loop.py checks.  The old
-# path returned a synthetic blocked result but left this field unset, allowing
-# the model to enter another API/tool cycle after the halt.
-hermes_root = Path.home() / "AppData" / "Local" / "hermes" / "hermes-agent"
-sys.path.insert(0, str(hermes_root))
-from agent.tool_guardrails import (  # noqa: E402
-    ToolCallGuardrailController,
-    toolguard_synthetic_result,
-)
-from agent import relay_tools, tool_executor  # noqa: E402
-import hermes_cli.middleware as hermes_middleware  # noqa: E402
-import hermes_cli.plugins as hermes_plugins  # noqa: E402
-from types import SimpleNamespace  # noqa: E402
-
-install_hermes_adapter(policy=RetrievalPolicy(max_redirect_violations=2))
-
-
-class MinimalExecutorAgent:
-    def __init__(self):
-        self._tool_guardrails = ToolCallGuardrailController()
-        self._tool_guardrail_halt_decision = None
-        self.session_id = "f63-regression"
-        self._current_turn_id = "turn"
-        self._current_api_request_id = "request"
-
-    @staticmethod
-    def _guardrail_block_result(decision):
-        return toolguard_synthetic_result(decision)
-
-
-executor_agent = MinimalExecutorAgent()
-# First violation redirects; the second is the terminal halt under test.
-first = executor_agent._tool_guardrails.before_call("browser_navigate", {})
-check("executor regression first violation redirects", first.action, "redirect")
-
-real_relay_execute = relay_tools.execute
-real_apply_request = hermes_middleware.apply_tool_request_middleware
-real_run_execution = hermes_middleware.run_tool_execution_middleware
-real_pre_hooks = hermes_plugins._dispatch_pre_tool_call_hooks
-real_emit_terminal = tool_executor._emit_terminal_post_tool_call
-try:
-    relay_tools.execute = lambda _name, args, pipeline, **_kwargs: (pipeline(args), args)
-    hermes_middleware.apply_tool_request_middleware = (
-        lambda _name, args, **_kwargs: SimpleNamespace(payload=args, trace=[])
-    )
-    hermes_middleware.run_tool_execution_middleware = (
-        lambda _name, args, execute, **_kwargs: execute(args)
-    )
-    hermes_plugins._dispatch_pre_tool_call_hooks = (
-        lambda *_args, **_kwargs: (None, None)
-    )
-    tool_executor._emit_terminal_post_tool_call = lambda *_args, **_kwargs: None
-    result = tool_executor._run_agent_tool_execution_middleware(
-        executor_agent,
-        function_name="browser_navigate",
-        function_args={},
-        effective_task_id="f63",
-        tool_call_id="halt-call",
-        execute=lambda _args: (_ for _ in ()).throw(
-            AssertionError("halted tool unexpectedly executed")
-        ),
-    )
-    check("executor returns blocked synthetic result", result.blocked, True)
-    check("pre-call halt reaches conversation loop field",
-          executor_agent._tool_guardrail_halt_decision is not None, True)
-    check("propagated halt action",
-          executor_agent._tool_guardrail_halt_decision.action, "halt")
-finally:
-    relay_tools.execute = real_relay_execute
-    hermes_middleware.apply_tool_request_middleware = real_apply_request
-    hermes_middleware.run_tool_execution_middleware = real_run_execution
-    hermes_plugins._dispatch_pre_tool_call_hooks = real_pre_hooks
-    tool_executor._emit_terminal_post_tool_call = real_emit_terminal
 
 # Failures count as low novelty and audit contains measurements/transitions only,
 # never query text or raw fetched content.

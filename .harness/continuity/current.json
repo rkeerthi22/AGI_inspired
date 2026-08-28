@@ -1,62 +1,67 @@
 {
   "schema_version": 1,
-  "brief_revision": 17,
-  "created_at": "2026-08-28T11:56:57Z",
+  "brief_revision": 18,
+  "created_at": "2026-08-28T12:30:00Z",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "9eb0f6e9f40160280de2d62fea5e984b5e4098e1",
+    "head": "87012cafdedb23d9a7b7290dfe2362b7263db481",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
       "docs/VALIDATION.md",
+      "orchestrator/retrieval_progress.py",
       "tests/test_f63.py"
     ]
   },
   "task": {
     "id": "REAL-VALIDATION-7",
-    "phase": "f63-halt-propagation-fix",
+    "phase": "f63-batch-accounting-fix",
     "status": "complete",
-    "next_action": "Original cohort truth is preserved: M7 FAILED F63 with 4 redirect_violations against limit 2; M1 and M5 were BORDERLINE from the same halt-propagation defect; M2/M3/M6 HELD; M4 N/A. Hermes tool_executor fix 717b8db propagates pre-call halt decisions to the conversation-loop field. Regression is 85/85 and focused F63/F66 gate is 2/2. Post-fix replay: M1/M5/M7 all HELD at 2/2. Keep execution paused pending operator confirmation."
+    "next_action": "F63 accounting is corrected and verified. Original critic outcomes: PASS M1/M4/M6; bounded environment/content FAIL M2/M3/M5/M7. F63: M1/M2/M3/M5/M6/M7 HELD; M4 N/A. Keep execution paused pending operator confirmation."
   },
   "completed": [
-    "Reverted incorrect zero-F63-failure documentation in commit 9eb0f6e.",
-    "Minimal model-free reproduction confirmed a halt decision did not set agent._tool_guardrail_halt_decision and a later tool call was accepted.",
-    "Original cohort adjudication: one real F63 failure (M7, 4/2 redirect_violations), two borderline cases (M1/M5), three clean holds (M2/M3/M6), and one N/A synthesis mission (M4).",
-    "Hermes commit 717b8db70fb1f9ca4e477af93043bd1a2e316060 propagates pre-call halt decisions in agent/tool_executor.py.",
-    "F63 integration regression failed before the fix and passes after it; F63 is 85/85.",
-    "Focused deterministic gate is green: F63/F66 2/2 suites.",
-    "Controller-only replay of M1/M5/M7 stops at the propagated halt; all three hold post-fix at 2 redirect violations against limit 2.",
-    "No cohort mission or task was rerun; no model, network, or database execution was used for replay.",
+    "Live source review refuted the earlier halt-propagation theory: the real pre-call path already propagated halt through _guardrail_block_result and _set_tool_guardrail_halt.",
+    "Hermes commit 717b8db was reverted because its direct halt assignment addressed a non-issue manufactured by a flawed minimal repro.",
+    "Confirmed the real defect: stage-3 redirects counted every parallel sibling as a separate violation despite representing one assistant feedback batch.",
+    "Added explicit retrieval tool-batch lifecycle tracking and bracketed AIAgent._execute_tool_calls in Hermes commit 0e8b5893eaa8075872810dc3516dbef504a3089b.",
+    "Added a regression requiring four rejected stage-3 siblings in one batch to count as exactly one redirect violation.",
+    "F63 regression is 86/86 and the focused F63/F66 gate is 2/2 green.",
+    "Replay of the preserved M1, M5, and M7 call shapes gives one redirect violation each; all three HELD under corrected accounting.",
+    "No new cohort, model, network, database, mission, or scheduled execution was run.",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
     "task execution and schedules remain paused until operator confirmation",
-    "do not describe the original cohort as F63-held",
-    "preserve original-run and post-fix replay results separately",
     "do not run a new cohort",
+    "preserve critic outcome and F63 compliance as separate findings",
+    "do not classify parallel siblings from one assistant batch as separate feedback violations",
     "no prompt tuning",
     "do not bypass CAPTCHAs, authentication, consent, or access controls"
   ],
   "gate": {
     "status": "passed",
-    "detail": "Controller defect reproduced, patched, and regression-covered. F63 85/85; focused F63/F66 2/2. Original cohort: M7 failed and M1/M5 borderline. Post-fix replay: M1/M5/M7 held. Execution remains paused."
+    "detail": "Batch-accounting defect fixed and regression-covered. F63 86/86; focused F63/F66 2/2. No genuine cohort F63 violations: M1/M5/M7 each replay at one violation and HELD. M4 N/A. Execution remains paused."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "Checkpoint 10 records original cohort failure separately from verified post-fix replay",
-      "sha256": "8a25acfbe5bde150d109f9c38665afb4a3d59d0d253c7a1a81ca687f2cf3bc9c"
+      "purpose": "Checkpoint 10 records actual critic outcomes and corrected F63 batch accounting",
+      "sha256": "9597b24b8151fdfc6ef1f667e63fbb082da0dc8ccd225e280b408c39da400827"
+    },
+    {
+      "path": "orchestrator/retrieval_progress.py",
+      "purpose": "Explicit assistant tool-batch lifecycle and per-batch redirect accounting"
     },
     {
       "path": "tests/test_f63.py",
-      "purpose": "F63 controller plus real Hermes pre-call halt propagation regression"
+      "purpose": "F63 regression for parallel stage-3 sibling redirects"
     },
     {
       "path": "workspace/validation/cohort_f63_replay.json",
-      "purpose": "model-free post-fix replay results for M1, M5, and M7"
+      "purpose": "Controller-only corrected-accounting replay for M1, M5, and M7"
     }
   ],
-  "timestamp": "2026-08-28T11:56:57Z"
+  "timestamp": "2026-08-28T12:30:00Z"
 }

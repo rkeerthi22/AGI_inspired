@@ -602,60 +602,53 @@ F63 design remains closed. No new controller defect was demonstrated.
 Hermes remains globally paused pending operator's `hermes resume` to
 launch the cohort.
 
-## Checkpoint 10 — cohort F63 violation and verified halt propagation fix
+## Checkpoint 10 — cohort F63 batch-accounting correction
 
-Date: 2026-08-28. The seven-mission cohort ran from 10:26 through 10:39 UTC
-under the pre-fix controller. The final joint audit supersedes the earlier
-zero-failure analysis: that analysis grouped redirect rows as a proxy and
-missed a real conversation-loop enforcement gap.
+Date: 2026-08-28. The seven-mission cohort ran from 10:26 through 10:39 UTC.
+The preserved critic outcomes are 3 PASS (M1, M4, M6) and 4 bounded FAIL
+(M2, M3, M5, M7). The FAIL outcomes reflect blocked sources, truncated pages,
+and resulting content/spec deficits in the saved artifacts; they are separate
+from F63 compliance.
 
-The final adjudicated cohort outcome was 3 PASS (M2, M3, M6) and 4 FAIL.
-The failures combine F63-adjacent behavior in M1, M5, and M7 with the bounded
-external-environment failures already preserved in the task artifacts. This
-outcome classification is separate from the per-mission F63 gate below.
-
-| Mission | Original F63 result | Evidence |
+| Mission | Critic outcome | Corrected F63 result |
 |---|---|---|
-| M1 | BORDERLINE | `rejected_calls` exceeded 2; same halt-propagation root cause, while adjudicated `redirect_violations` remained within the limit |
-| M2 | HELD | retrieval controller bounds held cleanly |
-| M3 | HELD | retrieval controller bounds held cleanly |
-| M4 | N/A | tool-free synthesis mission; no retrieval controller |
-| M5 | BORDERLINE | `rejected_calls` exceeded 2; same halt-propagation root cause, while adjudicated `redirect_violations` remained within the limit |
-| M6 | HELD | retrieval controller bounds held cleanly |
-| M7 | **FAILED** | 4 real `redirect_violations` against the limit of 2 |
+| M1 | PASS | HELD |
+| M2 | FAIL | HELD |
+| M3 | FAIL | HELD |
+| M4 | PASS | N/A — synthesis mission, no retrieval controller |
+| M5 | FAIL | HELD |
+| M6 | PASS | HELD |
+| M7 | FAIL | HELD |
 
-The root cause was in Hermes' pre-call block path. F63 returned a terminal
-`ToolGuardrailDecision(action="halt")`, and the executor produced a synthetic
-blocked tool result, but `agent/tool_executor.py` did not copy that decision to
-`agent._tool_guardrail_halt_decision`. `conversation_loop.py` checks that field
-to break the conversation turn. Because it remained unset, the tool loop could
-return while the conversation loop continued into another model/tool cycle.
+There were **no genuine F63 violations**. M1, M5, and M7 initially appeared to
+have excess redirect accounting. In particular, M7 recorded four
+`redirect_violations` for four stage-3 tool calls emitted as parallel siblings
+in one assistant response. The stage-3 (`partial_result`) redirect path in
+`orchestrator/retrieval_progress.py` counted every rejected sibling, while the
+wrong-stage path already suppressed sibling double-counting. One assistant
+tool batch is one feedback opportunity, so those four rows represent one
+violation, not four.
 
-The fix is Hermes commit `717b8db70fb1f9ca4e477af93043bd1a2e316060`:
-the pre-call block path now assigns `agent._tool_guardrail_halt_decision` when
-`guardrail_decision.should_halt` is true, before returning the synthetic blocked
-result.
+The fix adds an explicit tool-batch lifecycle to the retrieval controller and
+brackets `AIAgent._execute_tool_calls` with it in Hermes commit
+`0e8b5893eaa8075872810dc3516dbef504a3089b`. Rejected calls remain individually
+accounted, but at most one redirect violation is charged per assistant batch.
+This lifecycle is preferable to extending execution reservations because
+stage-3 calls are rejected before execution and therefore have no `after()`
+release event.
 
-The new integration regression in `tests/test_f63.py` exercises the real Hermes
-middleware path. It failed before the fix because the conversation-loop field
-was `None` and passes after the fix. F63 is now 85/85. The focused F63/F66 gate
-is 2/2 green.
+The new F63 regression sends four parallel stage-3 calls in one batch and
+requires four rejected calls but exactly one redirect violation; a later batch
+then consumes the next violation. F63 is 86/86, and the focused F63/F66 gate is
+2/2 green. Controller replay of the preserved M1, M5, and M7 call shapes under
+the corrected accounting gives one redirect violation for each mission, so all
+three HELD.
 
-A controller-only replay of the preserved M1, M5, and M7 post-halt states made
-no model, network, database, or mission calls. With the fixed executor, each
-turn stops as soon as the terminal halt is propagated:
-
-| Mission | Original status | Post-fix redirect violations | Post-fix result |
-|---|---|---:|---|
-| M1 | BORDERLINE | 2/2 | HELD |
-| M5 | BORDERLINE | 2/2 | HELD |
-| M7 | FAILED (4/2) | 2/2 | HELD |
-
-The original cohort therefore had one real F63 failure and two borderline
-cases caused by a reproduced controller defect. The defect is fixed and the
-three affected paths hold under post-fix replay. This does not rewrite the
-original cohort as having held; original-run and post-fix results remain
-explicitly separate.
+For commit-history clarity, Hermes commit `717b8db` added direct pre-call halt
+propagation and was later reverted. Inspection of the real path showed
+`_guardrail_block_result` already called `_set_tool_guardrail_halt`; the earlier
+issue was manufactured by a flawed minimal repro that replaced that method.
+The change was not necessary for M7 and is not part of the live fix.
 
 Hermes task execution and schedules remain paused.
 

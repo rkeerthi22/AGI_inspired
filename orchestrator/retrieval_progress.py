@@ -49,6 +49,8 @@ class RetrievalState:
     finalization_calls: int = 0
     rejected_calls: int = 0
     setup_calls: int = 0
+    batch_active: bool = False
+    batch_redirect_violation_counted: bool = False
 
 
 STAGE_NAMES = ("search", "direct_fetch", "browser")
@@ -122,6 +124,26 @@ class RetrievalProgressController:
         """Research, bounded setup, rejected turns, and one finalizer."""
         return (sum(self.policy.max_calls) + self.policy.max_setup_calls
                 + self.policy.max_redirect_violations + 1)
+
+    def begin_tool_batch(self) -> None:
+        """Mark one assistant-emitted tool batch as a feedback unit."""
+        with self._lock:
+            self.state.batch_active = True
+            self.state.batch_redirect_violation_counted = False
+
+    def end_tool_batch(self) -> None:
+        with self._lock:
+            self.state.batch_active = False
+            self.state.batch_redirect_violation_counted = False
+
+    def _count_batch_violation(self) -> bool:
+        """Count at most one redirect violation per model feedback batch."""
+        if not self.state.batch_active:
+            return True
+        if self.state.batch_redirect_violation_counted:
+            return False
+        self.state.batch_redirect_violation_counted = True
+        return True
 
     def before(self, tool_name: str, args: Mapping[str, Any] | None) -> dict | None:
         with self._lock:
@@ -249,7 +271,11 @@ class RetrievalProgressController:
                     reason=reason)
 
     def _redirect(self, tool_name: str, message: str,
-                  *, count_violation: bool = True) -> dict:
+                  *, count_violation: bool | None = None) -> dict:
+        if count_violation is None:
+            count_violation = self._count_batch_violation()
+        elif count_violation:
+            count_violation = self._count_batch_violation()
         self.state.rejected_calls += 1
         if count_violation:
             self.state.redirect_violations += 1
@@ -260,7 +286,10 @@ class RetrievalProgressController:
         # batch has completed and the model has had a feedback opportunity.
         if not count_violation:
             terminal = False
-        self._audit("redirect", tool=tool_name, required=self.required_strategy)
+        self._audit("redirect", tool=tool_name, required=self.required_strategy,
+                    count_violation=count_violation,
+                    redirect_violations=self.state.redirect_violations,
+                    rejected_calls=self.state.rejected_calls)
         if terminal:
             message += " The transition was ignored repeatedly, so this turn is now terminated."
         return {"code": "retrieval_strategy_halt" if terminal else "retrieval_strategy_redirect",
