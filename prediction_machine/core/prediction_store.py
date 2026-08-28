@@ -480,6 +480,7 @@ class PredictionStore:
                 """
                 SELECT * FROM predictions
                  WHERE actual IS NULL
+                   AND valid_for_training = 1
                    AND outcome_due_at <= ?
                    AND prediction_type = ?
                  ORDER BY outcome_due_at ASC
@@ -491,6 +492,7 @@ class PredictionStore:
                 """
                 SELECT * FROM predictions
                  WHERE actual IS NULL
+                   AND valid_for_training = 1
                    AND outcome_due_at <= ?
                  ORDER BY outcome_due_at ASC
                 """,

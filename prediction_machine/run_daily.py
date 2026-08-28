@@ -15,6 +15,7 @@ Usage: python -m prediction_machine.run_daily
 from __future__ import annotations
 
 import json
+import argparse
 import os
 import sqlite3
 import sys
@@ -940,6 +941,7 @@ def run_daily() -> str:
     print(report)
     print("=" * 70)
 
+    store.close()
     return report
 
 
@@ -947,9 +949,20 @@ def run_daily() -> str:
 # CLI entry
 # ---------------------------------------------------------------------------
 
+def main(argv: Optional[list[str]] = None) -> int:
+    """Parse CLI arguments before opening stores or creating report paths."""
+    parser = argparse.ArgumentParser(
+        description="Run the Prediction Machine daily learning loop.",
+    )
+    parser.parse_args(argv)
+    run_daily()
+    return 0
+
 if __name__ == "__main__":
     try:
-        run_daily()
+        raise SystemExit(main())
+    except SystemExit:
+        raise
     except Exception:
         import traceback
         traceback.print_exc()
