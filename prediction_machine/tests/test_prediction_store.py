@@ -2,7 +2,7 @@
 """Tests for PredictionStore (core/prediction_store.py).
 
 Every test uses a **temporary** database created inside ``tempfile.mkdtemp()``
-so the production database at ``S:/AGI_like/prediction_machine/data/predictions.db``
+so the production database under ``prediction_machine/data/predictions.db``
 is never touched.
 
 Run directly::
@@ -19,8 +19,8 @@ import unittest
 from pathlib import Path
 from datetime import datetime, timedelta
 
-# Ensure S:/AGI_like is on sys.path so `prediction_machine` is importable
-sys.path.insert(0, "S:/AGI_like")
+# Ensure the repository root is on sys.path so `prediction_machine` is importable
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from prediction_machine.core.prediction_store import PredictionStore  # noqa: E402
 

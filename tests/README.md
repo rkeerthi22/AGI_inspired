@@ -3,9 +3,20 @@
 Guards the fixes in `docs/HARDENING.md`. One suite per finding (or cluster), plus a baseline.
 
 ```
-python tests/run_all.py            # all of them, serially
-python tests/run_all.py f42 f47    # substring filter on suite name
+python tests/run_all.py                         # unit + containment + integration
+python tests/run_all.py --tier unit f63         # one tier, filtered by name
+python tests/run_all.py --tier live --live      # explicit live opt-in
 ```
+
+Every `test_*.py` file must appear exactly once in `tiers.json`:
+
+- `unit`: temporary state only; no Git mutation and no installed Hermes.
+- `containment`: repository mutation tests, run in a disposable Git worktree.
+- `integration`: installed Hermes is allowed, but model/network execution is not.
+- `live`: model, network, or mission execution; never part of the default gate.
+
+Default-tier children load `tests/live_guard/sitecustomize.py`. Attempts to invoke
+Hermes, Ollama, mission entry points, or a network socket fail the suite loudly.
 
 Non-zero exit means at least one suite failed; the runner prints the failing suite's output.
 

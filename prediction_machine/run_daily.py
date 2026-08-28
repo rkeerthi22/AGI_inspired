@@ -22,12 +22,13 @@ from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any, Optional
 
+
 # ---------------------------------------------------------------------------
 # Path setup — make it runnable standalone
 # ---------------------------------------------------------------------------
 _THIS_FILE = os.path.abspath(__file__)
 _PM_DIR = os.path.dirname(_THIS_FILE)          # prediction_machine/
-_REPO_DIR = os.path.dirname(_PM_DIR)            # S:/AGI_like/
+_REPO_DIR = os.path.dirname(_PM_DIR)            # repository root
 
 # Add repo root so `import prediction_machine...` works
 if _REPO_DIR not in sys.path:
@@ -37,11 +38,13 @@ if _REPO_DIR not in sys.path:
 if _PM_DIR not in sys.path:
     sys.path.insert(0, _PM_DIR)
 
+from prediction_machine.paths import LEDGERBOOK_DB, REPORTS_DIR  # noqa: E402
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-_REPORTS_DIR = os.path.join(_PM_DIR, "reports", "daily")
-_LEDGERBOOK_DB = os.path.join(_REPO_DIR, "memory", "ledgerbook.db")
+_REPORTS_DIR = str(REPORTS_DIR)
+_LEDGERBOOK_DB = str(LEDGERBOOK_DB)
 
 _MODEL_VERSIONS = [
     # (version, prediction_type, description, parent_version)
@@ -730,7 +733,7 @@ def _determine_next_action(store, eval_report: dict) -> str:
 def migrate_old_experiences(store) -> dict:
     """Migrate old experiences from ledgerbook.db into the prediction store.
 
-    Reads the ``experiences`` table from ``S:/AGI_like/memory/ledgerbook.db``
+    Reads the ``experiences`` table from the configured ledgerbook database
     and creates a prediction in the PredictionStore for each old prediction.
     ALL migrated predictions are marked as invalid for training because they
     may contain circular or fabricated actuals.

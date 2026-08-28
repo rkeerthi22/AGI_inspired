@@ -2,7 +2,7 @@
 TaskOutcomeCollector — collects real task outcomes from ledger.db.
 
 For every pending "task_outcome" prediction, looks up the task row in
-S:/AGI_like/ledger/ledger.db. If the task has reached a terminal state
+the configured repository ledger. If the task has reached a terminal state
 (done / failed / infra_failed) with a non-null finished_at, the collector
 records the *real* outcome. If the task is still running it is skipped.
 If the task went stale it is invalidated. An anti-cheat guard ensures the
@@ -20,10 +20,12 @@ import sys
 import traceback
 from typing import Any
 
+from prediction_machine.paths import LEDGER_DB
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_LEDGER_DB = os.environ.get("LEDGER_DB", r"S:\AGI_like\ledger\ledger.db")
+_LEDGER_DB = str(LEDGER_DB)
 
 _TERMINAL_STATUSES = {"done", "failed", "infra_failed"}
 _RUNNING_STATUSES = {"queued", "running", "quota_wait", "blocked"}

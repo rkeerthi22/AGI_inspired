@@ -6,17 +6,17 @@ Discovers and runs every ``test_*.py`` module in this directory via
 
 Usage::
 
-    python S:/AGI_like/prediction_machine/tests/run_tests.py
+    python prediction_machine/tests/run_tests.py
 """
 import os
 import sys
 import unittest
 
-# Ensure the parent directory (S:/AGI_like) is on sys.path so that
+# Ensure the repository root is on sys.path so that
 # `prediction_machine` is importable from the tests.
 HERE = os.path.dirname(os.path.abspath(__file__))
-PARENT = os.path.dirname(HERE)  # S:/AGI_like/prediction_machine
-GRANDPARENT = os.path.dirname(PARENT)  # S:/AGI_like
+PARENT = os.path.dirname(HERE)  # prediction_machine
+GRANDPARENT = os.path.dirname(PARENT)  # repository root
 for p in (GRANDPARENT, PARENT):
     if p not in sys.path:
         sys.path.insert(0, p)

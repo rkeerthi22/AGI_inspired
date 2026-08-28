@@ -3,7 +3,7 @@
 Model version: miks_campaign_v1
 
 This predictor wraps the existing MIKS engine at
-S:/AGI_like/workspace/miks_campaign_simulator/engine.py (CampaignEngine class).
+the configured workspace MIKS engine (CampaignEngine class).
 
 CRITICAL: The predictor does NOT use random viral breakout draws for the base
 prediction.  Instead it:
@@ -20,14 +20,12 @@ import statistics
 import sys
 from pathlib import Path
 
+from prediction_machine.paths import MIKS_CONFIG, MIKS_ENGINE
+
 # ── paths ─────────────────────────────────────────────────────────────────────
 
-MIKS_ENGINE_PATH = Path(
-    "S:/AGI_like/workspace/miks_campaign_simulator/engine.py"
-)
-DEFAULT_CONFIG_PATH = Path(
-    "S:/AGI_like/workspace/miks_campaign_simulator/miks.yaml"
-)
+MIKS_ENGINE_PATH = MIKS_ENGINE
+DEFAULT_CONFIG_PATH = MIKS_CONFIG
 
 MODEL_VERSION = "miks_campaign_v1"
 MODEL_NAME = "miks_campaign_engine_v1"

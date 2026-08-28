@@ -37,7 +37,7 @@ from typing import Optional
 # ---------------------------------------------------------------------------
 _THIS_DIR = os.path.dirname(os.path.abspath(__file__))
 _PM_DIR = os.path.dirname(_THIS_DIR)          # prediction_machine/
-_REPO_DIR = os.path.dirname(_PM_DIR)          # S:/AGI_like/
+_REPO_DIR = os.path.dirname(_PM_DIR)          # repository root
 
 if _REPO_DIR not in sys.path:
     sys.path.insert(0, _REPO_DIR)

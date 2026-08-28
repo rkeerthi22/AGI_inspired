@@ -1,0 +1,14 @@
+{
+  "unit": [
+    "test_f35", "test_f37", "test_f39_f40", "test_f44", "test_f48",
+    "test_f49", "test_f50", "test_f51", "test_f53", "test_f54",
+    "test_f56", "test_f57", "test_f58", "test_f59", "test_f60",
+    "test_f61", "test_f62", "test_f63", "test_f64", "test_h7",
+    "test_throughput", "test_prediction_paths", "test_tier_live_guard"
+  ],
+  "containment": [
+    "test_f36", "test_f42", "test_f47", "test_f52", "test_h7_gate"
+  ],
+  "integration": ["test_f66", "test_hermes_contract"],
+  "live": ["test_baseline"]
+}

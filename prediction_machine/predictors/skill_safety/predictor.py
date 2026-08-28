@@ -22,11 +22,12 @@ import sqlite3
 import subprocess
 from pathlib import Path
 
+from prediction_machine.paths import LEDGER_DB, REPO_ROOT, SKILLS_ROOT
+
 # ── paths ─────────────────────────────────────────────────────────────────────
 
-ROOT = Path("S:/AGI_like")
-SKILLS_DIR = ROOT / "skills_analyst"
-LEDGER_DB = ROOT / "ledger" / "ledger.db"
+ROOT = REPO_ROOT
+SKILLS_DIR = SKILLS_ROOT
 
 MODEL_VERSION = "skill_safety_v2"
 MODEL_NAME = "heuristic_risk_scoring_v2"

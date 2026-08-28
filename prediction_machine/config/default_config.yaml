@@ -1,6 +1,6 @@
 prediction_machine:
-  database_path: "S:/AGI_like/prediction_machine/data/predictions.db"
-  reports_dir: "S:/AGI_like/prediction_machine/reports/daily"
+  database_path: "data/predictions.db"
+  reports_dir: "reports/daily"
 
   # Model versions
   model_versions:

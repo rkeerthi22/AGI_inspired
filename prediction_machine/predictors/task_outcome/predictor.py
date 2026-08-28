@@ -3,7 +3,7 @@ critic review and token cost.
 
 Model version: task_outcome_v1
 
-Training data: S:/AGI_like/ledger/ledger.db (tasks table).
+Training data: the configured repository ledger (tasks table).
 Uses historical tasks with status IN ('done', 'failed') and mission_id != 'canaries'.
 NEVER uses tasks with status='stale' or 'infra_failed' — stale means the task
 was never completed (not a quality signal), and infra_failed means the failure
@@ -17,9 +17,9 @@ import sqlite3
 from pathlib import Path
 from statistics import median
 
-# ── paths ─────────────────────────────────────────────────────────────────────
+from prediction_machine.paths import LEDGER_DB
 
-LEDGER_DB = Path("S:/AGI_like/ledger/ledger.db")
+# ── paths ─────────────────────────────────────────────────────────────────────
 
 MODEL_VERSION = "task_outcome_v1"
 MODEL_NAME = "historical_median_by_mission"

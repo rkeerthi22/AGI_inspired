@@ -29,9 +29,14 @@ def main() -> None:
     hermes_root = Path(sys.executable).resolve().parents[2]
     sys.path.insert(0, str(hermes_root))
     sys.path.insert(0, str(Path(__file__).resolve().parent))
+    from hermes_contract import validate_installed_hermes
     from hermes_capabilities import install_harness_capabilities
     from retrieval_progress import active_controller, install_hermes_adapter
 
+    # Contract validation is model-free and runs before any Hermes worker call.
+    # An incompatible installed checkout is an explicit launch failure, never a
+    # subtly degraded retrieval run.
+    validate_installed_hermes(hermes_root)
     install_harness_capabilities(
         unattended_browser=os.environ.get("HARNESS_UNATTENDED_BROWSER") == "1"
     )

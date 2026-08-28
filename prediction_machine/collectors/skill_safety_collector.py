@@ -3,7 +3,7 @@ SkillSafetyCollector — determines whether a skill promotion caused a
 regression by inspecting the filesystem and git log.
 
 For each pending ``skill_safety`` prediction:
-  1. Checks if the skill file still exists under S:/AGI_like/skills_analyst/.
+  1. Checks if the skill file still exists under the repository's skills_analyst/.
      If the file is gone the skill was rolled back.
   2. Searches git log for ``Rollback skill: <target>`` commits.
   3. Records the actual outcome:
@@ -24,13 +24,13 @@ import sys
 import traceback
 from typing import Any
 
+from prediction_machine.paths import REPO_ROOT, SKILLS_ROOT
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_SKILLS_ROOT = os.environ.get(
-    "SKILLS_ANALYST_ROOT", r"S:\AGI_like\skills_analyst"
-)
-_REPO_ROOT = os.environ.get("AGI_REPO_ROOT", r"S:\AGI_like")
+_SKILLS_ROOT = str(SKILLS_ROOT)
+_REPO_ROOT = str(REPO_ROOT)
 
 _ROLLBACK_GREP_PREFIX = "Rollback skill:"
 

@@ -14,7 +14,7 @@ import unittest
 from datetime import datetime, timedelta
 from pathlib import Path
 
-sys.path.insert(0, "S:/AGI_like")
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from prediction_machine.core.prediction_store import PredictionStore  # noqa: E402
 

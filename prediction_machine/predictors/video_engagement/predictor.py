@@ -2,8 +2,7 @@
 
 Model version: video_engagement_v1
 
-Training data: S:/AGI_like/AI videos/07_analysis/vaibhav_video_dataset.json
-(or fallback S:/AI videos/vaibhav_video_dataset.json).
+Training data: the configured Vaibhav video dataset path.
 The dataset is a JSON list of video dicts with: type, views, likes, duration_min,
 hook_formula, and other fields.
 
@@ -20,13 +19,11 @@ import json
 from pathlib import Path
 from statistics import median
 
+from prediction_machine.paths import VIDEO_DATASET
+
 # ── paths ─────────────────────────────────────────────────────────────────────
 
-_DATASET_CANDIDATES = [
-    Path("S:/AGI_like/AI videos/07_analysis/vaibhav_video_dataset.json"),
-    Path("S:/AI videos/07_analysis/vaibhav_video_dataset.json"),
-    Path("S:/AI videos/vaibhav_video_dataset.json"),
-]
+_DATASET_CANDIDATES = [VIDEO_DATASET]
 
 MODEL_VERSION = "video_engagement_v1"
 MODEL_NAME = "category_median_with_duration_adjustment"

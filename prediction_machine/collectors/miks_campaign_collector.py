@@ -21,13 +21,12 @@ import sys
 import traceback
 from typing import Any
 
+from prediction_machine.paths import MIKS_CONFIG
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_MIKS_CONFIG = os.environ.get(
-    "MIKS_CONFIG",
-    r"S:\AGI_like\workspace\miks_campaign_simulator\miks.yaml",
-)
+_MIKS_CONFIG = str(MIKS_CONFIG)
 
 
 def _import_compute_error():

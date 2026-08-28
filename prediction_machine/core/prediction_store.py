@@ -44,6 +44,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
+from prediction_machine.paths import PREDICTION_DB
+
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -59,7 +61,7 @@ VALID_PREDICTION_TYPES = {
 VALID_EXPERIMENT_DECISIONS = {"ACCEPT", "REJECT", "PENDING"}
 
 # Default database location (canonical path on the S: drive).
-DEFAULT_DB_PATH = Path("S:/AGI_like/prediction_machine/data/predictions.db")
+DEFAULT_DB_PATH = PREDICTION_DB
 
 _SCHEMA = """
 CREATE TABLE IF NOT EXISTS predictions (
@@ -162,7 +164,7 @@ class PredictionStore:
     ----------
     db_path : Path or str, optional
         Path to the SQLite database file.  Defaults to
-        ``S:/AGI_like/prediction_machine/data/predictions.db``.
+        ``prediction_machine/data/predictions.db`` under the discovered repository.
 
     Notes
     -----
