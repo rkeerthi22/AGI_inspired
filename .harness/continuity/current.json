@@ -1,68 +1,56 @@
 {
   "schema_version": 1,
-  "brief_revision": 12,
-  "created_at": "2026-08-28T06:25:00+00:00",
-  "status": "in_progress",
+  "brief_revision": 13,
+  "created_at": "2026-08-28T06:43:01Z",
+  "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "e6da286",
+    "head": "b00fcf7e6f0aecc737c851528c31e9a4d4e7be86",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
-      "docs/HARDENING.md",
       "docs/VALIDATION.md",
-      "experiments/capability_selection_aiprm.md",
-      "experiments/capability_selection_aiprm_csa2.md",
-      "experiments/capability_selection_aiprm_csa3.md",
-      "orchestrator/execution.py",
-      "orchestrator/retrieval_progress.py",
-      "tests/test_f63.py"
+      "experiments/retrieval_method_reliability_aiprm.md"
     ]
   },
   "task": {
-    "id": "REAL-VALIDATION-3",
-    "phase": "capability-and-outcome-validation",
-    "status": "in_progress",
-    "next_action": "Checkpoint F65/CSA evidence. Then design a bounded retrieval-method reliability experiment for definitive AIPRM pricing and a recent-review theme; do not automatically retry task 72."
+    "id": "REAL-VALIDATION-4",
+    "phase": "retrieval-method-reliability",
+    "status": "complete",
+    "next_action": "Proceed to independent outcome-quality, recovery-behavior, capability-selection, and cost validation without changing F63 unless a concrete defect is reproduced; do not start scheduled missions while the global pause remains engaged."
   },
   "completed": [
-    "Recovery RV1 passed bounded state recovery and exposed F64, committed at e6da286.",
-    "CSA1 reproduced non-retrieval skill_view rejection and cross-attempt audit append defects.",
-    "CSA2 reproduced false repeated-redirect termination inside one parallel search batch.",
-    "Narrow F65 fixes bound skill setup, reset per-attempt audit, and coalesce parallel feedback opportunities without changing prompts or retrieval rung limits.",
-    "CSA3 accounting: 4 research API calls, 6 retrieval calls, 0 rejections, exactly 1 finalizer, 98766 worker tokens.",
-    "CSA3 session, JSONL, and usage reconcile exactly; independent check found 15/15 URLs reachable and 13/15 literals present.",
-    "CSA3 recovered the 3.9/5 rating but failed the required recurring review theme and definitive current price range.",
-    "F63 coverage is 81/81; full deterministic gate is 26/26 with test_baseline quarantined.",
+    "Official pricing PASS: existing browser plus open Shadow-DOM extraction recovered the authoritative current AIPRM table in USD.",
+    "Pricing accounting: 7 retrieval/tool invocations, 0 rejected or redirected controller attempts, 0 model calls, 0 tokens.",
+    "Recent-review themes PASS: three independently authored reviews in the displayed last-12-month set recur on renewal, cancellation, billing, and refund friction.",
+    "Review accounting: 7 retrieval/tool invocations, 0 rejected or redirected controller attempts, 0 model calls, 0 tokens.",
+    "Pricing miss classified as dynamic source-structure and extraction reliability; review miss classified as browser/access reliability plus aggregation.",
+    "No production code or prompt defect was demonstrated; controller and task 72 remained unchanged.",
+    "F63 remains 81/81; full deterministic gate remains 26/26 with test_baseline quarantined.",
     "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
     "schedules remain paused",
-    "do not automatically retry task 72 again",
+    "do not automatically retry task 72",
     "no prompt tuning",
-    "no controller architecture work absent another reproduced concrete defect",
-    "next experiment isolates retrieval-method reliability for the two observed evidence gaps"
+    "no controller architecture work absent a reproduced concrete defect",
+    "do not reinterpret search snippets or third-party summaries as definitive official pricing"
   ],
   "gate": {
-    "status": "failed",
-    "detail": "Controller defects cleared and original rating gap closed, but capability/outcome quality still failed on a recurring review theme and definitive pricing."
+    "status": "passed",
+    "detail": "Both isolated evidence classes passed with reconciled bounded accounting; no harness code defect was demonstrated."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
-      "purpose": "RV1 and CSA1-CSA3 evidence",
-      "sha256": "6a257c24cb83d42f46610c25b27b540170bf7de15c6a3e04118a4ee3fd1f1de7"
+      "purpose": "retrieval-method reliability checkpoint and verification",
+      "sha256": "34a03cd114e6dc01ddec961f7f14f103b5d7862b6101201fb5739e5f3859c0aa"
     },
     {
-      "path": "docs/HARDENING.md",
-      "purpose": "F64 and F65 defects and repairs",
-      "sha256": "d3ad06fecfa717799fb1096147073e2b6435b42928edfe8d1c90989edd754640"
-    },
-    {
-      "path": "experiments/capability_selection_aiprm_csa3.md",
-      "purpose": "authoritative corrected capability specimen",
-      "sha256": "2e684ca4c59606e001e22a40c308a8cf69a356f117a540f734e0b0be68b7c341"
+      "path": "experiments/retrieval_method_reliability_aiprm.md",
+      "purpose": "predeclared protocol, method tables, accounting, and classification",
+      "sha256": "8a7aca130bc6d9d104960e33d5c1d661ed9ebff8704e828fc9536d063ba15459"
     }
   ]
 }

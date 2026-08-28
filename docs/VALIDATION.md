@@ -389,3 +389,48 @@ retrieval-method reliability experiment for the two missing fields, followed by
 independent outcome evaluation—not prompt tuning or controller architecture.
 Schedules remain paused. F63 regression coverage is now 81/81 assertions; the
 full deterministic gate remains 26/26 with `test_baseline` quarantined.
+
+## Checkpoint 8 — retrieval-method reliability for pricing and reviews
+
+Date: 2026-08-28. The predeclared diagnostic protocol and complete comparison
+tables are in `experiments/retrieval_method_reliability_aiprm.md`. Production
+prompts, controller policy, and task 72 were not changed or rerun.
+
+Official pricing required seven bounded retrieval/tool invocations and zero
+model calls/tokens. Search located the official sources, but direct HTTP and
+ordinary rendered-body extraction exposed only legacy FAQ examples and the
+promotion/currency shell. The current table is injected by the official
+Pricewell resource into an open Shadow DOM. Explicit traversal recovered:
+
+| Plan | Annual | Monthly | Currency/source |
+|---|---:|---:|---|
+| AIPRM Plus | $200/year | $20/mo | USD, official AIPRM live table |
+| AIPRM Pro | $390/year | $39/mo | USD, official AIPRM live table |
+| AIPRM Elite One | $790/year | $79/mo | USD, official AIPRM live table |
+| AIPRM Titan | $9,990/year | $999/mo | USD, official AIPRM live table |
+
+Recent-review testing also required seven bounded retrieval/tool invocations
+and zero model calls/tokens. Direct Trustpilot and G2 requests returned HTTP
+403; Chrome Web Store browser navigation was diverted to a regional Google
+consent page. Installed-browser rendering nevertheless exposed Trustpilot's
+dated structured review corpus. Three independently authored reviews within
+the displayed last-12-month set—Jeff Roy (2026-08-17), Phil (2026-04-16), and
+nycmade me (2025-09-11)—recur on auto-renewal, cancellation, billing, and
+refund friction. A July 2025 fourth sample corroborates the theme but was not
+used for the strict recency pass.
+
+The prior pricing gap is classified as retrieval/extraction reliability caused
+by dynamic Shadow-DOM source structure. The review gap combines browser/access
+path reliability with evidence aggregation; the available dated corpus does
+support recurrence. No production code defect or prompt defect was
+demonstrated, and no evidence shows model reasoning discarded either fact after
+the decisive evidence had been supplied. One ignored diagnostic helper had a
+post-retrieval ShadowRoot serialization error; correcting that helper did not
+alter the harness.
+
+Accounting reconciles at seven invocations per evidence class, no rejected or
+redirected controller attempts, zero model calls, and zero model tokens.
+**Official pricing: PASS. Recent-review themes: PASS.** F63 remains 81/81 and
+the complete deterministic gate remains 26/26 with only `test_baseline`
+quarantined. `git diff --check` is clean and the Hermes global emergency pause
+remains engaged.
