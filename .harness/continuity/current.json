@@ -1,50 +1,65 @@
 {
   "schema_version": 1,
-  "brief_revision": 6,
-  "created_at": "2026-08-27T23:22:12.882452+00:00",
+  "brief_revision": 10,
+  "created_at": "2026-08-28T02:20:00+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
-    "head": "a6c791d0b6590163983f7d7582e10a2d87b0f3ec",
+    "head": "b7e75dbe36bdcd67dce053bb2e116585983854b9",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
+      ".harness/continuity/current.json",
+      "docs/HARDENING.md",
       "docs/VALIDATION.md",
-      "experiments/retrieval_switch_aiprm.md"
+      "orchestrator/execution.py",
+      "orchestrator/controlled_hermes.py",
+      "orchestrator/retrieval_progress.py",
+      "tests/test_f63.py"
     ]
   },
   "task": {
     "id": "REAL-VALIDATION-2",
     "phase": "capability-enforcement-validation",
     "status": "in_progress",
-    "next_action": "Design a bounded evidence-novelty enforcement experiment outside model self-report; do not resume schedules"
+    "next_action": "Commit and push the verified atomic F63 controller change; keep Hermes globally paused. Next phase is broader recovery/capability/quality validation, not prompt tuning or architecture work."
   },
   "completed": [
-    "matched AIPRM early-switch treatment executed and session trace exported",
-    "treatment violated 3-search limit with 8 searches and made 46 tool calls",
-    "treatment produced no deliverable and used 2,157,798 tokens, 3.44x control",
-    "prompt-only adaptive retrieval hypothesis rejected"
+    "Prompt-only retrieval switching failed at 2,157,798 tokens; generic hard-halt also failed to return a useful brief.",
+    "F63 bounded finalization controller passed 70/70 deterministic assertions.",
+    "Matched AIPRM acceptance passed: 6 retrieval executions, 1 rejection, exactly 1 finalizer, and 183,581 tokens.",
+    "The passing run used 55.6% fewer tokens than the prior 413,334-token useful specimen.",
+    "JSONL audit, redacted session export, and merged usage reconcile exactly.",
+    "Citation check: 15 checked, 12 reachable, 3 HTTP 403, and 12/12 literals present.",
+    "Full deterministic gate passed 25/25; test_baseline remains quarantined.",
+    "Hermes global pause remains engaged."
   ],
   "locked_constraints": [
     "do not rely on model self-report for tool counts or switching",
     "schedules remain paused",
-    "next control must enforce or externally measure evidence novelty",
-    "do not launch another unconstrained mission"
+    "do not launch another unconstrained mission",
+    "F63 passed the usefulness-and-bounded-inference gate; atomic commit is authorized",
+    "passing F63 does not authorize schedule resume"
   ],
   "gate": {
-    "status": "failed",
-    "detail": "prompt-only early switch failed: 46 calls, 2.16M tokens, no result"
+    "status": "passed",
+    "detail": "Matched AIPRM: 6 executed retrieval calls, 1 rejection, exactly 1 finalizer, useful cited partial brief, 183581 tokens (55.6% below 413334), complete JSONL/session/usage reconciliation."
   },
   "references": [
     {
       "path": "docs/VALIDATION.md",
       "purpose": "retrieval experiment evidence and verdict",
-      "sha256": "26651e56d4904c5b731abffd8a8083d703b962a01c1086ec12ab472528c71778"
+      "sha256": "28fb588823f65861219870e583436c8fd5d72dc8ea3afa2c18f1b4e42a4cdde4"
     },
     {
       "path": "experiments/retrieval_switch_aiprm.md",
       "purpose": "predeclared treatment prompt",
       "sha256": "bd3ec4f38dadf0ed47ec225f7cd87234422cebea027e29292b5383fc449c4a6a"
+    },
+    {
+      "path": "docs/HARDENING.md",
+      "purpose": "F63 failure mode and fixed controller contract",
+      "sha256": "0d03aae5d2193b97c0fc443a1f1b08dcefaddbda21ba06db39b7abb6d8f92e9c"
     }
   ]
 }

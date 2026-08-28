@@ -31,8 +31,10 @@ What lives here for utility reasons:
 import sys
 from pathlib import Path
 import json
+import os
 import re
 import subprocess
+import shutil
 
 # Paths and logging are shared via runtime_context.py (Move 5a) so every
 # orchestrator module writes to the same run-scoped log stream.
@@ -65,10 +67,18 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # even with tools present; (2) db_integrity_guard() below verifies no write
     # happened and reverts it if one did. Prevention-by-ignorance + verification,
     # not a trust-the-flag claim.
-    cmd = ["hermes", "-z", prompt, "--provider", model_cfg["provider"],
+    hermes_exe = shutil.which("hermes")
+    if not hermes_exe:
+        raise FileNotFoundError("hermes executable not found")
+    executable = Path(hermes_exe)
+    venv_python = executable.with_name("python.exe" if sys.platform == "win32" else "python")
+    launcher = Path(__file__).resolve().with_name("controlled_hermes.py")
+    cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", model_cfg["provider"],
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
+    env = dict(os.environ)
+    env["HARNESS_RETRIEVAL_AUDIT"] = str(usage_path.with_suffix(".retrieval.jsonl"))
     proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=timeout, cwd=str(ROOT))
+                          errors="replace", timeout=timeout, cwd=str(ROOT), env=env)
     usage = {}
     if usage_path.exists():
         usage = json.loads(usage_path.read_text(encoding="utf-8"))

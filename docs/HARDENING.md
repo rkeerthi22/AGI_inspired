@@ -2252,6 +2252,19 @@ F57 also locks the dependency shape: the patch point is the owning module
 behaviour-preserving — measured across the deterministic gate, not
 assumed. · `orchestrator/evaluation.py` · `tests/test_f57.py`
 
+### F63 — Retrieval progress and finalization must be externally bounded · **P0 · PROVEN + FIXED 2026-08-28**
+
+Prompt-only switching spent 2,157,798 tokens and produced nothing. The first
+external controller bounded tool execution but still allowed 29 model calls and
+ended with a generic guardrail message. The final controller meters every tool
+family, caps retrieval at 3/3/2 and total rejections at two, stores at most 30k
+characters of evidence, disables further tools, and performs exactly one
+tool-free evidence-only finalization call. The matched AIPRM acceptance used six
+retrieval calls, one rejection, one finalizer, and 183,581 tokens (55.6% below
+the prior 413,334-token useful specimen), producing a cited partial brief.
+JSONL/session/usage accounting reconciled exactly. Covered by `test_f63.py`
+(70 assertions); full deterministic gate 25/25. Schedules remain globally paused.
+
 ### F58 workflow extraction (Move 5c′ behaviour and state isolation)
 `run_synthesis`, `run_canaries`, `retry_failed_this_fire`, and
 `_check_repeated_failure` moved from `batch_runner.py` to the new
