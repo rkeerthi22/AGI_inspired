@@ -1,67 +1,56 @@
 {
-  "schema_version": 1,
-  "brief_revision": 18,
-  "created_at": "2026-08-28T12:30:00Z",
+  "schema_version": 2,
+  "brief_revision": 19,
+  "created_at": "2026-08-28T22:28:41.4384004Z",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "head": "87012cafdedb23d9a7b7290dfe2362b7263db481",
+    "based_on_head": "e7ca2c60fbac6c6bf6053878455f8c8503ead656",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
-      "docs/VALIDATION.md",
-      "orchestrator/retrieval_progress.py",
-      "tests/test_f63.py"
+      "docs/CURRENT_STATE.md",
+      "orchestrator/continuity.py",
+      "orchestrator/simulate.py",
+      "tests/test_f59.py",
+      "tests/test_prediction_interface.py",
+      "tests/tiers.json"
     ]
   },
   "task": {
-    "id": "REAL-VALIDATION-7",
-    "phase": "f63-batch-accounting-fix",
+    "id": "ARCHITECTURE-7-9",
+    "phase": "continuity-prediction-doc-consolidation",
     "status": "complete",
-    "next_action": "F63 accounting is corrected and verified. Original critic outcomes: PASS M1/M4/M6; bounded environment/content FAIL M2/M3/M5/M7. F63: M1/M2/M3/M5/M6/M7 HELD; M4 N/A. Keep execution paused pending operator confirmation."
+    "next_action": "Operator authorized clearing ESTOP and resuming cohort execution after this architecture checkpoint is committed."
   },
   "completed": [
-    "Live source review refuted the earlier halt-propagation theory: the real pre-call path already propagated halt through _guardrail_block_result and _set_tool_guardrail_halt.",
-    "Hermes commit 717b8db was reverted because its direct halt assignment addressed a non-issue manufactured by a flawed minimal repro.",
-    "Confirmed the real defect: stage-3 redirects counted every parallel sibling as a separate violation despite representing one assistant feedback batch.",
-    "Added explicit retrieval tool-batch lifecycle tracking and bracketed AIAgent._execute_tool_calls in Hermes commit 0e8b5893eaa8075872810dc3516dbef504a3089b.",
-    "Added a regression requiring four rejected stage-3 siblings in one batch to count as exactly one redirect violation.",
-    "F63 regression is 86/86 and the focused F63/F66 gate is 2/2 green.",
-    "Replay of the preserved M1, M5, and M7 call shapes gives one redirect violation each; all three HELD under corrected accounting.",
-    "No new cohort, model, network, database, mission, or scheduled execution was run.",
-    "Hermes global pause remains engaged."
+    "Continuity schema v2 records based_on_head provenance and removes the impossible self-referential HEAD expectation.",
+    "Removed legacy orchestrator/simulate.py after repository and installed-runtime inspection found no executable caller; prediction_machine is canonical.",
+    "Added docs/CURRENT_STATE.md and classified every _needs_review artifact for deletion without deleting evidence.",
+    "Default non-live gate passed 34/34 suites."
   ],
   "locked_constraints": [
-    "task execution and schedules remain paused until operator confirmation",
-    "do not run a new cohort",
-    "preserve critic outcome and F63 compliance as separate findings",
-    "do not classify parallel siblings from one assistant batch as separate feedback violations",
-    "no prompt tuning",
+    "Git, runtime, and database live state always win over this brief",
+    "live cohort execution requires explicit operator authorization",
     "do not bypass CAPTCHAs, authentication, consent, or access controls"
   ],
   "gate": {
     "status": "passed",
-    "detail": "Batch-accounting defect fixed and regression-covered. F63 86/86; focused F63/F66 2/2. No genuine cohort F63 violations: M1/M5/M7 each replay at one violation and HELD. M4 N/A. Execution remains paused."
+    "detail": "Architecture items 7-9 complete; unit, containment, and model-free integration gate 34/34 green."
   },
   "references": [
     {
-      "path": "docs/VALIDATION.md",
-      "purpose": "Checkpoint 10 records actual critic outcomes and corrected F63 batch accounting",
-      "sha256": "9597b24b8151fdfc6ef1f667e63fbb082da0dc8ccd225e280b408c39da400827"
+      "path": "docs/CURRENT_STATE.md",
+      "purpose": "Canonical short current-state architecture and review disposition"
     },
     {
-      "path": "orchestrator/retrieval_progress.py",
-      "purpose": "Explicit assistant tool-batch lifecycle and per-batch redirect accounting"
+      "path": "orchestrator/continuity.py",
+      "purpose": "Compact Brief schema v2 implementation"
     },
     {
-      "path": "tests/test_f63.py",
-      "purpose": "F63 regression for parallel stage-3 sibling redirects"
-    },
-    {
-      "path": "workspace/validation/cohort_f63_replay.json",
-      "purpose": "Controller-only corrected-accounting replay for M1, M5, and M7"
+      "path": "tests/test_prediction_interface.py",
+      "purpose": "Canonical prediction-interface regression"
     }
-  ],
-  "timestamp": "2026-08-28T12:30:00Z"
+  ]
 }

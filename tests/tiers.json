@@ -10,6 +10,6 @@
   "containment": [
     "test_f36", "test_f42", "test_f47", "test_f52", "test_h7_gate"
   ],
-  "integration": ["test_f66", "test_hermes_contract"],
+  "integration": ["test_f66", "test_hermes_contract", "test_prediction_interface"],
   "live": ["test_baseline"]
 }

@@ -19,7 +19,7 @@ from typing import Any
 
 from runtime_context import ROOT
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 MAX_BRIEF_BYTES = 4096
 DEFAULT_MAX_AGE_HOURS = 24
 CURRENT = ROOT / ".harness" / "continuity" / "current.json"
@@ -62,6 +62,13 @@ def inspect_repository(root: Path = ROOT) -> dict[str, Any]:
         "tree_clean": not lines,
         "changed_paths": [line[3:] for line in lines],
     }
+
+
+def _repository_checkpoint(root: Path = ROOT) -> dict[str, Any]:
+    """Snapshot Git without pretending the future brief commit is known."""
+    snapshot = inspect_repository(root)
+    snapshot["based_on_head"] = snapshot.pop("head")
+    return snapshot
 
 
 def _assert_no_secrets(value: Any, path: str = "brief") -> None:
@@ -115,6 +122,11 @@ def validate_brief(brief: dict[str, Any], root: Path = ROOT) -> list[dict[str, A
     required_objects = ("repository", "task", "gate")
     if any(not isinstance(brief.get(name), dict) for name in required_objects):
         raise ContinuityError("repository, task, and gate must be objects")
+    based_on_head = brief["repository"].get("based_on_head")
+    if not isinstance(based_on_head, str) or not re.fullmatch(r"[0-9a-f]{40}", based_on_head):
+        raise ContinuityError("repository.based_on_head must be a full Git commit id")
+    if "head" in brief["repository"] or "record_commit" in brief["repository"]:
+        raise ContinuityError("schema v2 uses based_on_head, not head or record_commit")
     for name in ("completed", "locked_constraints", "references"):
         if not isinstance(brief.get(name), list):
             raise ContinuityError(f"{name} must be a list")
@@ -176,7 +188,7 @@ def write_current(
         "brief_revision": revision,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "status": task_value.get("status", "in_progress"),
-        "repository": inspect_repository(root),
+        "repository": _repository_checkpoint(root),
         "task": task_value,
         "completed": completed,
         "locked_constraints": locked_constraints,
@@ -209,7 +221,9 @@ def recover(
     live = inspect_repository(root)
     recorded = brief["repository"]
     discrepancies = []
-    for key in ("branch", "head", "upstream", "tree_clean", "changed_paths"):
+    # HEAD normally advances when the brief itself is committed. The recorded
+    # basis is provenance, not an impossible assertion that HEAD stays its parent.
+    for key in ("branch", "upstream", "tree_clean", "changed_paths"):
         if recorded.get(key) != live.get(key):
             discrepancies.append({"field": key, "recorded": recorded.get(key),
                                   "live": live.get(key), "winner": "live"})

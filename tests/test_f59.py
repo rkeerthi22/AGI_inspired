@@ -50,7 +50,11 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as raw:
     )
 
     first = continuity.write_current(**common)
-    check("schema version", first["schema_version"], 1)
+    check("schema version", first["schema_version"], 2)
+    check("checkpoint records its basis",
+          first["repository"]["based_on_head"], git(repo, "rev-parse", "HEAD"))
+    check("checkpoint has no self-referential head field",
+          "head" in first["repository"], False)
     check("first revision", first["brief_revision"], 1)
     check("file within hard cap", current.stat().st_size <= 4096, True)
     check("reference verified", continuity.validate_brief(first, repo)[0]["exists"], True)
@@ -60,6 +64,12 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as raw:
     second = continuity.write_current(**common)
     check("replace increments revision", second["brief_revision"], 2)
     check("no temporary file remains", list(current.parent.glob("current.*.tmp")), [])
+
+    git(repo, "add", ".harness/continuity/current.json")
+    git(repo, "commit", "-m", "record continuity checkpoint")
+    after_brief_commit = continuity.recover(current, repo)
+    check("brief commit does not create a permanent HEAD mismatch",
+          "head" in {x["field"] for x in after_brief_commit["discrepancies"]}, False)
 
     # The brief observed a clean tree before writing itself. A subsequent real edit must
     # be reported as a discrepancy, and the report explicitly chooses live state.
@@ -105,7 +115,7 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as raw:
 
 check("continuity directory protected", ".harness" in integrity.PROTECTED_PATHS, True)
 live = continuity.load_current()
-check("tracked current brief validates", live["schema_version"], 1)
+check("tracked current brief validates", live["schema_version"], 2)
 
 # ── AGENTS.md: cross-agent discovery pointer ──────────────────────────
 
