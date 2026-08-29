@@ -2359,3 +2359,50 @@ The function retained a bare reference after the predicate moved to
 and synthesis scope routes. The failed recovery left task 64 recoverable and
 spent no worker tokens. The subsequent retry completed normally. ·
 `orchestrator/prompts.py` · `tests/test_f62.py`
+
+### F99 — `batch_runner.py` had no ESTOP check · **P1 · PROVEN, found + fixed 2026-08-29**
+
+`batch_runner.py` `main()` could queue tasks, expire stale rows, and run
+promotion review while the global ESTOP was engaged. `provider_chat.chat()`
+enforced ESTOP at model dispatch, so any code path that called a model was
+blocked — but non-model work (queue management, stale-row expiry, promotion
+review, Telegram spot-check notifications) was unguarded. `controlled_hermes.py`
+and `onboarding_autonomy.py` both had ESTOP checks at their entry points;
+`batch_runner.py` was the only orchestrator CLI without one.
+
+Root cause: the ESTOP boundary was implemented at the model-call layer
+(`provider_chat.chat()`), not at the batch execution entry point. Every other
+orchestrator CLI checked at `main()`; `batch_runner.py` was an oversight.
+The guard at `provider_chat.chat()` would block the actual model call, so no
+worker would run — but the side effects of attempting to run (ledger mutations,
+Telegram notifications) were unguarded. Severity: LOW but real.
+
+Fix: `pause_engaged()` check at `main()` before runlock acquisition, returns
+exit 75 (same convention as `controlled_hermes.py` and `onboarding_autonomy.py`).
+Placed in `main()`, not `_run()`, because tests call `_run()` directly and must
+not trip ESTOP — the gate is a CLI boundary, not a library boundary.
+
+Regression: `tests/test_f54_estop.py` (existing, covers all orchestrator entry
+points). · `orchestrator/batch_runner.py:141-144`
+
+### F100 — Fact duplication on crash recovery · **P2 · PROVEN, found + fixed 2026-08-29**
+
+`_commit_domain_memory()` in `onboarding_autonomy.py` used bare `INSERT` for
+facts at line 573, while decisions had a SELECT pre-check (lines 554-555) and
+entities had `INSERT OR IGNORE` (lines 560-561). If the original process crashed
+after `_commit_domain_memory()` COMMITed but before `journal.advance(DOMAIN_COMMITTED)`
+saved, recovery would re-enter `_commit_domain_memory()` and insert duplicate
+fact rows with identical values and `run_id`.
+
+Root cause: the facts INSERT was the only write in `_commit_domain_memory()`
+without idempotency protection; the other two writes had it, so the pattern was
+known but not applied uniformly. Severity: LOW — same data, same `run_id`,
+no corruption, but unintended data duplication.
+
+Fix: `INSERT OR IGNORE INTO facts` (line 573) as belt-and-suspenders alongside
+the existing SELECT pre-check at lines 567-571.
+
+Regression: `tests/test_onboarding_contract_red.py` (existing, covers recovery
+idempotency for all phases including DOMAIN_COMMITTED). Found by the DeepSeek
+architectural review (`docs/reviews/DEEPSEEK_ONBOARDING_REVIEW_2026-08-29.md`).
+· `orchestrator/onboarding_autonomy.py:573`
