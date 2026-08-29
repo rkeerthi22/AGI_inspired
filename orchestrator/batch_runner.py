@@ -33,7 +33,10 @@ MAX_WORKER_CALLS_PER_RUN = 12          # policy cost cap proxy (Ollama returns n
 
 
 def load_roles() -> dict:
-    return yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))["roles"]
+    config = yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))
+    providers = config.get("providers") or {}
+    return {name: {**providers.get(role.get("provider"), {}), **role}
+            for name, role in config["roles"].items()}
 
 
 
@@ -134,6 +137,11 @@ def main() -> int:
                     help="with --scorecard: also push the summary line to Telegram (fail-soft)")
     ap.add_argument("--max-tasks", type=int, default=MAX_WORKER_CALLS_PER_RUN)
     args = ap.parse_args()
+
+    from execution_pause import pause_engaged
+    if pause_engaged():
+        log("global ESTOP is engaged — batch execution refused")
+        return 75
 
     RUNS.mkdir(exist_ok=True)
     set_log_file(RUNS / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
