@@ -104,12 +104,21 @@ class RetrievalProgressController:
     """Pure state machine used by the runtime adapter and deterministic tests."""
 
     def __init__(self, policy: RetrievalPolicy | None = None,
-                 audit_path: Path | None = None):
+                 audit_path: Path | None = None,
+                 trajectory_writer: Any = None):
         self.policy = policy or RetrievalPolicy()
         self.state = RetrievalState()
         self.audit_path = audit_path
         self._lock = threading.RLock()
         self.evidence: list[dict[str, Any]] = []
+        if trajectory_writer is not None:
+            self.trajectory_writer = trajectory_writer
+        else:
+            try:
+                import trajectory
+                self.trajectory_writer = trajectory.active()
+            except Exception:
+                self.trajectory_writer = None
 
     @property
     def required_strategy(self) -> str:
@@ -249,6 +258,10 @@ class RetrievalProgressController:
         self._audit("observation", tool=tool_name, stage=STAGE_NAMES[stage], novel=novel,
                     new_urls=len(new_urls), new_words=len(new_words), failed=failed,
                     stale=stale)
+        if self.trajectory_writer:
+            self.trajectory_writer.tool_call_finished(
+                tool_name, STAGE_NAMES[stage], self.state.calls[stage],
+                novel, len(new_urls))
         if reason is None or stale:
             return None
         previous = STAGE_NAMES[stage]
@@ -269,6 +282,9 @@ class RetrievalProgressController:
         self.state.low_novelty_streak = 0
         self._audit("transition", source=previous, target=self.required_strategy,
                     reason=reason)
+        if self.trajectory_writer:
+            self.trajectory_writer.strategy_transition(
+                previous, self.required_strategy, reason)
 
     def _redirect(self, tool_name: str, message: str,
                   *, count_violation: bool | None = None) -> dict:
@@ -290,6 +306,9 @@ class RetrievalProgressController:
                     count_violation=count_violation,
                     redirect_violations=self.state.redirect_violations,
                     rejected_calls=self.state.rejected_calls)
+        if self.trajectory_writer:
+            self.trajectory_writer.tool_redirect(
+                tool_name, self.required_strategy, count_violation=bool(count_violation))
         if terminal:
             message += " The transition was ignored repeatedly, so this turn is now terminated."
         return {"code": "retrieval_strategy_halt" if terminal else "retrieval_strategy_redirect",
@@ -314,6 +333,9 @@ class RetrievalProgressController:
             self.state.finalization_calls = 1
             self._audit("finalization_started", evidence_items=len(self.evidence),
                         evidence_chars=self.state.evidence_chars)
+            if self.trajectory_writer:
+                self.trajectory_writer.finalization_started(
+                    len(self.evidence), self.state.evidence_chars)
 
     def research_finished(self, *, api_calls: int, input_tokens: int,
                           output_tokens: int, total_tokens: int) -> None:
@@ -330,6 +352,9 @@ class RetrievalProgressController:
             self._audit("finalization_finished", success=success,
                         input_tokens=input_tokens, output_tokens=output_tokens,
                         reason=reason)
+            if self.trajectory_writer:
+                self.trajectory_writer.finalization_finished(
+                    success=success, reason=reason)
 
     def finalization_prompt(self, mission: str) -> str:
         evidence = json.dumps(self.evidence, ensure_ascii=False, indent=2)

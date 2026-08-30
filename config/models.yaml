@@ -49,6 +49,16 @@ roles:
     provider: ollama
     model: nomic-embed-text
 
+# Available provider transports. Declaring a provider does not activate it for any
+# role or fallback. Authentication values are resolved from the named environment
+# variable only at dispatch and are never stored here.
+providers:
+  byteplus_coding:
+    endpoint: https://ark.ap-southeast.bytepluses.com/api/coding/v3
+    authentication_reference: env:ARK_API_KEY
+    routing_model: ark-code-latest
+    hermes_provider: custom:byteplus-coding
+
 # Cross-PROVIDER fallback chain (429 is account-level, not per-model — §1.6).
 # A second Ollama model does NOT survive quota exhaustion; a second provider does.
 #

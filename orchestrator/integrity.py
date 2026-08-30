@@ -22,10 +22,13 @@ imports; only `policy`, `ledger`, `runtime_context`, and stdlib.
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 import sqlite3
 import subprocess
+import uuid
+from contextlib import AbstractContextManager, closing
 from datetime import datetime
 from pathlib import Path
 
@@ -73,102 +76,298 @@ def escalate(reason: str, trigger: str | None = None, task_id: int | None = None
         pass
 
 
-# F1 / H2 (docs/HARDENING.md, docs/INCIDENTS.md 2026-07-18): a worker once wrote
-# directly to ledger.db and ledgerbook.db, scored its own task, and walked away
-# with a 'pass'. The harness's defense against that is provenance-based: every
-# legitimate row the orchestrator writes carries a run_id; worker writes do not,
-# because the worker is never told run_id exists. So:
-#
-#   snapshot BEFORE worker runs    ->  {"ledger.tasks": {count, max_id}, ...}
-#   run worker
-#   snapshot AFTER                 ->  same shape
-#   diff                           ->  any row with id > snapshot.max_id AND run_id IS NULL
-#                                     is the worker's unauthorized write; quarantine+revert.
-#
-# A concurrent legitimate insert (carrying a run_id) is spared. A blind count
-# comparison is NOT used because it would punish the legitimate concurrent run
-# (proven 2026-07-19 on DB copies). The four tables NOT in _PROVENANCE_TABLES
-# (entities, decisions, experiences, failures) keep the legacy count-only
-# behaviour: they are orchestrator-only writes in the normal workflow, never written
-# by the live worker path, and H1's run-lock means there is no concurrent
-# process to protect them from.
-_PROVENANCE_TABLES = {"tasks": "task_id", "facts": "id"}
+# F1 / H2: model subprocesses must never mutate harness databases.  The old
+# count/max-id heuristic missed updates, deletes, same-count replacement attacks,
+# schema changes, and forged non-null run_id values.  This guard snapshots whole
+# databases with SQLite's online-backup API and compares complete logical manifests.
+DB_GUARD_SCHEMA_VERSION = 1
 
 
-def _db_snapshot() -> dict:
-    """count + max(id) per table, both DBs. max(id) lets the check identify EXACTLY the
-    new rows later (WHERE id > snapshot_max_id) rather than guessing via ORDER BY LIMIT,
-    which can misidentify rows if anything else changed the table shape meanwhile."""
-    snap = {}
-    for name, path in (("ledger", ledger.LEDGER_DB),
-                       ("ledgerbook", ROOT / "memory" / "ledgerbook.db")):
-        with sqlite3.connect(path, timeout=30) as c:
-            for table in ("tasks", "entities", "facts", "decisions", "experiences", "failures"):
-                id_col = _PROVENANCE_TABLES.get(table, "id")
-                row = c.execute(f"SELECT count(*), max({id_col}) FROM {table}").fetchone()
-                snap[f"{name}.{table}"] = {"count": row[0], "max_id": row[1] or 0}
-    return snap
+class DatabaseMutationViolation(RuntimeError):
+    """Unauthorized database state was preserved forensically and restored."""
+
+
+class DatabaseRecoveryError(RuntimeError):
+    """A guard cannot prove that protected databases were restored."""
+
+
+def _guard_dir() -> Path:
+    return RUNS / "db_guard"
+
+
+def _protected_databases() -> tuple[tuple[str, Path], ...]:
+    return (("ledger", Path(ledger.LEDGER_DB).resolve()),
+            ("ledgerbook", (ROOT / "memory" / "ledgerbook.db").resolve()))
+
+
+def _open_existing(path: Path, *, read_only: bool) -> sqlite3.Connection:
+    if not path.is_file():
+        raise FileNotFoundError(f"protected database is missing: {path}")
+    if read_only:
+        return sqlite3.connect(f"{path.as_uri()}?mode=ro", uri=True, timeout=30)
+    return sqlite3.connect(f"{path.as_uri()}?mode=rw", uri=True, timeout=30)
+
+
+def _sqlite_backup(source: Path, destination: Path) -> None:
+    """Take a transactionally consistent SQLite snapshot without creating source."""
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.unlink(missing_ok=True)
+    with closing(_open_existing(source, read_only=True)) as src, \
+         closing(sqlite3.connect(destination)) as dst:
+        src.backup(dst)
+
+
+def _restore_backup(backup: Path, destination: Path) -> None:
+    with closing(_open_existing(backup, read_only=True)) as src, \
+         closing(_open_existing(destination, read_only=False)) as dst:
+        src.backup(dst)
+
+
+def _value_token(value) -> list:
+    if value is None:
+        return ["null", None]
+    if isinstance(value, bytes):
+        return ["blob", value.hex()]
+    if isinstance(value, float):
+        return ["float", value.hex()]
+    if isinstance(value, int):
+        return ["integer", value]
+    return ["text", str(value)]
+
+
+def _quote_identifier(name: str) -> str:
+    return '"' + name.replace('"', '""') + '"'
+
+
+def _database_manifest(path: Path) -> dict:
+    """Hash every row and record the complete table/index/view/trigger schema."""
+    with closing(_open_existing(path, read_only=True)) as con:
+        schema = [list(row) for row in con.execute(
+            "SELECT type,name,tbl_name,sql FROM sqlite_schema "
+            "ORDER BY type,name,tbl_name,sql")]
+        tables = {}
+        names = [row[0] for row in con.execute(
+            "SELECT name FROM sqlite_schema WHERE type='table' "
+            "AND name NOT LIKE 'sqlite_%' ORDER BY name")]
+        for name in names:
+            row_hashes = []
+            for row in con.execute(f"SELECT * FROM {_quote_identifier(name)}"):
+                encoded = json.dumps([_value_token(v) for v in row],
+                                     separators=(",", ":"), ensure_ascii=False)
+                row_hashes.append(hashlib.sha256(encoded.encode("utf-8")).hexdigest())
+            row_hashes.sort()  # order-independent, duplicates remain represented
+            tables[name] = {
+                "count": len(row_hashes),
+                "rows_sha256": hashlib.sha256(
+                    "\n".join(row_hashes).encode("ascii")).hexdigest(),
+                "columns": [list(row) for row in con.execute(
+                    f"PRAGMA table_info({_quote_identifier(name)})")],
+            }
+        pragmas = {name: con.execute(f"PRAGMA {name}").fetchone()[0]
+                   for name in ("application_id", "user_version", "page_size", "encoding")}
+    return {"schema": schema, "tables": tables, "pragmas": pragmas}
+
+
+def _write_json_durable(path: Path, payload: dict) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_suffix(path.suffix + ".tmp")
+    with open(temporary, "w", encoding="utf-8") as handle:
+        json.dump(payload, handle, indent=2, sort_keys=True)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temporary, path)
+
+
+def _current_process_identity() -> tuple[int, str]:
+    from runlock import _process_start_identity
+    pid = os.getpid()
+    identity = _process_start_identity(pid)
+    if not identity:
+        raise DatabaseRecoveryError("cannot establish DB guard process identity")
+    return pid, identity
+
+
+def _same_live_process(pid: int, identity: str) -> bool:
+    from runlock import _process_start_identity
+    current = _process_start_identity(pid)
+    return current is not None and current == identity
+
+
+def _validate_snapshot(snapshot: dict, journal: Path | None = None) -> None:
+    """Reject malformed/path-redirecting journals before any restoration write."""
+    if snapshot.get("schema_version") != DB_GUARD_SCHEMA_VERSION:
+        raise DatabaseRecoveryError("unsupported database guard journal schema")
+    guard_id = snapshot.get("guard_id")
+    if not isinstance(guard_id, str) or not guard_id or not all(
+            char.isalnum() or char == "_" for char in guard_id):
+        raise DatabaseRecoveryError("invalid database guard id")
+    owner = snapshot.get("owner")
+    if (not isinstance(owner, dict) or not isinstance(owner.get("pid"), int)
+            or owner["pid"] <= 0 or not isinstance(owner.get("process_start_id"), str)
+            or not owner["process_start_id"]):
+        raise DatabaseRecoveryError("invalid database guard owner identity")
+    expected_sources = {name: path for name, path in _protected_databases()}
+    databases = snapshot.get("databases")
+    if not isinstance(databases, dict) or set(databases) != set(expected_sources):
+        raise DatabaseRecoveryError("database guard inventory is incomplete or unknown")
+    guard_root = _guard_dir().resolve()
+    expected_journal = guard_root / f"{guard_id}.active.json"
+    recorded_journal = Path(snapshot.get("journal", "")).resolve()
+    if recorded_journal != expected_journal or (journal and journal.resolve() != expected_journal):
+        raise DatabaseRecoveryError("database guard journal path is not contained")
+    for name, expected_source in expected_sources.items():
+        item = databases[name]
+        if not isinstance(item, dict) or "manifest" not in item:
+            raise DatabaseRecoveryError(f"invalid database guard entry: {name}")
+        if Path(item.get("source", "")).resolve() != expected_source:
+            raise DatabaseRecoveryError(f"protected database path redirected: {name}")
+        expected_backup = guard_root / f"{guard_id}.{name}.before.sqlite"
+        if Path(item.get("backup", "")).resolve() != expected_backup:
+            raise DatabaseRecoveryError(f"backup path redirected: {name}")
+
+
+def _cleanup_snapshot(snapshot: dict) -> None:
+    for item in snapshot["databases"].values():
+        Path(item["backup"]).unlink(missing_ok=True)
+    Path(snapshot["journal"]).unlink(missing_ok=True)
+
+
+def _preserve_and_restore(snapshot: dict, context: str,
+                          changed: dict, *, recovery: bool = False) -> Path:
+    forensic = _guard_dir() / "forensics" / snapshot["guard_id"]
+    forensic.mkdir(parents=True, exist_ok=True)
+    errors = []
+    for name, item in snapshot["databases"].items():
+        source, backup = Path(item["source"]), Path(item["backup"])
+        before_copy = forensic / f"{name}.before.sqlite"
+        after_copy = forensic / f"{name}.after.sqlite"
+        try:
+            shutil.copy2(backup, before_copy)
+        except Exception as exc:
+            errors.append(f"preserve {name} before: {exc}")
+        try:
+            _sqlite_backup(source, after_copy)
+        except Exception:
+            try:
+                shutil.copy2(source, after_copy)
+            except Exception as exc:
+                errors.append(f"preserve {name} after: {exc}")
+        try:
+            if _database_manifest(backup) != item["manifest"]:
+                raise DatabaseRecoveryError("backup manifest does not match journal")
+            _restore_backup(backup, source)
+            if _database_manifest(source) != item["manifest"]:
+                raise DatabaseRecoveryError("restored manifest does not match snapshot")
+        except Exception as exc:
+            errors.append(f"restore {name}: {exc}")
+    report = forensic / "incident.json"
+    _write_json_durable(report, {
+        "schema_version": DB_GUARD_SCHEMA_VERSION,
+        "guard_id": snapshot["guard_id"], "context": context,
+        "recovery": recovery, "changed": changed, "errors": errors,
+        "owner": snapshot["owner"], "recorded_at": datetime.now().isoformat(),
+    })
+    if errors:
+        raise DatabaseRecoveryError(
+            f"database guard could not complete preservation/restoration: {errors}")
+    _cleanup_snapshot(snapshot)
+    return report
+
+
+def recover_database_mutation_guards() -> None:
+    """Restore journals whose exact owning OS process is positively gone/reused."""
+    directory = _guard_dir()
+    if not directory.is_dir():
+        return
+    my_pid, my_identity = _current_process_identity()
+    for journal in sorted(directory.glob("*.active.json")):
+        try:
+            snapshot = json.loads(journal.read_text(encoding="utf-8"))
+            _validate_snapshot(snapshot, journal)
+            owner = snapshot["owner"]
+            if owner == {"pid": my_pid, "process_start_id": my_identity}:
+                raise DatabaseRecoveryError(f"active nested/orphan guard owned by this process: {journal}")
+            if _same_live_process(owner["pid"], owner["process_start_id"]):
+                raise DatabaseRecoveryError(f"database guard still owned by a live process: {journal}")
+            _preserve_and_restore(snapshot, "crash recovery", {"state": "owner_gone"},
+                                  recovery=True)
+        except DatabaseRecoveryError:
+            raise
+        except Exception as exc:
+            raise DatabaseRecoveryError(f"unreadable recovery journal {journal}: {exc}") from exc
 
 
 def db_integrity_snapshot() -> dict:
-    """Call immediately BEFORE a worker subprocess runs."""
-    return _db_snapshot()
+    """Create full SQLite backups and a durable owner-identity recovery journal."""
+    recover_database_mutation_guards()
+    pid, identity = _current_process_identity()
+    guard_id = f"{datetime.now().strftime('%Y%m%dT%H%M%S%f')}_{uuid.uuid4().hex}"
+    directory = _guard_dir()
+    snapshot = {
+        "schema_version": DB_GUARD_SCHEMA_VERSION,
+        "guard_id": guard_id,
+        "owner": {"pid": pid, "process_start_id": identity},
+        "databases": {},
+        "journal": str(directory / f"{guard_id}.active.json"),
+    }
+    try:
+        for name, source in _protected_databases():
+            backup = directory / f"{guard_id}.{name}.before.sqlite"
+            _sqlite_backup(source, backup)
+            snapshot["databases"][name] = {
+                "source": str(source), "backup": str(backup),
+                "manifest": _database_manifest(backup),
+            }
+        _write_json_durable(Path(snapshot["journal"]), snapshot)
+        _validate_snapshot(snapshot, Path(snapshot["journal"]))
+        return snapshot
+    except Exception:
+        for item in snapshot["databases"].values():
+            Path(item["backup"]).unlink(missing_ok=True)
+        raise
 
 
 def db_integrity_check(before: dict, context: str) -> None:
-    """Call immediately AFTER a worker subprocess returns, BEFORE the orchestrator's own
-    ledger.finish_task() write. See docs/INCIDENTS.md 2026-07-18 for why this exists and
-    docs/HARDENING.md F1/H2 for why it is provenance-based (run_id) rather than a blind
-    count comparison: the earlier count-only version deleted a legitimate CONCURRENT
-    process's rows and raised a false alarm about it, proven on DB copies 2026-07-19.
-
-    For tasks/facts: only rows with id > snapshot's max_id AND run_id IS NULL are
-    quarantined -- a concurrent legitimate insert (valid run_id) is left untouched.
-    For the other four tables (never written by the live worker path, and not
-    run_id-tracked): unchanged blind behavior, now safe in practice because H1 serializes
-    orchestrator processes."""
-    import json as _json
-    after = _db_snapshot()
-    changed = {k: (before[k], after[k]) for k in after if after[k] != before[k]}
+    """Compare full state, preserve evidence, restore, and raise on any mutation."""
+    _validate_snapshot(before, Path(before.get("journal", "")))
+    pid, identity = _current_process_identity()
+    if before.get("owner") != {"pid": pid, "process_start_id": identity}:
+        raise DatabaseRecoveryError("DB snapshot owner process identity mismatch")
+    changed = {}
+    for name, item in before["databases"].items():
+        try:
+            after = _database_manifest(Path(item["source"]))
+            if after != item["manifest"]:
+                changed[name] = {"before": item["manifest"], "after": after}
+        except Exception as exc:
+            changed[name] = {"before": item["manifest"], "after_error": repr(exc)}
     if not changed:
+        _cleanup_snapshot(before)
         return
-    dump = {"context": context, "changed": changed, "quarantined_rows": {}, "spared_rows": {}}
-    any_quarantined = False
-    for key, (b, a) in changed.items():
-        if a["count"] <= b["count"]:
-            continue  # a decrease is not a worker-write; leave it, just recorded above
-        dbname, table = key.split(".", 1)
-        path = ledger.LEDGER_DB if dbname == "ledger" else ROOT / "memory" / "ledgerbook.db"
-        with sqlite3.connect(path, timeout=30) as c:
-            c.row_factory = sqlite3.Row
-            id_col = _PROVENANCE_TABLES.get(table, "id")
-            new_rows = c.execute(
-                f"SELECT * FROM {table} WHERE {id_col} > ?", (b["max_id"],)).fetchall()
-            if table in _PROVENANCE_TABLES:
-                bad = [r for r in new_rows if r["run_id"] is None]
-                good = [r for r in new_rows if r["run_id"] is not None]
-                if good:
-                    dump["spared_rows"][key] = [dict(r) for r in good]
-                    log(f"{context}: {len(good)} new {table} row(s) have valid run_id "
-                       f"(concurrent legitimate run) -- spared")
-            else:
-                bad = new_rows  # unchanged legacy behavior for non-provenance tables
-            if not bad:
-                continue
-            any_quarantined = True
-            dump["quarantined_rows"][key] = [dict(r) for r in bad]
-            ids = [r[id_col] for r in bad]
-            c.executemany(f"DELETE FROM {table} WHERE {id_col}=?", [(i,) for i in ids])
-    if not any_quarantined:
-        return  # every new row had valid provenance -- not an incident, nothing to log loudly
-    log(f"INTEGRITY VIOLATION during {context}: unauthorized DB writes detected {changed}")
-    RUNS.mkdir(exist_ok=True)
-    qpath = RUNS / f"quarantine_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json"
-    qpath.write_text(_json.dumps(dump, indent=2, default=str), encoding="utf-8")
-    log(f"quarantined unauthorized rows -> {qpath.name}; reverted DB to pre-call state")
-    escalate(f"worker wrote directly to a database during {context} -- quarantined, "
-            f"see {qpath.name}. Toolset restriction is NOT reliable in this Hermes "
-            f"version; this guard is the real containment.")
+    report = _preserve_and_restore(before, context, changed)
+    log(f"INTEGRITY VIOLATION during {context}: database state restored; evidence={report}")
+    escalate(f"worker mutated a protected database during {context}; full pre/post "
+             f"forensics preserved at {report} and the snapshot was restored")
+    raise DatabaseMutationViolation(
+        f"unauthorized database mutation during {context}; restored from snapshot")
+
+
+class DatabaseMutationGuard(AbstractContextManager):
+    """Context manager protecting all databases across one untrusted call."""
+
+    def __init__(self, context: str):
+        self.context = context
+        self.snapshot: dict | None = None
+
+    def __enter__(self):
+        self.snapshot = db_integrity_snapshot()
+        return self
+
+    def __exit__(self, exc_type, exc, traceback):
+        if self.snapshot is None:
+            raise DatabaseRecoveryError("database guard exited without a snapshot")
+        db_integrity_check(self.snapshot, self.context)
+        return False
 
 
 # H9 / F14 (docs/HARDENING.md): the worker holds write_file/edit_file/terminal/python/patch
@@ -557,6 +756,15 @@ def fs_integrity_check(before: dict, context: str) -> None:
 
 def preflight() -> bool:
     import urllib.request
+    try:
+        # Recovery must precede every scheduler/ledger read or write. Deferring
+        # this until the next worker snapshot could let crash-window tampering
+        # influence admission and then overwrite legitimate reconciliation.
+        recover_database_mutation_guards()
+    except DatabaseRecoveryError as exc:
+        log(f"PREFLIGHT FAIL: database guard recovery is not provably safe ({exc})")
+        escalate(f"batch run aborted: database recovery requires operator review ({exc})")
+        return False
     try:
         urllib.request.urlopen("http://127.0.0.1:11434/api/tags", timeout=5)
         return True

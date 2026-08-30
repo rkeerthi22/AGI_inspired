@@ -36,11 +36,14 @@ import os
 import re
 import subprocess
 import shutil
+from dataclasses import dataclass
 
 # Paths and logging are shared via runtime_context.py (Move 5a) so every
 # orchestrator module writes to the same run-scoped log stream.
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from runtime_context import ROOT, log  # noqa: E402
+import provider_chat as provider_transport  # noqa: E402
+import trajectory  # noqa: E402 — P0 unified task trace
 import yaml  # for load_fallback_chain()
 
 # Module constants needed by the moved functions.
@@ -74,9 +77,13 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     executable = Path(hermes_exe)
     venv_python = executable.with_name("python.exe" if sys.platform == "win32" else "python")
     launcher = Path(__file__).resolve().with_name("controlled_hermes.py")
-    cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", model_cfg["provider"],
+    # Harness provider identities stay provider-neutral; transports may expose
+    # their own canonical selector (Hermes named custom providers use custom:<slug>).
+    hermes_provider = model_cfg.get("hermes_provider", model_cfg["provider"])
+    cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", hermes_provider,
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
     env = dict(os.environ)
+    env.update(provider_transport.authentication_env_from_config(model_cfg))
     # F66: this launcher is used only for policy-approved research workers.
     # Authorize a dedicated local headless browser instead of attaching to the
     # user's Chrome (which requires interactive remote-debugging approval).
@@ -91,12 +98,23 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     usage = {}
     if usage_path.exists():
         usage = json.loads(usage_path.read_text(encoding="utf-8"))
+    # Preserve process-level failure evidence. Hermes may report transport/auth
+    # errors only on stderr; reducing that to empty stdout misclassifies provider
+    # capacity as a mission-quality failure.
+    process_returncode = int(getattr(proc, "returncode", 0) or 0)
+    if process_returncode:
+        usage["process_returncode"] = process_returncode
+    process_error = getattr(proc, "stderr", "") or ""
+    if process_error:
+        usage["process_error"] = process_error.strip()[:2000]
     return (proc.stdout or "").strip(), usage
 
 
 def ollama_chat(model: str, prompt: str, timeout: int = 300,
                 trace_path: Path | None = None,
-                usage_out: dict | None = None) -> str:
+                usage_out: dict | None = None,
+                provider: str = "ollama",
+                **request_options) -> str:
     """Tool-free call for the critic (no web needed, cheaper than a hermes session).
 
     glm-5.2:cloud returns its full chain-of-thought in `message.thinking` on EVERY
@@ -120,19 +138,13 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300,
     changed return type, so the four other call sites keep working unmodified (same
     shape as `trace_path` above).
     """
-    import urllib.request
-    body = json.dumps({"model": model, "messages": [{"role": "user", "content": prompt}],
-                       "stream": False}).encode()
-    req = urllib.request.Request("http://127.0.0.1:11434/api/chat", data=body,
-                                 headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        payload = json.loads(r.read())
-    msg = payload.get("message", {})
+    result = provider_transport.chat(provider_transport.ChatRequest(
+        provider=provider, model=model, prompt=prompt, timeout_seconds=timeout,
+        **request_options))
     if usage_out is not None:
-        usage_out["input_tokens"] = int(payload.get("prompt_eval_count") or 0)
-        usage_out["output_tokens"] = int(payload.get("eval_count") or 0)
+        usage_out.update(result.usage)
     if trace_path is not None:
-        thinking = (msg.get("thinking") or "").strip()
+        thinking = result.reasoning
         if thinking:
             # Never let an audit-trail write failure kill a real run.
             try:
@@ -142,7 +154,7 @@ def ollama_chat(model: str, prompt: str, timeout: int = 300,
                     encoding="utf-8")
             except Exception as e:
                 log(f"reasoning trace not persisted to {trace_path.name} ({e})")
-    return msg.get("content", "")
+    return result.content
 
 
 # ── F9 cross-provider failover (docs/HARDENING.md) ──────────────────────────────
@@ -190,7 +202,9 @@ def _is_local_model(model_cfg: dict) -> bool:
 
 def load_fallback_chain() -> list[dict]:
     cfg = yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))
-    return cfg.get("fallback_chain") or []
+    providers = cfg.get("providers") or {}
+    return [{**providers.get(item.get("provider"), {}), **item}
+            for item in (cfg.get("fallback_chain") or [])]
 
 
 def _quota_group(cfg: dict) -> str | None:
@@ -287,26 +301,54 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
         return "", {}, worker_cfg, True
     out, usage, cfg_used = "", {}, candidates[0]
     dead_groups: set[str] = set()          # F39: quota pools already known exhausted
+    tw = trajectory.active()                # P0: may be None if called outside a task
     for i, cfg in enumerate(candidates):
         grp = _quota_group(cfg)
         if grp and grp in dead_groups:
             log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
                 f"({i+1}/{len(candidates)}) — quota group '{grp}' already exhausted")
+            if tw:
+                tw.provider_skip(cfg["provider"], cfg["model"],
+                    reason=f"quota group '{grp}' exhausted", rung=i + 1,
+                    total_rungs=len(candidates))
             continue
         if not _fits_context(cfg, prompt):          # F50
             log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
                 f"({i+1}/{len(candidates)}) — {_context_skip_note(cfg, prompt)}")
+            if tw:
+                tw.provider_skip(cfg["provider"], cfg["model"],
+                    reason=_context_skip_note(cfg, prompt), rung=i + 1,
+                    total_rungs=len(candidates))
             continue
+        if i == 0 and tw:
+            tw.provider_selected(cfg["provider"], cfg["model"],
+                                 rung=1, total_rungs=len(candidates))
+        elif i > 0 and tw:
+            tw.failover_attempted(candidates[i - 1]["provider"],
+                candidates[i - 1]["model"], cfg["provider"], cfg["model"],
+                reason="quota_exhausted", rung=i + 1)
         attempt_path = usage_path if i == 0 else usage_path.with_name(
             f"{usage_path.stem}_fallback{i}{usage_path.suffix}")
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else WORKER_TIMEOUT_S
         out, usage = hermes_worker(prompt, cfg, attempt_path, timeout=timeout)
         cfg_used = cfg
-        if not is_quota_error(out):
-            if i > 0:
+        combined_error = f"{out} {usage.get('process_error', '')}".strip()
+        if not is_quota_error(combined_error):
+            if i > 0 and not worker_failed(out, usage):
                 log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
                    f"(rung {i+1}/{len(candidates)})")
+            elif i > 0:
+                log(f"{log_prefix}: failover returned unusable output on "
+                    f"{cfg['provider']}/{cfg['model']} (rung {i+1}/{len(candidates)})")
+                if tw:
+                    tw.provider_failed(cfg["provider"], cfg["model"],
+                        reason="unusable_output", rung=i + 1,
+                        total_rungs=len(candidates))
             return out, usage, cfg_used, False
+        if tw:
+            tw.provider_failed(cfg["provider"], cfg["model"],
+                reason="quota_exhausted", rung=i + 1,
+                total_rungs=len(candidates))
         if grp:
             dead_groups.add(grp)
         more = i + 1 < len(candidates)
@@ -316,9 +358,22 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
     return out, usage, cfg_used, True
 
 
+@dataclass(frozen=True)
+class SynthesisOutcome:
+    output: str | None
+    model_cfg: dict
+    exhausted: bool
+    exhaustion_reason: str | None = None
+
+    def __iter__(self):
+        yield self.output
+        yield self.model_cfg
+        yield self.exhausted
+
+
 def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
                             usage_out: dict | None = None
-                            ) -> tuple[str | None, dict, bool]:
+                            ) -> SynthesisOutcome:
     """ollama_chat() with the same F9 failover, for synthesis's tool-free HTTP call
     (urllib, not the hermes CLI subprocess) -- quota shows up as HTTPError code 429
     here, not as text in a subprocess reply, so the detection differs from
@@ -329,6 +384,8 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
     candidates = _failover_candidates(worker_cfg)
     cfg_used = candidates[-1]
     dead_groups: set[str] = set()          # F39: quota pools already known exhausted
+    quota_seen = False
+    context_skips = 0
     for i, cfg in enumerate(candidates):
         grp = _quota_group(cfg)
         if grp and grp in dead_groups:
@@ -336,28 +393,51 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
                 f"({i+1}/{len(candidates)}) — quota group '{grp}' already exhausted")
             continue
         if not _fits_context(cfg, prompt):          # F50
+            context_skips += 1
             log(f"{log_prefix}: skipping {cfg['provider']}/{cfg['model']} "
                 f"({i+1}/{len(candidates)}) — {_context_skip_note(cfg, prompt)}")
             continue
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else 600
         cfg_used = cfg
         try:
+            provider_options = provider_transport.options_from_config(cfg, "synthesis")
             out = ollama_chat(cfg["model"], prompt, timeout=timeout,
-                              usage_out=usage_out)   # F33: carry consumption out
-            if i > 0:
+                              **provider_options, usage_out=usage_out)
+            if i > 0 and out.strip():
                 log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
                    f"(rung {i+1}/{len(candidates)})")
-            return out, cfg, False
+            elif i > 0:
+                log(f"{log_prefix}: failover returned zero-length output on "
+                    f"{cfg['provider']}/{cfg['model']} (rung {i+1}/{len(candidates)})")
+            return SynthesisOutcome(out, cfg, False)
+        except provider_transport.ProviderChatError as e:
+            if e.category not in {provider_transport.ErrorCategory.QUOTA,
+                                  provider_transport.ErrorCategory.RATE_LIMIT}:
+                raise
+            quota_seen = True
+            if grp:
+                dead_groups.add(grp)
+            more = i + 1 < len(candidates)
+            log(f"{log_prefix}: quota error ({e.category.value}) on "
+                f"{cfg['provider']}/{cfg['model']} ({i+1}/{len(candidates)})" +
+                (" -- trying next" if more else " -- chain exhausted"))
         except urllib.error.HTTPError as e:
             if e.code != 429:
                 raise
+            quota_seen = True
             if grp:
                 dead_groups.add(grp)
             more = i + 1 < len(candidates)
             log(f"{log_prefix}: quota error (HTTP 429) on {cfg['provider']}/{cfg['model']} "
                f"({i+1}/{len(candidates)})" +
                (" -- trying next" if more else " -- chain exhausted"))
-    return None, cfg_used, True
+    if quota_seen and context_skips:
+        reason = "mixed_quota_context"
+    elif context_skips:
+        reason = "context_capacity"
+    else:
+        reason = "quota"
+    return SynthesisOutcome(None, cfg_used, True, reason)
 
 
 
@@ -377,13 +457,14 @@ def worker_failed(out: str, usage: dict) -> bool:
     # alone. usage.get("failed") IS trusted (an explicit signal), plus real output-text
     # evidence (either a short/empty reply, or an actual error string) -- never a
     # metadata flag whose meaning we haven't confirmed.
-    if usage.get("failed"):
+    if usage.get("failed") or int(usage.get("process_returncode") or 0) != 0:
         return True
     if not out or len(out.strip()) < 50:
         return True  # empty/near-empty is a real failure regardless of any flag
     low = out.lower()
     return any(s in low for s in ("api call failed", "connection error",
-                                  "connection refused", "traceback (most recent"))
+                                  "connection refused", "finalization failed",
+                                  "traceback (most recent"))
 
 
 # ── Worker-output post-processing ─────────────────────────────────────────────

@@ -26,6 +26,22 @@ def merge_finalization_usage(usage: dict, final_usage: dict) -> dict:
     return merged
 
 
+def finalizer_provider(hermes_provider: str | None) -> str:
+    """Translate Hermes transport selectors to harness provider identities."""
+    mapping = {"custom:byteplus-coding": "byteplus_coding"}
+    value = (hermes_provider or "ollama").strip().lower()
+    return mapping.get(value, value)
+
+
+def finalizer_call_options(argv: list[str]) -> dict[str, str]:
+    """Build finalizer kwargs from the exact Hermes research argv."""
+    selected = next((argv[i + 1] for i, arg in enumerate(argv[:-1])
+                     if arg == "--provider"), "ollama")
+    provider = finalizer_provider(selected)
+    return ({"provider": provider, "purpose": "retrieval_finalization"}
+            if provider != "ollama" else {})
+
+
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run one harness-controlled Hermes research turn")
     parser.add_argument("-z", "--oneshot", required=True, help="research objective")
@@ -106,18 +122,32 @@ def main(argv: list[str] | None = None) -> int:
         output_tokens=int(research_usage.get("output_tokens") or 0),
         total_tokens=int(research_usage.get("total_tokens") or 0),
     )
+    # A retrieval controller changes presentation, not process semantics.  Never
+    # let its evidence-only finalizer turn a failed Hermes research process into
+    # a successful deliverable.  stdout was intentionally buffered above; emit
+    # it now, while stderr has remained attached to the caller throughout.
+    if rc:
+        print(captured.getvalue(), end="")
+        research_usage["process_returncode"] = int(rc)
+        research_usage["failed"] = True
+        if usage_path:
+            usage_path.write_text(json.dumps(research_usage, indent=2) + "\n",
+                                  encoding="utf-8")
+        return int(rc)
     controller.finalization_started()
     final_usage: dict[str, int] = {}
     success = False
     reason = ""
     try:
         from execution import ollama_chat
+        final_options = finalizer_call_options(original_args)
         final = ollama_chat(
             next((original_args[i + 1] for i, arg in enumerate(original_args[:-1])
                   if arg in {"-m", "--model"}), ""),
             controller.finalization_prompt(mission),
             timeout=300,
             usage_out=final_usage,
+            **final_options,
         ).strip()
         if not final:
             reason = "finalizer returned empty output"
@@ -138,7 +168,9 @@ def main(argv: list[str] | None = None) -> int:
         usage = merge_finalization_usage(research_usage, final_usage)
         usage_path.write_text(json.dumps(usage, indent=2) + "\n", encoding="utf-8")
     print(final)
-    return 0
+    # A bounded failure is useful evidence, but it is not a successful worker
+    # deliverable and must reach the orchestrator as infrastructure failure.
+    return 0 if success else 70
 
 
 if __name__ == "__main__":

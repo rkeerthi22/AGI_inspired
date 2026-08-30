@@ -48,6 +48,12 @@ import policy  # noqa: F401 -- used via policy.<name>(...)
 import prompts  # noqa: F401 -- used via prompts.<name>(...)
 import scheduler  # noqa: F401 -- used via scheduler.<name>(...)
 
+
+def _status_for_critic_verdict(verdict: str) -> str:
+    """Keep infrastructure unavailability distinct from content rejection."""
+    return ("done" if verdict == "pass" else
+            "infra_failed" if verdict == "infra_failed" else "failed")
+
 # ── Constants owned by workflow.py ─────────────────────────────────────
 # (Operator lock: only CANARIES / MAX_RETRIES_PER_FIRE /
 #  REPEATED_FAILURE_THRESHOLD move here. SYNTHESIS_MAX_BRIEFS, FACT_LEDGER_CAP,
@@ -142,9 +148,10 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         # no longer needs its own e.code==429 case -- that path is handled before it
         # could reach here.
         syn_usage: dict = {}
-        out, model_used_cfg, exhausted = execution.synthesis_with_failover(
+        synthesis_result = execution.synthesis_with_failover(
             prompt, worker_cfg, log_prefix=f"task {tid} (synthesis)",
             usage_out=syn_usage)
+        out, model_used_cfg, exhausted = synthesis_result
     except urllib.error.HTTPError as e:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis HTTP {e.code}",
@@ -157,12 +164,17 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         rc.log(f"task {tid}: infra_failed ({e})"); return "infra_failed"
 
     if exhausted:
-        ledger.finish_task(tid, artifacts=[], status="quota_wait",
-                           critic_notes="quota/usage limit on every model in the "
-                                        "fallback chain — parked (§1.6, F9)",
-                           append_note=True)
-        rc.log(f"task {tid}: chain_exhausted (every fallback model quota-limited)")
-        return "chain_exhausted"
+        reason = getattr(synthesis_result, "exhaustion_reason", "quota")
+        quota_only = reason == "quota"
+        status = "quota_wait" if quota_only else "infra_failed"
+        note = ("quota/usage limit on every eligible model in the fallback chain"
+                if quota_only else
+                f"synthesis fallback unavailable ({reason}); at least one model was "
+                "ineligible for the prompt context")
+        ledger.finish_task(tid, artifacts=[], status=status,
+                           critic_notes=note, append_note=True)
+        rc.log(f"task {tid}: synthesis_exhausted ({reason})")
+        return "chain_exhausted" if quota_only else "capacity_exhausted"
     if model_used_cfg != worker_cfg:
         ledger.update_model_used(
             tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']} (tool-free synthesis)")
@@ -195,7 +207,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     # of verdict -- weekly_fitness() and is_first_run_for_mission() both read status
     # only, so a critic-REJECTED deliverable was silently indistinguishable from a
     # pass anywhere except the separate critic_verdict column nobody was filtering on.
-    status = "done" if verdict == "pass" else "failed"
+    status = _status_for_critic_verdict(verdict)
     # No fact extraction for synthesis — it derives from facts already in the ledger;
     # re-extracting would duplicate them.
     # F33 (docs/HARDENING.md): this call used to omit tokens entirely, so no synthesis
@@ -207,7 +219,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     tok_in = int(mission_usage.get("input_tokens") or 0) + int(row.get("tokens_in") or 0)
     tok_out = int(mission_usage.get("output_tokens") or 0) + int(row.get("tokens_out") or 0)
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(rc.ROOT))], cost_usd=0.0,
-                       tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
+                       tokens_in=tok_in, tokens_out=tok_out,
+                       critic_verdict=("needs_review" if verdict == "infra_failed" else verdict),
                        critic_notes=verdict_text[:500], status=status)
     if verdict == "fail":
         ledger.add_lesson(tid, f"[{mission['id']}] {verdict_text[:300]}", kind="failed")
@@ -326,7 +339,6 @@ def run_canaries(roles: dict) -> None:
                                trigger="cost_cap_breach")
             rc.log(f"{name}: quota_wait (token budget)"); continue
         ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
-        snapshot = integrity.db_integrity_snapshot()
         fs_snapshot = integrity.fs_integrity_snapshot()
         try:
             # F40 (docs/HARDENING.md): canaries NEVER run on a local model. Their green
@@ -339,15 +351,20 @@ def run_canaries(roles: dict) -> None:
             # scoreable content failures and cost a skill. Excluded, a quota-exhausted
             # canary parks instead — week_pending rises, the rollback gate stays shut
             # (F37), and the skill survives to be judged on real data.
-            out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
-                prompt, worker_cfg, rc.RUNS / f"canary_{name}.usage.json",
-                log_prefix=f"canary {name}", allow_local=False)
+            with integrity.DatabaseMutationGuard(f"canary {name}"):
+                out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
+                    prompt, worker_cfg, rc.RUNS / f"canary_{name}.usage.json",
+                    log_prefix=f"canary {name}", allow_local=False)
         except subprocess.TimeoutExpired:
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes="canary timeout",
                            append_note=True)
             rc.log(f"{name}: infra_failed (timeout)"); continue
-        integrity.db_integrity_check(snapshot, context=f"canary {name}")
+        except integrity.DatabaseMutationViolation as exc:
+            ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               critic_notes=f"database containment violation: {exc}",
+                               append_note=True)
+            rc.log(f"{name}: infra_failed (database containment violation)"); continue
         integrity.fs_integrity_check(fs_snapshot, context=f"canary {name}")
         if exhausted:
             tok_in, tok_out = scheduler.accumulated_tokens(usage, prior_in, prior_out)
@@ -357,7 +374,7 @@ def run_canaries(roles: dict) -> None:
                                             "— canary parked (F9)",
                            append_note=True)
             rc.log(f"{name}: quota_wait (fallback chain exhausted)"); continue
-        if model_used_cfg != worker_cfg:
+        if model_used_cfg != worker_cfg and not execution.worker_failed(out, usage):
             ledger.update_model_used(tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']}")
             integrity.escalate(f"canary {name}: completed via failover to {model_used_cfg['provider']}/"
                                f"{model_used_cfg['model']} after quota exhaustion on the primary worker",

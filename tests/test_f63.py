@@ -13,7 +13,8 @@ from retrieval_progress import (  # noqa: E402
     tool_stage,
 )
 import execution  # noqa: E402
-from controlled_hermes import merge_finalization_usage  # noqa: E402
+from controlled_hermes import (finalizer_call_options, finalizer_provider,
+                               merge_finalization_usage)  # noqa: E402
 
 
 checks = 0
@@ -213,6 +214,11 @@ merged = merge_finalization_usage(
 check("final usage merged", merged,
       {"input_tokens": 130, "output_tokens": 30, "total_tokens": 160,
        "api_calls": 11, "retrieval_finalization_calls": 1})
+check("Hermes BytePlus selector maps to provider-neutral finalizer",
+      finalizer_provider("custom:byteplus-coding"), "byteplus_coding")
+check("controlled Hermes passes BytePlus provider into finalization",
+      finalizer_call_options(["-z", "ping", "--provider", "custom:byteplus-coding"]),
+      {"provider": "byteplus_coding", "purpose": "retrieval_finalization"})
 
 # The rejection ceiling is global, not a streak that successful work can reset.
 separated = RetrievalProgressController(policy)
@@ -252,6 +258,7 @@ audit_attempt.write_text("stale prior attempt\n", encoding="utf-8")
 captured = {}
 real_which = execution.shutil.which
 real_run = execution.subprocess.run
+real_auth_env = execution.provider_transport.authentication_env_from_config
 try:
     execution.shutil.which = lambda name: str(
         Path("C:/Hermes/venv/Scripts/hermes.exe"))
@@ -264,8 +271,11 @@ try:
         return Result()
 
     execution.subprocess.run = fake_run
+    execution.provider_transport.authentication_env_from_config = lambda cfg: {
+        "ARK_API_KEY": "test-only-placeholder"}
     out, measured = execution.hermes_worker(
-        "mission", {"provider": "p", "model": "m"}, usage)
+        "mission", {"provider": "p", "model": "m",
+                    "authentication_reference": "env:ARK_API_KEY"}, usage)
     check("worker output preserved", out, "controlled output")
     check("missing usage remains empty", measured, {})
     check("venv Python selected", captured["cmd"][0].endswith("python.exe"), True)
@@ -274,10 +284,13 @@ try:
     check("per-attempt audit injected",
           captured["kwargs"]["env"]["HARNESS_RETRIEVAL_AUDIT"].endswith(
               "test_f63.usage.retrieval.jsonl"), True)
+    check("declared provider credential injected into Hermes child only",
+          captured["kwargs"]["env"].get("ARK_API_KEY"), "test-only-placeholder")
     check("prior attempt audit removed before launch", audit_attempt.exists(), False)
 finally:
     execution.shutil.which = real_which
     execution.subprocess.run = real_run
+    execution.provider_transport.authentication_env_from_config = real_auth_env
     usage.unlink(missing_ok=True)
     audit_attempt.unlink(missing_ok=True)
 

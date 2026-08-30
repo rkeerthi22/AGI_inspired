@@ -82,16 +82,16 @@ with sqlite3.connect(tmp) as c:
 check("explicit interventions= overwrites", r[0], 7)
 check("explicit intervention_types= overwrites", json.loads(r[1]), ["manual"])
 
-print("\n=== 5. fitness reports WHICH terms are live, and the free floor ===")
+print("\n=== 5. fitness reports WHICH terms are live without rewarding no-work failures ===")
 t2 = ledger.queue_task("m-test", "spec2", "criteria2")
 ledger.finish_task(t2, artifacts=[], status="done", critic_verdict="pass")
 f = ledger.weekly_fitness()
-check("cost is still not measurable (Ollama reports $0)", f["cost_measured"], False)
-check("...so 0.10 is awarded for free and is reported as floor",
-      f["fitness_floor"] >= 0.10, True)
+check("successful zero-cost work is a measured efficiency signal", f["cost_measured"], True)
+check("measured successful work is not reported as a free floor",
+      f["fitness_floor"] >= 0.10, False)
 check("intervention IS measured once a task carries one", f["intervention_measured"], True)
 
-# a window with no interventions at all must report the full 0.35 floor
+# A failed window with no tokens/evidence must receive no cost-efficiency credit.
 tmp2 = Path(tempfile.mkdtemp()) / "t2.db"
 sqlite3.connect(tmp2).executescript(
     (ROOT / "ledger" / "schema.sql").read_text(encoding="utf-8"))
@@ -99,11 +99,11 @@ ledger.LEDGER_DB = tmp2
 t3 = ledger.queue_task("m-test", "s", "c")
 ledger.finish_task(t3, artifacts=[], status="failed", critic_verdict="fail")
 f2 = ledger.weekly_fitness()
-check("a total-failure week still scores the 0.35 floor (the smoking gun)",
-      f2["fitness"], 0.35)
+check("a zero-evidence failure receives only the unmeasured intervention term",
+      f2["fitness"], 0.25)
 check("...and says so: nothing measured",
       (f2["intervention_measured"], f2["cost_measured"]), (False, False))
-check("...floor reported as exactly 0.35", f2["fitness_floor"], 0.35)
+check("...floor reported as exactly 0.25", f2["fitness_floor"], 0.25)
 check("W untouched — LOCKED", ledger.W,
       {"completion": 0.35, "accuracy": 0.30, "intervention": 0.25, "cost": 0.10})
 

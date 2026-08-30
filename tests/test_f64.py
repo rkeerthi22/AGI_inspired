@@ -29,6 +29,8 @@ def check(name, got, want=True):
 
 
 class Response:
+    headers = {}
+
     def __enter__(self):
         return self
 
@@ -46,7 +48,8 @@ class Response:
 with tempfile.TemporaryDirectory() as td:
     trace = Path(td) / "critic_reasoning.txt"
     usage = {}
-    with patch("urllib.request.urlopen", return_value=Response()):
+    with (patch("provider_chat.pause_engaged", return_value=False),
+          patch("urllib.request.urlopen", return_value=Response())):
         out = execution.ollama_chat("critic", "judge", trace_path=trace, usage_out=usage)
     check("critic response survives trace persistence", out, "VERDICT: PASS")
     check("reasoning trace is created", trace.is_file())

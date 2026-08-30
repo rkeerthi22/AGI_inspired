@@ -20,6 +20,17 @@ backups/
 # Track the folder READMEs so the layout survives a clone; ignore everything else.
 workspace/*
 !workspace/README.md
+# The validation cohort runner is maintained harness code, not scratch output.
+# Keep its sibling summaries/artifacts ignored.
+!workspace/validation/
+workspace/validation/*
+!workspace/validation/run_cohort.py
+!workspace/validation/cohort_isolation.py
+!workspace/validation/cohort_missions.json
+!workspace/validation/byteplus_connectivity_canary.py
+!workspace/validation/cohort_baseline_manifest.json
+!workspace/validation/cohort_prompt_template.txt
+_needs_review/
 inbox/*
 !inbox/README.md
 runs/

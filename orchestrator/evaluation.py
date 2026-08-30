@@ -63,8 +63,10 @@ from datetime import datetime
 
 import citecheck
 import execution
+import provider_chat
 import ledger
 import policy
+import trajectory
 
 from runtime_context import ROOT, RUNS, log
 
@@ -125,7 +127,13 @@ def _parse_json_array(text: str) -> list:
         return []
 
 
-def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
+def _provider_call_options(config: dict, purpose: str) -> dict:
+    return provider_chat.options_from_config(config, purpose)
+
+
+def extract_facts(tid: int, deliverable: str, manager_model: str,
+                  manager_provider: str = "ollama",
+                  manager_config: dict | None = None) -> int:
     """The loop's Memory-update stage: ONE tool-free manager call turns a PASSED
     deliverable into typed facts; the ORCHESTRATOR validates and writes them.
     Workers never touch ledgerbook.db (docs/INCIDENTS.md) — the extractor model
@@ -144,7 +152,10 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
         return 0
     policy.record_manager_call()
     try:
-        raw = execution.ollama_chat(manager_model, prompt)
+        config = manager_config or {"provider": manager_provider}
+        raw = execution.ollama_chat(
+            manager_model, prompt,
+            **_provider_call_options(config, "fact_extraction"))
     except Exception as e:
         log(f"task {tid}: fact-extraction call failed ({e}) — memory update skipped")
         return 0
@@ -165,11 +176,21 @@ def extract_facts(tid: int, deliverable: str, manager_model: str) -> int:
             date = str(it.get("retrieval_date", "")).strip() or str(datetime.now().date())
             c.execute("INSERT OR IGNORE INTO entities (type, name) VALUES (?,?)",
                       (etype, entity))
-            c.execute("INSERT INTO facts (entity, statement, provenance_url, provenance_date,"
-                      " confidence, status, source_task_id, run_id) "
-                      "VALUES (?,?,?,?,?,'candidate',?,?)",
-                      (entity, stmt, url, date, conf, tid, ledger.RUN_ID))
-            written += 1
+            existing = c.execute(
+                "SELECT 1 FROM facts WHERE statement=? AND source_task_id=?",
+                (stmt, tid),
+            ).fetchone()
+            if not existing:
+                c.execute("INSERT INTO facts (entity, statement, provenance_url, provenance_date,"
+                          " confidence, status, source_task_id, run_id) "
+                          "VALUES (?,?,?,?,?,'candidate',?,?)",
+                          (entity, stmt, url, date, conf, tid, ledger.RUN_ID))
+                written += 1
+    tw = trajectory.active()
+    if tw:
+        tw.facts_extracted(written, model=manager_model,
+                           provider=config.get("provider", manager_provider)
+                           if manager_config else manager_provider)
     return written
 
 
@@ -237,20 +258,29 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
                         "evidence": evidence}, indent=2) + "\n", encoding="utf-8")
     except Exception as e:
         log(f"citation evidence not persisted for task {row['task_id']} ({e})")
+    tw = trajectory.active()
+    if tw:
+        tw.citecheck_completed(summary["checked"], summary["dead"],
+                               summary["dead_frac"],
+                               hard_fail=citecheck.is_hard_fail(summary))
     if citecheck.is_hard_fail(summary):
         dead = [e["url"] for e in evidence if not e["reachable"]][:5]
         return _finish("fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
                                 f"URLs unreachable (dead_frac={summary['dead_frac']}): {dead}"))
 
     if policy.manager_call_budget_breached():
+        if tw:
+            tw.critic_evaluated("needs_review", model="manager_budget_breached", provider="")
         return _finish("needs_review", "manager-role call budget exhausted for today (policy.yaml "
                                        "cost_caps.manager_calls_per_day) -- critic skipped, not judged")
     policy.record_manager_call()
     model_usage: dict = {}
     usage["api_calls"] = 1
     try:
+        critic_cfg = roles["critic"]
+        call_options = _provider_call_options(critic_cfg, "critic")
         verdict_text = execution.ollama_chat(
-            roles["critic"]["model"],
+            critic_cfg["model"],
             "You are a strict critic judging a research analyst's TEXT deliverable.\n"
             "The criteria below are the mission's full spec, written for the system as a "
             "whole -- some lines describe things a SEPARATE orchestrator process handles "
@@ -287,9 +317,13 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
             # were only diagnosable because the one-sentence reason happened to name a
             # missing section. The full trace makes that reliable instead of lucky.
             trace_path=RUNS / f"task{row['task_id']}_critic_reasoning.txt",
-            usage_out=model_usage)
+            usage_out=model_usage,
+            **call_options)
     except Exception as e:
-        return _finish("needs_review", f"critic call failed: {e}")
+        if tw:
+            tw.critic_evaluated("infra_failed", model=critic_cfg.get("model", ""),
+                                provider=critic_cfg.get("provider", ""))
+        return _finish("infra_failed", f"critic model call failed ({e})")
     usage["input_tokens"] = int(model_usage.get("input_tokens") or 0)
     usage["output_tokens"] = int(model_usage.get("output_tokens") or 0)
 
@@ -299,8 +333,15 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     # ledger. An unparseable reply is now 'needs_review', never a silent fail.
     m = re.search(r"VERDICT:\s*(PASS|FAIL)", verdict_text, re.I)
     if not m:
+        if tw:
+            tw.critic_evaluated("needs_review", model=critic_cfg.get("model", ""),
+                                provider=critic_cfg.get("provider", ""))
         return _finish("needs_review", verdict_text[:500] + " [UNPARSEABLE VERDICT]")
-    return _finish(m.group(1).lower(), verdict_text)
+    parsed_verdict = m.group(1).lower()
+    if tw:
+        tw.critic_evaluated(parsed_verdict, model=critic_cfg.get("model", ""),
+                            provider=critic_cfg.get("provider", ""))
+    return _finish(parsed_verdict, verdict_text)
 
 
 def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dict:

@@ -1,0 +1,56 @@
+{
+  "cohort": "Real-mission validation cohort 2026-W36 (post-F66)",
+  "purpose": "Evaluate recovery, capability selection, efficiency, and outcome quality across materially different real missions.",
+  "deliverable_location": "workspace/shopify/<cohort_spec_id_slug>.md (harness writes here; cohort spec describes the required content).",
+  "specs": [
+    {
+      "id": "M1",
+      "type": "straightforward_research",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M1][straightforward-research] PromptHero (AI prompt community): current monthly active users, top 3 model categories by prompt volume, free vs paid split.",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] At least 2 distinct sources cited (PromptHero official + at least one independent: blog/review/aggregator)\n- [ ] MAU stated as a range or single number with confidence level\n- [ ] Top-3 model categories named\n- [ ] Free vs paid split stated\n- [ ] If MAU, model categories, or free/paid split data is not publicly available, explicitly declare it as unavailable with the specific source attempted and the reason\n- [ ] Every fact has: source URL + retrieval date + confidence 1-3\n- [ ] Gaps (if any) explicitly enumerated"
+    },
+    {
+      "id": "M2",
+      "type": "dynamic_browser_required",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M2][dynamic-browser] AIPRM pricing page: capture the full plan table (tier names + monthly AND annual prices + seat counts) including any current promo discount visible on the page.",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] At least 4 distinct plan tiers identified by name\n- [ ] Monthly price for each tier\n- [ ] Annual price for each tier (or explicit 'not shown' per tier)\n- [ ] Any current promo or discount visible on the page\n- [ ] Direct evidence from the canonical AIPRM pricing URL with retrieval date + confidence 3"
+    },
+    {
+      "id": "M3",
+      "type": "externally_blocked_source",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M3][blocked-source] PromptBase customer review sentiment: current average rating, sample of 3 distinct recent review themes, and any review volume trend over the last 6 months.",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] If G2/Trustpilot/Chrome-Web-Store are blocked, declare that explicitly\n- [ ] At least 3 independent third-party review sources attempted\n- [ ] Each attempted source noted as: rating-obtained / blocked / unavailable\n- [ ] If rating obtained: numeric + sample themes + trend\n- [ ] If rating not obtainable: explicit bounded-failure section naming every attempt\n- [ ] NO CAPTCHA/WAF-bypass attempts"
+    },
+    {
+      "id": "M4",
+      "type": "multi_source_synthesis",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M4][multi-source-synthesis] Build a 4-competitor snapshot table comparing AIPRM, PromptBase, PromptHero, and FlowGPT on: pricing tier, free vs paid, primary audience, and last public update.",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] All 4 competitors have all 4 columns filled OR an explicit gap per missing cell\n- [ ] At least 2 independent sources cited total\n- [ ] No fabricated data: every cell either has source URL or 'not available'\n- [ ] Confidence levels per cell where evidence is partial"
+    },
+    {
+      "id": "M5",
+      "type": "recovery_mission",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M5][recovery] FlowGPT homepage hero claim verification: confirm or refute FlowGPT's stated '50M+ prompts served' headline using at least one independent third-party source.",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] FlowGPT's official claim quoted verbatim with source URL + retrieval date\n- [ ] At least 1 independent third-party source consulted (Crunchbase, news article, LinkedIn post, blog)\n- [ ] Verdict: confirmed / unconfirmed / refuted, with evidence\n- [ ] If independent source is blocked or unavailable, declare it and report FlowGPT-only evidence as best available"
+    },
+    {
+      "id": "M6",
+      "type": "capability_selection",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M6][capability-selection] Identify the most-cited 'AI prompt library' tool on Hacker News in the last 90 days (by mention count). Compare with at least one other independent mention-count source.",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] Single tool identified by name as the most-mentioned\n- [ ] Mention count from HN source with retrieval date\n- [ ] At least 1 independent source consulted (HN Algolia, news aggregator, or manual Google search count)\n- [ ] If HN Algolia or independent search is blocked, declare blocked status and fall back to news/blog mentions"
+    },
+    {
+      "id": "M7",
+      "type": "partial_answer",
+      "mission_id": "001-shopify-competitor-intel",
+      "spec": "[cohort-2026-W36][M7][partial-answer] AI prompt marketplace landscape: produce a structured overview of the top 6 AI prompt marketplaces by 2026 with: name, founding year, primary content category, public funding status (if any), and current operational status (active/sunset/acquired).",
+      "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] At least 6 marketplaces named (some may be defunct, that's fine)\n- [ ] All 5 columns filled where data is publicly available\n- [ ] Where data is NOT publicly available: explicit 'not publicly disclosed' per cell, not fabricated\n- [ ] At least 2 independent sources per marketplace where possible\n- [ ] Defunct marketplaces noted with last-known activity date if known"
+    }
+  ]
+}

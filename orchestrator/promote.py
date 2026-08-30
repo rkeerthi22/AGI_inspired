@@ -170,7 +170,7 @@ def cmd_review(notify: bool, dry: bool) -> int:
 
     from batch_runner import load_roles  # late import: CLI-owned role loading
     from execution import ollama_chat
-    manager = load_roles()["manager"]["model"]
+    manager_cfg = load_roles()["manager"]
     CANDIDATES.mkdir(parents=True, exist_ok=True)
     drafted = []
     for mission, lessons in pool.items():
@@ -189,7 +189,9 @@ def cmd_review(notify: bool, dry: bool) -> int:
             "TITLE: <5-8 word imperative title>\nNOTE: <2-5 sentences, imperative, specific, "
             "no fluff>\nEVIDENCE: <comma-separated lesson ids that support it>")
         try:
-            out = ollama_chat(manager, prompt).strip()
+            from provider_chat import options_from_config
+            options = options_from_config(manager_cfg, "promotion_review")
+            out = ollama_chat(manager_cfg["model"], prompt, **options).strip()
         except Exception as e:
             _log(f"{mission}: review call failed ({e}) — will retry next Sunday")
             continue

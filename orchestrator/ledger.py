@@ -76,7 +76,7 @@ def queue_task(mission_id: str, spec: str, pass_criteria: str) -> int:
 # Note gemma's LOCAL_FALLBACK_TIMEOUT_S (3600s) already exceeds even this; a failed-over
 # local run can therefore still outlive its lease. Accepted for now (failover is rare and
 # escalates), but it is the next instance of this same coupling to fix.
-LEASE_SECONDS = 2400  # 40 min
+LEASE_SECONDS = 4200  # 70 min (> LOCAL_FALLBACK_TIMEOUT_S 3600s + buffer)
 MAX_TASK_ATTEMPTS = 3  # crash-loop cap: after this many interruptions, give up honestly
 
 
@@ -339,7 +339,11 @@ def weekly_fitness(week_start: str | None = None) -> dict:
     avg_cost = sum(r["cost_usd"] for r in terminal) / n_terminal if n_terminal else 0.0
     completion_rate = completed / n_total
     intervention_norm = min(1.0, interventions / n_terminal) if n_terminal else 0.0
-    cost_eff = min(1.0, COST_TARGET / avg_cost) if avg_cost > 0 else 1.0
+    has_work_signal = any(r["status"] == "done" or
+                          (r["tokens_in"] or 0) + (r["tokens_out"] or 0) > 0
+                          for r in terminal)
+    cost_eff = (min(1.0, COST_TARGET / avg_cost) if avg_cost > 0
+                else (1.0 if has_work_signal else 0.0))
     acc = accuracy if accuracy is not None else 0.0
     fitness = (W["completion"] * completion_rate + W["accuracy"] * acc +
                W["intervention"] * (1 - intervention_norm) + W["cost"] * cost_eff)
@@ -349,7 +353,8 @@ def weekly_fitness(week_start: str | None = None) -> dict:
         "dropped": dropped, "pending": pending,
         "accuracy": round(accuracy, 3) if accuracy is not None else None,
         "intervention_rate": round(intervention_norm, 3),
-        "avg_cost_usd": round(avg_cost, 4), "fitness": round(fitness, 3),
+        "avg_cost_usd": round(avg_cost, 4), "cost_efficiency": round(cost_eff, 3),
+        "fitness": round(fitness, 3),
         "spot_checked": len(spot),
         "spot_checked_ai": spot_checked_ai,
         # F53: which terms actually MEASURED something this window, and how much of the
@@ -363,10 +368,10 @@ def weekly_fitness(week_start: str | None = None) -> dict:
         # honesty fix F7/F45 made for vanishing denominators: the number is not wrong,
         # but it is not what it looks like. W is untouched -- LOCKED (§3.2).
         "intervention_measured": any(r["interventions"] for r in terminal),
-        "cost_measured": avg_cost > 0,
+        "cost_measured": avg_cost > 0 or has_work_signal,
         "fitness_floor": round(W["intervention"] * (1 - intervention_norm) * (0 if any(
             r["interventions"] for r in terminal) else 1)
-            + W["cost"] * (0 if avg_cost > 0 else cost_eff), 3),
+            + W["cost"] * (0 if avg_cost > 0 or has_work_signal else cost_eff), 3),
     }
 
 

@@ -18,6 +18,7 @@ import promote
 import prompts
 import runtime_context as rc
 import scheduler
+import trajectory
 import workflow
 from health_events import emit as emit_health_event
 
@@ -54,6 +55,7 @@ def _run_research_task(context: _TaskContext) -> str:
     """Execute a prepared research task through worker, critic, and ledger."""
     tid, mission, roles, row = (context.tid, context.mission,
                                 context.roles, context.row)
+    tw = trajectory.active()
 
     # Prediction Machine: record a prediction BEFORE the task runs (Â§predictâ†’actâ†’measureâ†’learn).
     # Fault-tolerant: if the prediction machine is unavailable, the harness runs normally.
@@ -108,6 +110,12 @@ def _run_research_task(context: _TaskContext) -> str:
             emit_health_event("prediction", "after_synthesis_completes", e,
                               task_id=tid, mission_id=mission["id"])
             pass
+        tw = trajectory.active()
+        if tw:
+            if synth_status == "done":
+                tw.task_completed("pass", synth_status)
+            else:
+                tw.task_failed(f"synthesis {synth_status}", failure_stage="synthesis")
         return synth_status
     # Promoted technique notes (Â§2.4): operator-approved, repo-versioned, capped ~2k.
     try:
@@ -204,6 +212,8 @@ def _run_research_task(context: _TaskContext) -> str:
         integrity.escalate(f"task {tid}: daily token budget exhausted, parked",
                  trigger="cost_cap_breach", task_id=tid)
         rc.log(f"task {tid}: quota_wait (token budget)")
+        if tw:
+            tw.task_failed("token budget exhausted", failure_stage="admission")
         return "quota_wait"
     # F24 (docs/HARDENING.md): admission control. The check above is a pure gate -- it
     # stops the next task only AFTER the cap is blown, which is how 2026-07-27 hit 360%
@@ -221,22 +231,34 @@ def _run_research_task(context: _TaskContext) -> str:
                 f"({policy.tokens_used_today():,} already spent) -- parked before starting",
                 trigger="cost_cap_breach", task_id=tid)
         rc.log(f"task {tid}: budget_skip (estimated {est:,} won't fit) â€” trying the next seed")
+        if tw:
+            tw.task_failed("estimated tokens exceed remaining daily budget",
+                           failure_stage="admission")
         return "budget_skip"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = rc.RUNS / f"task{tid}_worker.usage.json"
-    snapshot = integrity.db_integrity_snapshot()
     fs_snapshot = integrity.fs_integrity_snapshot()
     try:
-        out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
-            prompt, worker_cfg, usage_path, log_prefix=f"task {tid}")
+        with integrity.DatabaseMutationGuard(f"task {tid} worker call"):
+            out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
+                prompt, worker_cfg, usage_path, log_prefix=f"task {tid}")
     except subprocess.TimeoutExpired:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes="worker timeout",
                            append_note=True)
         rc.log(f"task {tid}: infra_failed (timeout)")
+        if tw:
+            tw.task_failed("worker timeout", failure_stage="execution")
+        return "infra_failed"
+    except integrity.DatabaseMutationViolation as exc:
+        ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                           critic_notes=f"database containment violation: {exc}",
+                           append_note=True)
+        rc.log(f"task {tid}: infra_failed (database containment violation)")
+        if tw:
+            tw.task_failed("database containment violation", failure_stage="execution")
         return "infra_failed"
 
-    integrity.db_integrity_check(snapshot, context=f"task {tid} worker call")
     integrity.fs_integrity_check(fs_snapshot, context=f"task {tid} worker call")
     # Persist the FULL raw output regardless of what happens next -- a misclassified
     # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
@@ -251,8 +273,10 @@ def _run_research_task(context: _TaskContext) -> str:
                                         "fallback chain â€” parked (Â§1.6, F9)",
                            append_note=True)
         rc.log(f"task {tid}: chain_exhausted (every fallback model quota-limited)")
+        if tw:
+            tw.task_failed("every fallback model quota-limited", failure_stage="execution")
         return "chain_exhausted"
-    if model_used_cfg != worker_cfg:
+    if model_used_cfg != worker_cfg and not execution.worker_failed(out, usage):
         # F9: keep provenance truthful and flag the degraded-model deliverable for
         # spot-check priority -- a failover completion is not a free pass.
         ledger.update_model_used(tid, f"{model_used_cfg['provider']}/{model_used_cfg['model']}")
@@ -266,11 +290,17 @@ def _run_research_task(context: _TaskContext) -> str:
                                        f"runs/task{tid}_worker_raw.txt): {out[:200]}",
                            append_note=True)
         rc.log(f"task {tid}: infra_failed ({out[:80]})")
+        if tw:
+            tw.task_failed("worker API failure", failure_stage="execution",
+                           detail=out[:200])
         return "infra_failed"
     if len(out) < 200:
         ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",
                            critic_notes=f"output too short ({len(out)} chars) â€” no deliverable")
         rc.log(f"task {tid}: failed (short output)")
+        if tw:
+            tw.task_failed("output too short", failure_stage="classification",
+                           detail=f"{len(out)} chars")
         return "failed"
 
     # F13 deny-list (docs/HARDENING.md): heuristic scan of the worker's OWN report
@@ -285,6 +315,9 @@ def _run_research_task(context: _TaskContext) -> str:
         integrity.escalate(f"task {tid}: worker output matched deny-list pattern(s) {deny_hits}",
                 trigger="deny_list_match", task_id=tid)
         rc.log(f"task {tid}: failed (deny-list match {deny_hits})")
+        if tw:
+            tw.task_failed("deny-list match", failure_stage="classification",
+                           detail=str(deny_hits))
         return "failed"
 
     return _record_outcome(context, out, usage, worker_cfg, scope_note,
@@ -310,13 +343,18 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                 trigger="pass_criteria_ambiguous", task_id=tid)
+    elif verdict == "infra_failed":
+        integrity.escalate(f"task {tid}: critic infrastructure unavailable -- "
+                           f"{verdict_text[:200]}",
+                trigger="model_infrastructure_failure", task_id=tid)
     # F18 (docs/HARDENING.md): status must reflect the verdict. Previously EVERY
     # resolved task landed status='done' regardless of critic_verdict -- proven live
     # 2026-07-24: task_id 20/21/22 all carry critic_verdict='fail' with status='done',
     # so weekly_fitness() (which reads only status) reported 100% completion on a week
     # where the TRUE pass rate was 0/10. needs_review is also not 'done' -- an
     # unjudged deliverable must not silently count as complete either.
-    status = "done" if verdict == "pass" else "failed"
+    status = ("done" if verdict == "pass" else
+              "infra_failed" if verdict == "infra_failed" else "failed")
 
     # F32 (docs/HARDENING.md), 2026-07-29: accumulate, don't replace. F21 made an
     # OMITTED token count preserve the prior attempt's; it does nothing for a retry that
@@ -329,7 +367,8 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
     tok_in, tok_out = scheduler.accumulated_tokens(
         mission_usage, row.get("tokens_in"), row.get("tokens_out"))
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(rc.ROOT))], cost_usd=0.0,
-                       tokens_in=tok_in, tokens_out=tok_out, critic_verdict=verdict,
+                       tokens_in=tok_in, tokens_out=tok_out,
+                       critic_verdict=("needs_review" if verdict == "infra_failed" else verdict),
                        critic_notes=verdict_text[:500], status=status)
 
     # Lesson capture (baseline weeks: harvest only, promotion stays OFF per Â§7):
@@ -339,9 +378,19 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
         workflow._check_repeated_failure(mission["id"])
 
     # Memory-update stage: only PASSED research deliverables become facts.
-    facts_n = evaluation.extract_facts(tid, out, roles["manager"]["model"]) if verdict == "pass" else 0
+    facts_n = evaluation.extract_facts(
+        tid, out, roles["manager"]["model"], roles["manager"].get("provider", "ollama"),
+        roles["manager"]
+    ) if verdict == "pass" else 0
     rc.log(f"task {tid}: {status} verdict={verdict} facts+{facts_n} "
         f"({dest.name}, in={tok_in} out={tok_out})")
+    tw = trajectory.active()
+    if tw:
+        if status == "done":
+            tw.task_completed(verdict, status, facts_extracted=facts_n)
+        else:
+            tw.task_failed(verdict_text[:200] if verdict_text else "unknown",
+                           failure_stage="evaluation")
 
     # Prediction Machine: record the actual outcome AFTER the task completes.
     # Fault-tolerant: if the prediction machine is unavailable, the harness runs normally.
@@ -359,6 +408,19 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
 
 def run_task(tid: int, mission: dict, roles: dict) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
-    row = _load_task(tid)
-    context = _prepare_task_input(tid, mission, roles, row)
-    return _run_research_task(context)
+    tw = trajectory.begin(tid, mission["id"])
+    try:
+        row = _load_task(tid)
+        worker_cfg = roles.get("worker", {})
+        tw.task_started(
+            spec=row.get("spec", ""),
+            worker_model=worker_cfg.get("model", ""),
+            worker_provider=worker_cfg.get("provider", ""),
+        )
+        context = _prepare_task_input(tid, mission, roles, row)
+        return _run_research_task(context)
+    except Exception as exc:
+        tw.task_failed(f"unhandled task runner exception: {exc}", failure_stage="task_runner")
+        raise
+    finally:
+        trajectory.end()

@@ -360,6 +360,32 @@ _live_after = _row_count()
 check("live ledgerbook row count unchanged across all sections",
       _live_after, _live_before)
 
+# 2k: Re-running extract_facts for the same task_id does not insert duplicate rows.
+mp = _Patch()
+tmp_root, cleanup = temp_root_with_ledgerbook()
+try:
+    mp.set(policy, "manager_call_budget_breached", lambda: False)
+    mp.set(policy, "record_manager_call", lambda: None)
+    canned = json.dumps([
+        {"entity": "Shopify", "entity_type": "competitor",
+         "statement": "Shopify launched Shop Pay in 2020",
+         "source_url": "https://shopify.com/shoppay",
+         "retrieval_date": "2026-08-30", "confidence": 3}
+    ])
+    calls_stub = patch_chat(mp, [canned, canned])
+    with silence_log():
+        written_first = br.extract_facts(tid=9200, deliverable="x" * 50, manager_model="m")
+        written_second = br.extract_facts(tid=9200, deliverable="x" * 50, manager_model="m")
+    check("first extract writes 1 fact", written_first, 1)
+    check("second extract for same task writes 0 duplicates", written_second, 0)
+    temp_lb = tmp_root / "memory" / "ledgerbook.db"
+    with sqlite3.connect(temp_lb, timeout=30) as c:
+        count = c.execute("SELECT COUNT(*) FROM facts WHERE source_task_id=9200").fetchone()[0]
+    check("total fact count in DB remains 1 after retry", count, 1)
+finally:
+    mp.undo()
+    cleanup()
+
 # §3. run_critic ───────────────────────────────────────────────────────────
 
 print("\n=== 3. run_critic LLM-call gating, parsing, scope/baseline, trace ===")
@@ -414,7 +440,7 @@ check("budget exhaustion text names the cause", "budget" in text.lower(), True)
 check("budget exhaustion skips the LLM", len(calls_stub.calls), 0)
 mp.undo()
 
-# 3c: Model-call failure returns needs_review.
+# 3c: Model-call failure is infrastructure, never a critic/content failure.
 mp = _Patch()
 mp.set(citecheck, "verify", lambda _: [])
 mp.set(citecheck, "summarize", lambda e: {"dead": 0, "checked": 0, "dead_frac": 0.0})
@@ -427,7 +453,7 @@ with silence_log():
         row=stub_row(), out="x", roles={"critic": {"model": "m"}},
         baseline=False, scope_note="",
     )
-check("model failure verdict is needs_review", verdict, "needs_review")
+check("model failure verdict is infra_failed", verdict, "infra_failed")
 check("model failure text names the error", "net down" in text, True)
 mp.undo()
 
