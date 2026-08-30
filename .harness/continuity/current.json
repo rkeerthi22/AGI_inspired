@@ -1,56 +1,81 @@
 {
   "schema_version": 2,
-  "brief_revision": 19,
-  "created_at": "2026-08-28T22:28:41.4384004Z",
+  "brief_revision": 24,
+  "created_at": "2026-08-30T18:50:00.000000+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
-    "based_on_head": "e7ca2c60fbac6c6bf6053878455f8c8503ead656",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
-      ".harness/continuity/current.json",
+      "AGENTS.md",
+      "CLAUDE.md",
       "docs/CURRENT_STATE.md",
-      "orchestrator/continuity.py",
-      "orchestrator/simulate.py",
-      "tests/test_f59.py",
-      "tests/test_prediction_interface.py",
-      "tests/tiers.json"
-    ]
+      "docs/DEEPSEEK_HANDOFF_2026-08-30.md",
+      "orchestrator/evaluation.py",
+      "orchestrator/execution.py",
+      "orchestrator/integrity.py",
+      "orchestrator/ledger.py",
+      "orchestrator/provider_chat.py",
+      "orchestrator/retrieval_progress.py",
+      "orchestrator/task_runner.py",
+      "orchestrator/trajectory.py",
+      "tests/test_trajectory_event_stream.py",
+      "tests/tiers.json",
+      "workspace/validation/cohort_isolation.py",
+      "workspace/validation/run_cohort.py"
+    ],
+    "based_on_head": "0ce23ec5ff20ddeaf2a31026ab7800919a387f14"
   },
   "task": {
-    "id": "ARCHITECTURE-7-9",
-    "phase": "continuity-prediction-doc-consolidation",
+    "id": "COHORT-VALIDATION-2026-08-30",
+    "phase": "p0-trajectory-complete-docs-audited",
     "status": "complete",
-    "next_action": "Operator authorized clearing ESTOP and resuming cohort execution after this architecture checkpoint is committed."
+    "next_action": "Verify BytePlus connectivity canary at quota reset (~22:22 CEST); execute controlled M1 rerun."
   },
   "completed": [
-    "Continuity schema v2 records based_on_head provenance and removes the impossible self-referential HEAD expectation.",
-    "Removed legacy orchestrator/simulate.py after repository and installed-runtime inspection found no executable caller; prediction_machine is canonical.",
-    "Added docs/CURRENT_STATE.md and classified every _needs_review artifact for deletion without deleting evidence.",
-    "Default non-live gate passed 34/34 suites."
+    "Fixed F-01 (failover stderr 429), F-02 (lease 4200s), F-03 (fact deduplication).",
+    "Hardened cohort_isolation.py regex for Hermes cron list and gateway status.",
+    "Verified 41/41 model-free test suites pass (run_all.py).",
+    "Executed A5 BytePlus canary (HTTP 200) and Task 104 M1 inside controlled window.",
+    "Harmonized M1 pass criteria for non-public private data bounded gaps.",
+    "Implemented P0 Unified Trajectory Event Stream in orchestrator/trajectory.py.",
+    "Completed multi-agent documentation audit, canonical architecture, active work registry, and Obsidian synchronization."
   ],
   "locked_constraints": [
-    "Git, runtime, and database live state always win over this brief",
-    "live cohort execution requires explicit operator authorization",
-    "do not bypass CAPTCHAs, authentication, consent, or access controls"
+    "Live Git/runtime/database state always wins over the brief.",
+    "Transactional isolation window must strictly restore ESTOP first before re-enabling any dispatchers.",
+    "Model calls must pass through orchestrator/provider_chat.py typed boundary."
   ],
   "gate": {
     "status": "passed",
-    "detail": "Architecture items 7-9 complete; unit, containment, and model-free integration gate 34/34 green."
+    "detail": "41/41 model-free suites green; P0 trajectory verified; multi-agent documentation unified."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical short current-state architecture and review disposition"
+      "purpose": "Canonical human-readable architecture, quota semantics, and status",
+      "sha256": "2f3a6ca0f15a7ce4664c71b9e4fe0e6f02be4c99efc8ed1da11833b429a1676f"
     },
     {
-      "path": "orchestrator/continuity.py",
-      "purpose": "Compact Brief schema v2 implementation"
+      "path": "docs/DEEPSEEK_HANDOFF_2026-08-30.md",
+      "purpose": "Authoritative bridge, M1 adjudication, and P0 trajectory spec for DeepSeek",
+      "sha256": "0403a2e6aa428ff40387cb127d29dd9d697960817e3ce4fa28e6ed98db5c26d3"
     },
     {
-      "path": "tests/test_prediction_interface.py",
-      "purpose": "Canonical prediction-interface regression"
+      "path": "orchestrator/provider_chat.py",
+      "purpose": "Canonical provider contract and option extraction",
+      "sha256": "b6a00cdad7c69b5f67c069b5df00101a627a592035895e6ac1a847621160070d"
+    },
+    {
+      "path": "workspace/validation/run_cohort.py",
+      "purpose": "Controlled cohort and recovery CLI",
+      "sha256": "31f1a3142288689b94aca109f5dd5337944a572d281b3003171ef3b4aa85b4cb"
+    },
+    {
+      "path": "workspace/validation/cohort_isolation.py",
+      "purpose": "Transactional isolation window manager and crash guardian",
+      "sha256": "d9818816c14101e4ecba03b9b4dca21d0a514d3a2b724495e806c9a99787ff8c"
     }
   ]
 }

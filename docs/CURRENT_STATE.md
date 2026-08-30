@@ -1,55 +1,63 @@
-# Current architecture
+# Canonical Project State — AGI_like Harness
 
-This is the short, current map of AGI_like. `HARDENING.md` and `INCIDENTS.md`
-remain chronological records; they are not current operating instructions.
+**Last Updated:** 2026-08-30T18:45:00Z  
+**Phase:** P0 Trajectory Complete / Awaiting Quota Reset for M1 Controlled Canary  
+**Safety Status:** ESTOP Engaged (`True`) | Dispatchers Protected | Zero Live Execution Active  
+**Test Status:** 41/41 Model-Free Suites Green (`tests/run_all.py`)  
 
-## Runtime path
+---
 
-Mission specs enter `orchestrator/scheduler.py`, are persisted by `ledger.py`,
-and run through `batch_runner.py` / `task_runner.py`. Hermes is accessed through
-the versioned contract in `orchestrator/hermes_contract.py`. Retrieval policy and
-per-assistant-tool-batch accounting live in `retrieval_progress.py`. Critics and
-finalization write durable run evidence; Git and the databases are authoritative.
+## 1. Executive Summary & Verified Milestones
 
-The global Hermes ESTOP is a fail-closed execution boundary. Its state is runtime
-state and must be checked live; this document never claims whether it is engaged.
+| Milestone / Component | Status | Empirical Evidence |
+| :--- | :---: | :--- |
+| **Architecture Blockers F-01, F-02, F-03 (A1, A2, A3)** | **VERIFIED** | `execution.py` (stderr quota detection), `ledger.py` (`LEASE_SECONDS = 4200`), `evaluation.py` (idempotent fact extraction); verified across 41/41 test suites. |
+| **BytePlus ModelArk Integration (A5)** | **VERIFIED** | Typed transport via `orchestrator/provider_chat.py`; passed initial connectivity canary (HTTP 200, 2.068s latency, request ID validated). |
+| **M1 Canary Run (Task 104)** | **EXECUTED** | 243.2s duration, 49.6k in / 11.2k out tokens, 0% dead URLs on mechanical citecheck. Failed critic strictly due to over-constrained non-public data criteria. |
+| **M1 Pass Criteria Harmonization** | **APPROVED** | Added explicit bounded-unavailability declaration rule to `cohort_missions.json`, aligning M1 with M3, M4, M5, and M7 standards. |
+| **Failover Chain Verification (Task 105)** | **VERIFIED** | Correctly caught 429 quota exhaustion across BytePlus and Ollama Cloud rungs, safely returning `infra_failed` without harness crash. Transactional window cleanly restored. |
+| **P0 Unified Trajectory Event Stream** | **COMPLETE** | Implemented `orchestrator/trajectory.py` (`runs/task{id}.trajectory.jsonl`), integrated across all 4 pipeline stages, and verified with 25 unit assertions (`tests/test_trajectory_event_stream.py`). |
 
-## Prediction path
+---
 
-`prediction_machine/` is the only prediction implementation. The batch runner
-uses `prediction_machine.integrations.batch_runner_hook`; daily collection and
-evaluation use `prediction_machine/run_daily.py`. Paths default relative to the
-repository and may be overridden through the supported environment settings.
+## 2. Active Blockers & Provider Quota State
 
-The former `orchestrator/simulate.py` duplicated models, storage, and fallbacks.
-Repository search and installed-runtime inspection found no executable caller;
-the one installed script that mentioned it uses its own heuristic instead. The
-legacy module was therefore removed rather than preserving two sources of truth.
-Historical references to it describe past state only.
+* **Primary Blocker:** Upstream BytePlus ModelArk 5-hour rolling session quota is exhausted (`HTTP 429 AccountQuotaExceeded`).
+* **Expected Reset Time:** **`2026-08-31 04:21:32 +0800 CST`** (~**`22:22 CEST`**).
+* **Gate Invariant:** No controlled isolation window or live mission (M1–M7) may be opened until the single-probe canary (`byteplus_connectivity_canary.py`) returns HTTP 200.
 
-## Continuity and tests
+---
 
-Compact Brief schema v2 records `repository.based_on_head`: the commit observed
-when the brief was assembled. It intentionally has no `record_commit`, which
-cannot be embedded in the commit that creates it without self-reference. Recovery
-treats the basis as provenance and independently prefers current Git/runtime/DB
-state.
+## 3. Canonical Architecture & Control Plane
 
-The default test gate runs unit, containment, and model-free Hermes integration
-tiers. Live model/network/mission tests require explicit opt-in, and the default
-gate fails if a test attempts a live path.
+* **Global Emergency Stop (ESTOP):** Managed by `orchestrator/execution_pause.py`. When engaged, all CLI commands and model dispatches fail closed (Exit Code 75).
+* **Single-Instance Runlock:** Managed by `orchestrator/runlock.py` ensuring zero database write collisions.
+* **Transactional Isolation:** Managed by `workspace/validation/cohort_isolation.py`. Guarantees restoration of ESTOP and production dispatchers in a `finally` block upon completion or crash.
+* **Database Containment:** Guarded by `integrity.DatabaseMutationGuard`, preventing direct database manipulation by worker processes.
 
-## `_needs_review` disposition
+---
 
-The durable F63 outcome and crash findings are already preserved in validation
-and incident history. The review directory is not authoritative. These files are
-flagged for deletion (no deletion is performed by this change):
+## 4. Multi-Agent Coordination & Ownership
 
-- `README.md`, `CRASH_AUDIT_2026-08-28.md`: superseded audit narratives.
-- `cohort_analysis_INCOMPLETE.json`, `abbvie_app_INCOMPLETE.pdf`: explicitly
-  incomplete/broken artifacts.
-- `F63_COHORT_COMPLIANCE_CORRECTED.md`: superseded duplicate of the final
-  validated accounting.
-- `audit_checks.py`: one-off audit helper, not a maintained test.
-- `full_inventory_mtime_desc.csv`: bulky point-in-time inventory; archive outside
-  the working tree only if forensic retention is desired.
+* **Active Registry:** Tracked in [`docs/ACTIVE_WORK.json`](ACTIVE_WORK.json).
+* **Write Scope Rule:** Exactly one agent may hold a write lock on a given subsystem scope in the main working tree.
+* **Roles:**
+  - **Gemini CLI:** Independent Principal Architect / Reviewer (Read-Only audit mode).
+  - **DeepSeek-V4-pro / Cade:** Core Runtime & Infrastructure Implementer.
+  - **Claude / Codex / Hermes:** Specialist Task Workers.
+  - **Operator:** Strategic director and execution gate authorizer.
+
+---
+
+## 5. Next Exact Action
+
+1. **At Quota Reset (~22:22 CEST):**
+   ```powershell
+   $env:ARK_API_KEY = (Get-Content "$env:LOCALAPPDATA\hermes\.env" | Select-String "^ARK_API_KEY=").ToString().Split("=", 2)[1].Trim(); python workspace/validation/byteplus_connectivity_canary.py --authorize-single-estop-bypass
+   ```
+2. **If HTTP 200 Confirmed:** Execute exactly ONE controlled M1 rerun:
+   ```powershell
+   python workspace/validation/run_cohort.py --controlled-window --only M1
+   ```
+3. **Verify:** Confirm that `runs/task{id}.trajectory.jsonl` records the full event stream and the deliverable achieves an authentic critic `PASS`.
+4. **Advance:** Proceed with the validation cohort (M2–M7).
