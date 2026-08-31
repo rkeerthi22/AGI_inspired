@@ -102,3 +102,30 @@ Verified baseline:
 * The AGI working tree is clean after the baseline commits.
 
 **Exact next action:** The Operator may run exactly one authorized BytePlus connectivity canary. Do not run M1–M7 unless that canary returns HTTP 200 and the Operator authorizes the controlled execution window.
+
+---
+
+## 5. Document Pipeline Status & Active Handoff
+
+* **2026-08-31 (Gemini CLI Review):** `docs/MUNDER_INTEGRATION.md` completed.
+* **2026-08-31 (Hermes Technical Research — COMPLETE):** `docs/HERMES_RESEARCH_MUNDER.md` delivered on-machine empirical evidence for polling, atomic file writes, FTS5 database isolation, and Job Object process containment.
+* **2026-08-31 (Gemini Blueprint Specification — COMPLETE):** `docs/MUNDER_BLUEPRINT.md` establishes the canonical architectural specification for Phase 1 (Mailbus), Phase 2 (Transparent Memory FTS5), Phase 3 (Drain Loops), and Phase 4 (Job Object PTY Daemon).
+* **Next Exact Action:** Development implementation begins following the phased roadmap in `docs/MUNDER_BLUEPRINT.md`:
+  - **DeepSeek-Cade:** ~~Implement Phase 1~~ **COMPLETE 2026-08-31.** `orchestrator/mailbus.py` (786 lines), `tests/test_mailbus.py` (817 lines, 21 tests). 42/42 suites green. Handoff: `docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md`.
+  - **Codex:** Implement Phase 2 (`orchestrator/memory_fts.py` + `tests/test_memory_fts.py` with dedicated `memory/fts_index.db`, external-content FTS5 triggers, and zero `DatabaseMutationGuard` conflicts).
+  - **DeepSeek-Cade (next):** Implement Phase 3 (`orchestrator/drain_loop.py`) after Phase 2 is complete — wire `route_cycle()` into the harness dispatch loop.
+  - **Constraints:** Model-free 42/42 test suites must remain green throughout; ESTOP remains engaged (`True`).
+
+---
+
+## 6. Boundary Repair Recovery Closeout — 2026-08-31
+
+This section supersedes the Phase 2/3 next-action wording above until the operator explicitly unfreezes those phases.
+
+* Hermes completed the final fleet/process quiescence and canary-admission repair at commit `fde1585`; provider quota interrupted only its bookkeeping closeout.
+* Codex performed recovery/finalization only: the four boundary suites passed (63 + 22 + 27 + 27 checks), and `python -B tests/run_all.py` passed 45/45 without live-provider calls.
+* ESTOP remained engaged, isolation remained restored, the batch lock and canary marker remained absent, and no canary authorization was issued.
+* All implementation ownership is released. Gemini and Codex remain read-only for the final static-state confirmation.
+* Phase 2 Memory FTS, Phase 3 drain/dispatch work, the BytePlus canary, and M1–M7 remain frozen.
+
+**Exact next action:** Perform the final static pre-canary review of `fde1585` and the canonical recovery state. Only the operator may then authorize one manually supervised BytePlus connectivity canary.

@@ -1,63 +1,75 @@
 {
   "schema_version": 2,
-  "brief_revision": 28,
-  "created_at": "2026-08-31T00:55:18.788252+00:00",
+  "brief_revision": 31,
+  "created_at": "2026-08-31T03:32:14.917837+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "c20dba18dac86c6d02d01454875b25f62a8d191c"
+    "tree_clean": false,
+    "changed_paths": [
+      ".harness/continuity/current.json",
+      "docs/ACTIVE_WORK.json",
+      "docs/CURRENT_STATE.md",
+      "docs/HANDOFF_PROTOCOL.md",
+      "docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md",
+      "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md",
+      "docs/HERMES_RESEARCH_MUNDER.md",
+      "docs/MUNDER_BLUEPRINT.md",
+      "docs/MUNDER_INTEGRATION.md"
+    ],
+    "based_on_head": "920f59dcca4429f9a1eeaa9c2ffe484309b3331f"
   },
   "task": {
-    "id": "PRE-M1-INTEGRATION-BASELINE",
-    "phase": "ready-for-operator-connectivity-canary",
+    "id": "MUNDER-BOUNDARY-HARDENING",
+    "phase": "complete",
     "status": "complete",
-    "next_action": "Operator runs exactly one authorized BytePlus connectivity canary; run no M1-M7 unless it returns HTTP 200 and the controlled window is authorized"
+    "next_action": "Independent review of commit 920f59d (boundary hardening) by Codex/Gemini; operator adjudicates limitations and authorizes any canary. No canary/M1-M7 before that."
   },
   "completed": [
-    "Trajectory sequence resumption and test isolation repaired",
-    "41/41 model-free suites green",
-    "Munder state isolated at S:\\MunderState\\AGI_like",
-    "Dual-orchestrator continuity collision resolved",
-    "All AGI write ownership released"
+    "4 Munder/AGI boundary gaps closed (hive quiesce, ESTOP tamper, hook deny+ownership, canary marker)",
+    "45/45 model-free suites green; targeted 68 checks (19+22+27, live-measured)",
+    "Commit 920f59d: runtime+tests only; docs pending operator sign-off",
+    "MunderState hook files delivered outside repo (enforce.js, cth-hook.cjs, roster)",
+    "Hermes ownership claimed then released; no live implementation owner remains"
   ],
   "locked_constraints": [
-    "ESTOP stays engaged until an explicitly authorized controlled bypass",
-    "No M1-M7 before a successful connectivity canary and operator authorization",
-    "Munder generated state remains outside S:\\AGI_like",
-    "Live repository and runtime state win over this brief"
+    "ESTOP engaged until operator-authorized bypass only",
+    "No M1-M7 without passed independent review + HTTP 200 canary + operator authorization",
+    "Munder state stays outside S:\\AGI_like",
+    "Phase 2/3 and dispatch wiring NOT started (operator directive)",
+    "Live repository and runtime state win over this brief",
+    "enforce.js limitations pending review: marker-forgery shell form, non-Claude engine enforcement"
   ],
   "gate": {
     "status": "passed",
-    "detail": "41/41 model-free suites green; targeted trajectory and F59 green; no live calls"
+    "detail": "45/45 green; targeted 19/22/27 all exit 0; continuity validate PASS; diff-check clean; no live calls"
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical pre-M1 state and exact next action",
-      "sha256": "e52817aa3c8c1fc85f5304bda7afe4f9cee40c8cfe28506b09f604f078bb6973"
+      "purpose": "Canonical hardened state and next action",
+      "sha256": "a2164f8a95e90087340912fae97e6509a546425a18a398eb63b9d0e3510068a2"
     },
     {
-      "path": "docs/HANDOFF_PROTOCOL.md",
-      "purpose": "Universal handoff protocol and resolved pre-M1 checkpoint",
-      "sha256": "db4f8269ee7e7c25843876027efde25342c492b8e8a7c0544f505a56f24e64f8"
+      "path": "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md",
+      "purpose": "Closeout evidence and limitations",
+      "sha256": "496d15abcff596654f08d49f6beaa042734aa3949d6f64cad2bd4b0feab8e25f"
     },
     {
-      "path": "docs/DEEPSEEK_HANDOFF_2026-08-31.md",
-      "purpose": "Trajectory repair evidence",
-      "sha256": "f75a4885d5497288433e3a9ff544c21bd7a9114397bf43d5260e77caec996d9e"
+      "path": "docs/ACTIVE_WORK.json",
+      "purpose": "Ownership released at closeout",
+      "sha256": "a601bad1be2fc4416d1be315ec499aaa77b12712225210b68b87ab85311df33d"
     },
     {
-      "path": "orchestrator/provider_chat.py",
-      "purpose": "Canonical provider boundary",
-      "sha256": "65e924a6f8a4cad6610f0a1973e57e232cdaeceadde27ff7c0fec358d277e9b5"
+      "path": "orchestrator/execution_pause.py",
+      "purpose": "ESTOP + tamper detection",
+      "sha256": "977551a62da6a941053e088165dd70fe7c4e4ec8bed2b226fc55945c6cb63e13"
     },
     {
       "path": "workspace/validation/cohort_isolation.py",
-      "purpose": "Transactional isolation",
-      "sha256": "8354999e91382d2a8256eed3f483ab3ae1f8d9812cb23a7feb182a4fa2c0b705"
+      "purpose": "Transactional isolation + hive quiesce",
+      "sha256": "29d46c430158576b41707333f09c4090ccb2ac8f6248d94ba4bc3657001a0a9b"
     }
   ]
 }

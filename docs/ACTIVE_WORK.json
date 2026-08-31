@@ -1,60 +1,58 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-08-31T03:55:00Z",
+  "last_updated": "2026-08-31T05:07:00Z",
   "active_agents": [
     {
-      "agent": "gemini-cli",
-      "role": "Independent Principal Architect / Reviewer",
-      "task_id": "P0-MUNDER-BLUEPRINT-SPEC",
-      "mode": "read-only-audit",
+      "agent": "hermes",
+      "role": "Boundary Repair Implementer - closeout interrupted by provider quota",
+      "task_id": "MUNDER-BOUNDARY-REPAIR-2",
+      "mode": "implementation",
       "owned_paths": [],
-      "started_at": "2026-08-31T01:21:00Z",
-      "last_update": "2026-08-31T01:23:00Z",
+      "started_at": "2026-08-31T04:07:39Z",
+      "last_update": "2026-08-31T05:07:00Z",
       "status": "completed",
-      "blocked_by": null,
-      "handoff_path": "docs/MUNDER_BLUEPRINT.md"
+      "blocked_by": "provider quota exhausted after commit fde1585, before bookkeeping closeout",
+      "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md",
+      "notes": "Implementation completed and committed at fde1585. Provider quota interrupted only the final bookkeeping sequence; recovery transferred to Codex without overlapping source ownership."
     },
     {
       "agent": "deepseek-cade",
-      "role": "Core Runtime & Infrastructure Implementer",
-      "task_id": "MUNDER-PHASE1-MAILBUS",
-      "mode": "implementation",
-      "owned_paths": [
-        "orchestrator/mailbus.py",
-        "tests/test_mailbus.py"
-      ],
+      "role": "Core Runtime & Infrastructure Implementer - temporarily unavailable",
+      "task_id": "MUNDER-PHASE1-MAILBUS (completed) / currently unavailable",
+      "mode": "unavailable",
+      "owned_paths": [],
       "started_at": "2026-08-31T01:23:00Z",
       "last_update": "2026-08-31T03:55:00Z",
       "status": "completed",
-      "blocked_by": null,
-      "handoff_path": "docs/MUNDER_BLUEPRINT.md"
+      "blocked_by": "temporarily unavailable (operator instruction 2026-08-31)",
+      "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md"
     },
     {
       "agent": "codex",
-      "role": "Specialist Implementation & Memory Indexer",
-      "task_id": "MUNDER-PHASE2-MEMORY-FTS",
-      "mode": "implementation",
-      "owned_paths": [
-        "orchestrator/memory_fts.py",
-        "tests/test_memory_fts.py"
-      ],
-      "started_at": "2026-08-31T01:23:00Z",
-      "last_update": "2026-08-31T01:23:00Z",
-      "status": "ready",
-      "blocked_by": null,
-      "handoff_path": "docs/MUNDER_BLUEPRINT.md"
-    },
-    {
-      "agent": "hermes",
-      "role": "Specialist Task Worker / Technical Research",
-      "task_id": "MUNDER-RESEARCH-HERMES",
-      "mode": "research",
+      "role": "Recovery/Closeout Owner - interrupted boundary repair",
+      "task_id": "MUNDER-BOUNDARY-REPAIR-RECOVERY",
+      "mode": "completed",
       "owned_paths": [],
-      "started_at": "2026-08-31T01:05:30Z",
-      "last_update": "2026-08-31T01:18:25Z",
+      "read_only": true,
+      "started_at": "2026-08-31T01:23:00Z",
+      "last_update": "2026-08-31T05:07:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/HERMES_RESEARCH_MUNDER.md"
+      "handoff_path": "docs/CODEX_HANDOFF_2026-08-31_BOUNDARY_RECOVERY.md",
+      "notes": "Recovery/finalization only: independently verified targeted suites and 45/45 full gate, reconciled canonical records, and released all paths. No live calls, canary authorization, M1-M7, or Phase 2/3."
+    },
+    {
+      "agent": "gemini-cli",
+      "role": "Independent Principal Architect / Reviewer - REVIEWER ONLY for boundary-hardening",
+      "task_id": "MUNDER-BOUNDARY-HARDENING-REVIEW",
+      "mode": "read-only-review",
+      "owned_paths": [],
+      "read_only": true,
+      "started_at": "2026-08-31T01:21:00Z",
+      "last_update": "2026-08-31T05:20:00Z",
+      "status": "pending",
+      "blocked_by": "unavailable (operator instruction 2026-08-31); review pending until available",
+      "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md"
     },
     {
       "agent": "claude-opus",
@@ -75,6 +73,7 @@
     "3. Multi-agent concurrent implementations require ephemeral git worktrees.",
     "4. All agents must inspect ACTIVE_WORK.json and AGENTS.md before modifying any file.",
     "5. An agent must update its handoff when stopping, being quota-blocked, or transferring ownership.",
-    "6. Completion requires evidence: files exist, 41/41 tests pass, continuity validates, handoff updated."
+    "6. Completion requires evidence: files exist, full model-free gate green (45/45 suites as of 2026-08-31), continuity validates, handoff updated.",
+    "7. Boundary-hardening implementation and recovery closeout are complete; no implementation owner remains. Edit/Write to S:/AGI_like from hive agents must pass the enforce.js ownership check; deny + audit on conflict."
   ]
 }
