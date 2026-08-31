@@ -1,14 +1,20 @@
 {
   "schema_version": 2,
-  "brief_revision": 32,
-  "created_at": "2026-08-31T05:09:15.010890+00:00",
+  "brief_revision": 35,
+  "created_at": "2026-08-31T06:25:22.705279+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "7212f576029e489897ee993d3fe0156380f0d24f"
+    "tree_clean": false,
+    "changed_paths": [
+      ".harness/continuity/current.json",
+      "AGENTS.md",
+      "docs/ACTIVE_WORK.json",
+      "docs/CURRENT_STATE.md",
+      "docs/ENTERPRISE_READINESS_2026-08-31.md"
+    ],
+    "based_on_head": "4e768eba118c0ca7d8ca276d4f6b2610beed983f"
   },
   "task": {
     "id": "MUNDER-BOUNDARY-REPAIR-RECOVERY",
@@ -20,34 +26,41 @@
     "Hermes repair committed at fde1585; quota interrupted bookkeeping only",
     "Codex independently verified 63+22+27+27 targeted checks and 45/45 full gate",
     "Canonical docs reconciled and all implementation ownership released",
+    "Enterprise readiness documented at PRE-ENTERPRISE 2.9/5; no recommendation implemented",
     "No provider call, canary authorization, M1-M7, or Phase 2/3 work"
   ],
   "locked_constraints": [
     "ESTOP remains engaged until an operator-controlled transition",
     "No canary or M1-M7 before final static review and operator authorization",
     "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
-    "Munder state remains external to S:\\AGI_like",
+    "Munder state remains external to S:\\MunderState\\AGI_like",
+    "Enterprise readiness report is planning guidance, not live authorization",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "Targeted 63+22+27+27 PASS; full model-free gate 45/45; diff-check clean; no live calls"
+    "detail": "45/45 model-free suites PASS; continuity refreshed after documentation-only review; no live calls"
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical recovery state and exact next action",
-      "sha256": "033c162d61aa2aa664199219e5147fe3805af502cf6a8ae434007e40b9b47de3"
+      "purpose": "Canonical recovery state and exact live next action",
+      "sha256": "27b7b11d5146f6de4a1665f88758bc9bae40c4a9ce6490d940624e1dea3f1cfd"
+    },
+    {
+      "path": "docs/ENTERPRISE_READINESS_2026-08-31.md",
+      "purpose": "Canonical enterprise maturity assessment and roadmap",
+      "sha256": "d3bebf6c091b297ba2b0baffa50fff7b8daf9ed16d8b30482ceed6b888f5a71d"
     },
     {
       "path": "docs/CODEX_HANDOFF_2026-08-31_BOUNDARY_RECOVERY.md",
-      "purpose": "Independent recovery evidence",
+      "purpose": "Independent boundary recovery evidence",
       "sha256": "89a5eb3516487393677b88e8684eef786ebf4d362d71142feb0cc59494e20fd9"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
       "purpose": "Released ownership registry",
-      "sha256": "69b4d471d8d0fa0043161ddcdc24c02f66b59a8f3833e135c17beac6f9f7efee"
+      "sha256": "eb0ca2f0dd15b063b0a69b117e60f53d8db1fc5bd84701e1993f9925d8edbbe7"
     },
     {
       "path": "orchestrator/cohort_hive_quiesce.py",

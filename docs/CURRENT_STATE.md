@@ -24,6 +24,17 @@
 
 ---
 
+### Enterprise Readiness
+
+The canonical enterprise-readiness assessment is
+`docs/ENTERPRISE_READINESS_2026-08-31.md`: **PRE-ENTERPRISE, 2.9/5**.
+The control-plane design is estimated at 65-75% toward enterprise candidate;
+whole-system readiness is estimated at 50-60%. The assessment is a planning
+record only and does not authorize a provider call, canary, M1-M7, ESTOP
+transition, or Phase 2/3 work.
+
+---
+
 ## 2. Active Blockers & Review State
 
 * **Primary Blocker:** Final static-state review of `fde1585` and the recovery checkpoint by Codex/Gemini, followed by operator authorization. No canary or mission authorization has been issued.

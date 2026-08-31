@@ -25,6 +25,7 @@ Before performing any action, reading deep history, or modifying files:
 * **Active Agent Registry:** [`docs/ACTIVE_WORK.json`](docs/ACTIVE_WORK.json)
 * **Canonical Current State:** [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md)
 * **Canonical Architecture:** [`docs/CANONICAL_ARCHITECTURE.md`](docs/CANONICAL_ARCHITECTURE.md)
+* **Enterprise Readiness:** [`docs/ENTERPRISE_READINESS_2026-08-31.md`](docs/ENTERPRISE_READINESS_2026-08-31.md)
 * **Handoff Protocol:** [`docs/HANDOFF_PROTOCOL.md`](docs/HANDOFF_PROTOCOL.md)
 * **Chat / Human Continuity:** [`docs/CHAT_CONTINUITY_2026-08-30.md`](docs/CHAT_CONTINUITY_2026-08-30.md)
 * **Chronological Incident & Fix Registries:** [`docs/INCIDENTS.md`](docs/INCIDENTS.md), [`docs/HARDENING.md`](docs/HARDENING.md)
