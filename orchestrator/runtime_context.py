@@ -27,9 +27,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 RUNS = ROOT / "runs"
 MISSIONS = ROOT / "missions"
+MAILBOXES = ROOT / "mailboxes"
 ESCALATIONS = ROOT / "workspace" / "ESCALATIONS.md"
 
-_log_file = None
+_log_file: str | None = None
 
 
 def _real_log(msg: str) -> None:

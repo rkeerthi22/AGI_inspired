@@ -1,30 +1,60 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-08-31T00:53:42Z",
+  "last_updated": "2026-08-31T03:55:00Z",
   "active_agents": [
     {
       "agent": "gemini-cli",
       "role": "Independent Principal Architect / Reviewer",
-      "task_id": "P0-DOCS-CONTINUITY-AUDIT",
+      "task_id": "P0-MUNDER-BLUEPRINT-SPEC",
       "mode": "read-only-audit",
       "owned_paths": [],
-      "started_at": "2026-08-30T18:40:00Z",
-      "last_update": "2026-08-30T18:45:00Z",
+      "started_at": "2026-08-31T01:21:00Z",
+      "last_update": "2026-08-31T01:23:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/GEMINI_REVIEW_DOSSIER.md"
+      "handoff_path": "docs/MUNDER_BLUEPRINT.md"
     },
     {
       "agent": "deepseek-cade",
       "role": "Core Runtime & Infrastructure Implementer",
-      "task_id": "PRE-M1-MODEL-FREE-REPAIR",
+      "task_id": "MUNDER-PHASE1-MAILBUS",
       "mode": "implementation",
-      "owned_paths": [],
-      "started_at": "2026-08-30T04:55:00Z",
-      "last_update": "2026-08-30T23:42:52Z",
+      "owned_paths": [
+        "orchestrator/mailbus.py",
+        "tests/test_mailbus.py"
+      ],
+      "started_at": "2026-08-31T01:23:00Z",
+      "last_update": "2026-08-31T03:55:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-31.md"
+      "handoff_path": "docs/MUNDER_BLUEPRINT.md"
+    },
+    {
+      "agent": "codex",
+      "role": "Specialist Implementation & Memory Indexer",
+      "task_id": "MUNDER-PHASE2-MEMORY-FTS",
+      "mode": "implementation",
+      "owned_paths": [
+        "orchestrator/memory_fts.py",
+        "tests/test_memory_fts.py"
+      ],
+      "started_at": "2026-08-31T01:23:00Z",
+      "last_update": "2026-08-31T01:23:00Z",
+      "status": "ready",
+      "blocked_by": null,
+      "handoff_path": "docs/MUNDER_BLUEPRINT.md"
+    },
+    {
+      "agent": "hermes",
+      "role": "Specialist Task Worker / Technical Research",
+      "task_id": "MUNDER-RESEARCH-HERMES",
+      "mode": "research",
+      "owned_paths": [],
+      "started_at": "2026-08-31T01:05:30Z",
+      "last_update": "2026-08-31T01:18:25Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/HERMES_RESEARCH_MUNDER.md"
     },
     {
       "agent": "claude-opus",
@@ -37,18 +67,6 @@
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-30.md"
-    },
-    {
-      "agent": "codex",
-      "role": "Continuity Baseline and Handoff Owner",
-      "task_id": "PRE-M1-CONTINUITY-BASELINE",
-      "mode": "implementation",
-      "owned_paths": [],
-      "started_at": "2026-08-31T00:44:00Z",
-      "last_update": "2026-08-31T00:53:42Z",
-      "status": "completed",
-      "blocked_by": null,
-      "handoff_path": "docs/HANDOFF_PROTOCOL.md"
     }
   ],
   "coordination_rules": [
