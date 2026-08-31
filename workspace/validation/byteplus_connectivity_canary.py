@@ -34,6 +34,12 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit("ABORT: explicit --authorize-single-estop-bypass is required")
     if not execution_pause.pause_engaged():
         raise SystemExit("ABORT: ESTOP must remain engaged for this scoped-bypass canary")
+    # Boundary hardening 2026-08-31: the CLI flag alone is no longer authority.
+    # A single-use, 30-minute operator marker must be consumed on this machine.
+    try:
+        execution_pause.consume_canary_authorization()
+    except RuntimeError as exc:
+        raise SystemExit(f"ABORT: {exc}")
     if not os.environ.get("ARK_API_KEY", ""):
         raise SystemExit("ABORT: ARK_API_KEY is not present in this process environment")
 

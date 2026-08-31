@@ -46,6 +46,13 @@ class FakeBackend:
     def set_gateway_running(self, running):
         self.events.append(("gateway", running))
         self.gateway = running
+    # Boundary hardening 2026-08-31: extended protocol methods. Legacy
+    # scenarios assume a quiet hive by default.
+    def snapshot_hive(self):
+        return [{"id": "god", "status": "idle", "cwd": r"S:\MunderState\AGI_like",
+                 "mutation_capable": False}]
+    def ensure_hive_quiesced(self):
+        return {"agents": self.snapshot_hive(), "quiesced": True, "offenders": []}
 
 
 with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as td:

@@ -82,6 +82,7 @@ def main(argv: list[str] | None = None) -> int:
 
     # Admission is before every durable write. The canonical provider dispatcher
     # checks the same fail-closed gate again immediately before every model call.
+    execution_pause.verify_pause_integrity()
     if execution_pause.pause_engaged():
         print("[paused] Hermes ESTOP is engaged; task was not queued", file=sys.stderr)
         return 6

@@ -32,6 +32,30 @@ def _run(argv: list[str], timeout: int = 45) -> subprocess.CompletedProcess[str]
                           errors="replace", timeout=timeout, check=False)
 
 
+def _emit(*args, **context) -> None:
+    """Fail-soft health-event sink shared by hive-quiesce refusals."""
+    try:
+        sys.path.insert(0, str(ROOT / "orchestrator"))
+        import health_events
+        health_events.emit(*args, **context)
+    except Exception:
+        pass
+
+
+def _repo_status_paths() -> list[str]:
+    """Current git porcelain paths; audit-snapshot helper (fail-soft)."""
+    try:
+        proc = subprocess.run(
+            ["git", "-C", str(ROOT), "status", "--porcelain=v1"],
+            capture_output=True, text=True, encoding="utf-8",
+            errors="replace", timeout=30)
+        if proc.returncode:
+            return []
+        return [line[3:] for line in proc.stdout.splitlines() if line.strip()]
+    except Exception:
+        return []
+
+
 class IsolationBackend(Protocol):
     def snapshot_tasks(self) -> list[dict]: ...
     def set_task_enabled(self, name: str, enabled: bool) -> None: ...
@@ -39,6 +63,8 @@ class IsolationBackend(Protocol):
     def set_cron_active(self, job_id: str, active: bool) -> None: ...
     def gateway_running(self) -> bool: ...
     def set_gateway_running(self, running: bool) -> None: ...
+    def snapshot_hive(self) -> list[dict]: ...
+    def ensure_hive_quiesced(self) -> dict: ...
 
 
 class LiveBackend:
@@ -104,6 +130,31 @@ class LiveBackend:
         if result.returncode:
             raise RuntimeError(f"could not {'start' if running else 'stop'} gateway: "
                                f"{result.stderr.strip()}")
+
+    # --- Hive quiescence (boundary hardening 2026-08-31) ------------------
+    # LiveBackend deliberately does NOT kill or suspend hive processes.  It
+    # verifies (via roster/fleet under the Munder harness home) that no
+    # mutation-capable hive agent is active; an unquiet hive refuses the
+    # window.  Process control stays with the operator.
+
+    def snapshot_hive(self) -> list[dict]:
+        import cohort_hive_quiesce
+        try:
+            states = cohort_hive_quiesce.snapshot_hive_state(
+                cohort_hive_quiesce.live_roster_probe())
+        except cohort_hive_quiesce.HiveQuiesceError as exc:
+            raise RuntimeError(str(exc)) from exc
+        return [{"id": s.agent_id, "status": s.status, "cwd": s.cwd,
+                 "mutation_capable": s.capable_of_repo_mutation}
+                for s in states]
+
+    def ensure_hive_quiesced(self) -> dict:
+        import cohort_hive_quiesce
+        try:
+            return cohort_hive_quiesce.ensure_hive_quiesced(
+                cohort_hive_quiesce.live_roster_probe(), emit_event=_emit)
+        except cohort_hive_quiesce.HiveQuiesceError as exc:
+            raise RuntimeError(str(exc)) from exc
 
 
 def _write_journal(path: Path, state: dict) -> None:
@@ -205,6 +256,7 @@ class CohortIsolation:
             "estop_b64": base64.b64encode(estop_bytes).decode("ascii"),
             "tasks": tasks, "cron": self.backend.snapshot_cron(),
             "gateway_running": self.backend.gateway_running(),
+            "hive": self.backend.snapshot_hive(),
         }
         self.state = state
         _write_journal(self.journal, state)
@@ -229,6 +281,17 @@ class CohortIsolation:
                 raise RuntimeError("Hermes cron pause verification failed")
             if self.backend.gateway_running():
                 raise RuntimeError("Hermes gateway stop verification failed")
+            # Boundary hardening 2026-08-31: the window must also verify that
+            # no mutation-capable Munder hive agent is active.  Refusal here
+            # fails closed and triggers full restoration below — the window
+            # never opens with a live hive.  Nothing is killed.
+            hive_record = self.backend.ensure_hive_quiesced()
+            state["hive"] = hive_record["agents"]
+            state["hive_quiesced"] = hive_record["quiesced"]
+            _write_journal(self.journal, state)
+            # Boundary hardening: snapshot the tree so restore can audit
+            # whether anything appeared mid-window (hive leak detection).
+            state["tree_status_at_open"] = _repo_status_paths()
             state["phase"] = "quiesced"
             _write_journal(self.journal, state)
             self.estop.unlink()
@@ -269,6 +332,17 @@ class CohortIsolation:
             _write_journal(self.journal, state)
             raise RuntimeError("dispatcher restoration incomplete: " + "; ".join(errors))
         state.pop("restore_errors", None)
+        # Boundary hardening 2026-08-31: audit whether the AGI tree was
+        # dirtied during the window (audit-only; never blocks restoration —
+        # ESTOP and dispatchers are already restored above).
+        try:
+            import cohort_hive_quiesce
+            taint = cohort_hive_quiesce.tree_taint_report(
+                state.get("tree_status_at_open"),
+                emit_event=_emit)
+            state["tree_taint"] = taint
+        except Exception:
+            state["tree_taint"] = {"verified": False, "new_paths": []}
         state["phase"] = "restored"
         state["restored_at"] = datetime.now(timezone.utc).isoformat()
         _write_journal(self.journal, state)
