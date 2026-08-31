@@ -1,9 +1,9 @@
 # Munder Architecture Blueprint — AGI Harness Integration
 
-**Document Version:** 1.0 (Canonical Specification)  
-**Author / Principal Architect:** Gemini CLI (Independent Principal Architect / Reviewer)  
-**Status:** SPECIFICATION COMPLETE — Ready for Implementation  
-**Base Inputs:** `docs/MUNDER_INTEGRATION.md` (Blueprint Draft) & `docs/HERMES_RESEARCH_MUNDER.md` (Empirical Spike)  
+**Document Version:** 1.0 (Canonical Specification)
+**Author / Principal Architect:** Gemini CLI (Independent Principal Architect / Reviewer)
+**Status:** SPECIFICATION COMPLETE — Ready for Implementation
+**Base Inputs:** `docs/MUNDER_INTEGRATION.md` (Blueprint Draft) & `docs/HERMES_RESEARCH_MUNDER.md` (Empirical Spike)
 **Authority Invariant:** Subordinate to the AGI Control Plane (ESTOP, single-instance runlock, `DatabaseMutationGuard`, and Operator-gated mission dispatch). Munder patterns provide inter-agent coordination convenience; they possess zero execution authority.
 
 ---
@@ -186,14 +186,14 @@ CREATE_SUSPENDED = 0x00000004
 def create_contained_process(command_list, cwd):
     # 1. Create anonymous Job Object
     hJob = kernel32.CreateJobObjectW(None, None)
-    
+
     # 2. Configure KILL_ON_JOB_CLOSE (do NOT set BREAKAWAY_OK)
     info = JOBOBJECT_EXTENDED_LIMIT_INFORMATION()
     info.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE
     kernel32.SetInformationJobObject(
         hJob, 9, ctypes.byref(info), ctypes.sizeof(info)
     )
-    
+
     # 3. Spawn suspended (NEVER invoke py.exe; use sys.executable directly)
     proc = subprocess.Popen(
         command_list,
@@ -203,10 +203,10 @@ def create_contained_process(command_list, cwd):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE
     )
-    
+
     # 4. Assign to Job Object BEFORE resuming thread (prevents breakaway race)
     kernel32.AssignProcessToJobObject(hJob, proc._handle)
-    
+
     # 5. Resume process execution
     kernel32.ResumeThread(proc._handle)
     return proc, hJob

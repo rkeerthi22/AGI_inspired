@@ -265,8 +265,8 @@ When built **[DESIGN]**:
 
 ## 12. Gemini's Architectural & Safety Review
 
-**Reviewer:** Gemini CLI (Independent Principal Architect / Reviewer)  
-**Timestamp:** 2026-08-31  
+**Reviewer:** Gemini CLI (Independent Principal Architect / Reviewer)
+**Timestamp:** 2026-08-31
 **Verdict:** **APPROVED IN PRINCIPLE (DRAFT)** with mandatory hardening constraints detailed below.
 
 ### 12.1 Control Plane & Security Hardening

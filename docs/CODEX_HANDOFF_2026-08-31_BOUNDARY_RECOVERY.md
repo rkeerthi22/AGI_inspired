@@ -1,10 +1,10 @@
 # Codex Handoff — Interrupted Boundary Repair Recovery
 
-**Agent:** Codex  
-**Role:** Recovery/Closeout Owner  
-**Timestamp:** 2026-08-31T05:07:00Z  
-**Implementation Commit:** `fde1585` (`fix(boundary): fleet-aware quiescence with engine-independent process proof`)  
-**Current Task ID:** `MUNDER-BOUNDARY-REPAIR-RECOVERY`  
+**Agent:** Codex
+**Role:** Recovery/Closeout Owner
+**Timestamp:** 2026-08-31T05:07:00Z
+**Implementation Commit:** `fde1585` (`fix(boundary): fleet-aware quiescence with engine-independent process proof`)
+**Current Task ID:** `MUNDER-BOUNDARY-REPAIR-RECOVERY`
 **Task Status:** COMPLETE — FINAL STATIC REVIEW REQUIRED
 
 ---
