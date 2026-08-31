@@ -86,3 +86,19 @@ When resuming, any agent must follow this exact 6-step sequence:
 4. Read [`docs/CURRENT_STATE.md`](file:///S:/AGI_like/docs/CURRENT_STATE.md).
 5. Read the latest relevant handoff in `docs/`.
 6. Run `python orchestrator/continuity.py recover` and `python tests/run_all.py`.
+
+---
+
+## 4. Pre-M1 Integration Baseline — 2026-08-31
+
+The pre-M1 integration blocker is resolved. The trajectory append/resumption repair is complete and model-free tests are isolated from production `runs/`. Munder coordination state is isolated outside the repository at `S:\MunderState\AGI_like`, while `S:\AGI_like` remains its registered canonical repository. No agent holds an active AGI write scope.
+
+Verified baseline:
+
+* 41/41 model-free suites pass.
+* ESTOP remains engaged and transactional isolation is restored.
+* No batch lock or live provider execution is active.
+* Munder Hive, roster, backups, Palace state, and future worktrees are external to the AGI repository.
+* The AGI working tree is clean after the baseline commits.
+
+**Exact next action:** The Operator may run exactly one authorized BytePlus connectivity canary. Do not run M1–M7 unless that canary returns HTTP 200 and the Operator authorizes the controlled execution window.

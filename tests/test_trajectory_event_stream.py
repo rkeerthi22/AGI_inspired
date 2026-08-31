@@ -3,6 +3,8 @@ import json
 import os
 import sys
 import tempfile
+import atexit
+import hashlib
 from datetime import datetime
 from pathlib import Path
 
@@ -14,6 +16,38 @@ import task_runner
 import evaluation
 import execution
 import retrieval_progress
+import runtime_context as rc
+
+REAL_RUNS = ROOT / "runs"
+
+
+def runs_snapshot(path: Path) -> dict[str, str]:
+    return {
+        str(item.relative_to(path)): hashlib.sha256(item.read_bytes()).hexdigest()
+        for item in path.rglob("*") if item.is_file()
+    }
+
+
+REAL_RUNS_BEFORE = runs_snapshot(REAL_RUNS)
+_suite_tmp = tempfile.TemporaryDirectory(prefix="trajectory_test_")
+TEST_RUNS = Path(_suite_tmp.name) / "runs"
+TEST_RUNS.mkdir()
+_original_runs = rc.RUNS
+_original_evaluation_runs = evaluation.RUNS
+_original_policy_state = evaluation.policy.STATE_PATH
+rc.RUNS = TEST_RUNS
+evaluation.RUNS = TEST_RUNS
+evaluation.policy.STATE_PATH = TEST_RUNS / "policy_state.json"
+
+
+def _cleanup_test_runs() -> None:
+    rc.RUNS = _original_runs
+    evaluation.RUNS = _original_evaluation_runs
+    evaluation.policy.STATE_PATH = _original_policy_state
+    _suite_tmp.cleanup()
+
+
+atexit.register(_cleanup_test_runs)
 
 fails = []
 
@@ -51,6 +85,55 @@ with tempfile.TemporaryDirectory() as td:
           all(l["task_id"] == 101 and l["mission_id"] == "001-shopify" for l in lines))
     check("timestamps are valid ISO UTC format",
           all(datetime.fromisoformat(l["timestamp"]) for l in lines))
+
+
+# ── Test 1b: Reopen/append resumes sequence without overwriting ──────────
+
+with tempfile.TemporaryDirectory() as td:
+    traj_path = Path(td) / "task103.trajectory.jsonl"
+    first = trajectory.TrajectoryWriter(traj_path, task_id=103, mission_id="m-reopen")
+    first.task_started("spec", "model", "provider")
+    first.provider_selected("provider", "model")
+    first.tool_call_finished("web_search", "search", 1, True, 2)
+    prefix = traj_path.read_bytes()
+
+    reopened = trajectory.TrajectoryWriter(traj_path, task_id=103, mission_id="m-reopen")
+    e4 = reopened.critic_evaluated("pass")
+    e5 = reopened.task_completed("pass", "done")
+    lines = [json.loads(line) for line in traj_path.read_text(encoding="utf-8").splitlines()]
+    sequences = [line["sequence"] for line in lines]
+    event_ids = [line["event_id"] for line in lines]
+
+    check("reopen preserves existing bytes", traj_path.read_bytes().startswith(prefix))
+    check("reopen resumes at max existing sequence + 1", [e4["sequence"], e5["sequence"]] == [4, 5])
+    check("reopened trajectory remains strictly monotonic", sequences == [1, 2, 3, 4, 5])
+    check("reopened trajectory event IDs remain unique", len(event_ids) == len(set(event_ids)))
+
+
+# ── Test 1c: Truncated trailing record is preserved and safely separated ─
+
+with tempfile.TemporaryDirectory() as td:
+    traj_path = Path(td) / "task104.trajectory.jsonl"
+    first = trajectory.TrajectoryWriter(traj_path, task_id=104, mission_id="m-truncated")
+    first.task_started("spec", "model", "provider")
+    first.provider_selected("provider", "model")
+    with traj_path.open("ab") as handle:
+        handle.write(b'{"sequence": 999, "truncated"')
+    prefix = traj_path.read_bytes()
+
+    reopened = trajectory.TrajectoryWriter(traj_path, task_id=104, mission_id="m-truncated")
+    appended = reopened.task_failed("expected test failure")
+    raw_lines = traj_path.read_text(encoding="utf-8").splitlines()
+    valid = []
+    for raw_line in raw_lines:
+        try:
+            valid.append(json.loads(raw_line))
+        except json.JSONDecodeError:
+            pass
+
+    check("truncated tail bytes are not overwritten", traj_path.read_bytes().startswith(prefix))
+    check("truncated tail does not inflate resumed sequence", appended["sequence"] == 3)
+    check("append after truncated tail is a separate valid JSONL record", valid[-1]["event_id"] == "evt-104-0003")
 
 
 # ── Test 2: Secret Redaction ───────────────────────────────────────────────
@@ -93,6 +176,7 @@ check("begin() replaces active writer with task 202", trajectory.active() is w2 
 
 trajectory.end()
 check("end() resets active writer to None", trajectory.active() is None)
+check("trajectory.begin uses isolated test RUNS", w1.path.parent == TEST_RUNS and w2.path.parent == TEST_RUNS)
 
 
 # ── Test 4: Regression — task_runner.run_task() Try/Finally Cleanup ───────
@@ -227,6 +311,9 @@ with tempfile.TemporaryDirectory() as td:
 
 
 # ── Final Summary ─────────────────────────────────────────────────────────
+
+check("real runs artifacts remain byte-for-byte unchanged",
+      runs_snapshot(REAL_RUNS) == REAL_RUNS_BEFORE)
 
 if fails:
     raise SystemExit(f"FAILED {len(fails)} trajectory regression assertions: {fails}")

@@ -1,42 +1,54 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-08-30T18:45:00Z",
+  "last_updated": "2026-08-31T00:53:42Z",
   "active_agents": [
     {
       "agent": "gemini-cli",
       "role": "Independent Principal Architect / Reviewer",
       "task_id": "P0-DOCS-CONTINUITY-AUDIT",
       "mode": "read-only-audit",
-      "owned_paths": [
-        "docs/",
-        "AGENTS.md",
-        "CLAUDE.md",
-        "GEMINI.md",
-        "DEEPSEEK.md",
-        "CODEX.md",
-        ".harness/continuity/current.json"
-      ],
+      "owned_paths": [],
       "started_at": "2026-08-30T18:40:00Z",
       "last_update": "2026-08-30T18:45:00Z",
-      "status": "in_progress",
+      "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/GEMINI_REVIEW_DOSSIER.md"
     },
     {
       "agent": "deepseek-cade",
       "role": "Core Runtime & Infrastructure Implementer",
-      "task_id": "P0-M1-CANARY-RERUN",
+      "task_id": "PRE-M1-MODEL-FREE-REPAIR",
       "mode": "implementation",
-      "owned_paths": [
-        "orchestrator/",
-        "tests/",
-        "workspace/validation/"
-      ],
+      "owned_paths": [],
       "started_at": "2026-08-30T04:55:00Z",
-      "last_update": "2026-08-30T18:34:35Z",
-      "status": "blocked",
-      "blocked_by": "BytePlus ModelArk 5-hour rolling session quota reset (~22:22 CEST)",
+      "last_update": "2026-08-30T23:42:52Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-31.md"
+    },
+    {
+      "agent": "claude-opus",
+      "role": "Live Execution Owner — M1 validation gate",
+      "task_id": "P0-M1-BYTE-EXEC",
+      "mode": "implementation",
+      "owned_paths": [],
+      "started_at": "2026-08-30T21:00:00Z",
+      "last_update": "2026-08-30T21:00:00Z",
+      "status": "completed",
+      "blocked_by": null,
       "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-30.md"
+    },
+    {
+      "agent": "codex",
+      "role": "Continuity Baseline and Handoff Owner",
+      "task_id": "PRE-M1-CONTINUITY-BASELINE",
+      "mode": "implementation",
+      "owned_paths": [],
+      "started_at": "2026-08-31T00:44:00Z",
+      "last_update": "2026-08-31T00:53:42Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/HANDOFF_PROTOCOL.md"
     }
   ],
   "coordination_rules": [

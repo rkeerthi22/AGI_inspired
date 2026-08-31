@@ -89,8 +89,36 @@ class TrajectoryWriter:
         self._path = trajectory_path
         self._task_id = task_id
         self._mission_id = mission_id
-        self._sequence = 0
         self._path.parent.mkdir(parents=True, exist_ok=True)
+        self._sequence, self._needs_separator = self._resume_state()
+
+    def _resume_state(self) -> tuple[int, bool]:
+        """Return the highest valid sequence and whether an append needs a newline.
+
+        A crash may leave a truncated final JSON object.  Valid earlier records
+        remain authoritative; malformed records are ignored, and the next append
+        is separated from an unterminated tail without rewriting existing bytes.
+        """
+        if not self._path.is_file() or self._path.stat().st_size == 0:
+            return 0, False
+
+        highest = 0
+        with self._path.open("r", encoding="utf-8", errors="replace") as handle:
+            for raw_line in handle:
+                try:
+                    event = json.loads(raw_line)
+                except (json.JSONDecodeError, UnicodeDecodeError):
+                    continue
+                if not isinstance(event, dict) or event.get("task_id") != self._task_id:
+                    continue
+                sequence = event.get("sequence")
+                if type(sequence) is int and sequence > highest:
+                    highest = sequence
+
+        with self._path.open("rb") as handle:
+            handle.seek(-1, os.SEEK_END)
+            needs_separator = handle.read(1) not in (b"\n", b"\r")
+        return highest, needs_separator
 
     # ── read-only properties ──────────────────────────────────────────
 
@@ -152,6 +180,9 @@ class TrajectoryWriter:
                                if k not in _SECRET_ENV_NAMES}
         line = json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
         with open(self._path, "a", encoding="utf-8") as fh:
+            if self._needs_separator:
+                fh.write("\n")
+                self._needs_separator = False
             fh.write(line)
         return event
 
