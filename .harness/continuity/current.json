@@ -1,46 +1,35 @@
 {
   "schema_version": 2,
-  "brief_revision": 37,
-  "created_at": "2026-08-31T18:02:55.988094+00:00",
+  "brief_revision": 38,
+  "created_at": "2026-08-31T23:44:20.359997+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      ".harness/continuity/current.json",
-      "docs/ACTIVE_WORK.json",
-      "docs/CURRENT_STATE.md",
-      "tests/tiers.json",
-      "agi.ps1",
-      "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
-      "docs/OPERATOR_CLI.md",
-      "orchestrator/operator_cli.py",
-      "tests/test_operator_cli.py"
-    ],
-    "based_on_head": "09ccc0fde2fbd41081c205345426047e05cef595"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "cb504fe986874af8915b8f8e8be53cec105d7c20"
   },
   "task": {
     "id": "OPERATOR-CLI-P1-RECOVERY",
-    "phase": "complete-awaiting-independent-review",
+    "phase": "complete-independent-review-passed-frozen",
     "status": "complete",
-    "next_action": "DeepSeek/Gemini independently review the frozen Operator CLI checkpoint; then follow the human-controlled protection, quiescence, preflight, and single-canary sequence."
+    "next_action": "Frozen checkpoint cb504fe passed DeepSeek technical and Gemini architectural review and was pushed to origin. Operator performs the human-controlled sequence: quiescence, ARK_API_KEY, single-use canary marker, supervised connectivity canary, then optionally the controlled M1 window."
   },
   "completed": [
-    "Hermes completed the Unified Operator CLI implementation; quota interrupted commit/bookkeeping only",
-    "Codex fixed only the confirmed continuity recovery UNKNOWN/PASS defect",
-    "Continuity recovery errors now report valid=null and block canary preflight",
-    "Operator CLI targeted contract passes 109/109 assertions",
-    "Complete model-free gate passes 46/46 suites",
-    "Hermes and Codex own no paths; no active implementation writer remains",
-    "No provider call, canary, M1-M7, ESTOP transition, Phase 2/3, or enterprise package work"
+    "Unified Operator CLI implemented, reviewed, frozen at cb504fe",
+    "DeepSeek TECHNICALLY APPROVED; Gemini ARCHITECTURALLY APPROVED",
+    "Targeted Operator CLI checks 109/109; full model-free gate 46/46",
+    "Continuity recovery UNKNOWN/PASS defect fixed; fail-closed verified",
+    "Baseline preserved off-machine: cb504fe pushed to origin/master",
+    "No provider call, canary, M1-M7, ESTOP transition, or Phase 2/3 work"
   ],
   "locked_constraints": [
-    "Operator CLI remains observational and never becomes a second safety authority",
-    "Independent DeepSeek/Gemini review is required before operator reliance",
     "ESTOP remains engaged until an operator-controlled transition",
-    "No canary authorization or provider call before the reviewed checkpoint is protected and agents are quiesced",
-    "M1-M7, Phase 2 Memory FTS, Phase 3 drain/dispatch, and enterprise platform packages remain frozen",
+    "No canary or M1-M7 before operator authorization",
+    "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
+    "Munder state remains external to S:\\MunderState\\AGI_like",
+    "Development frozen for live-validation preparation",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
@@ -50,7 +39,7 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical checkpoint state and review sequence",
+      "purpose": "Canonical state and exact live next action",
       "sha256": "407c810c1c2fc23f670d8a38d30f0a9b2f5828330e0dbe1640c76edbe12c9137"
     },
     {
@@ -60,23 +49,28 @@
     },
     {
       "path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
-      "purpose": "Implementation, interrupted closeout, defect, fix, and evidence",
+      "purpose": "Implementation handoff with review scope",
       "sha256": "57e3e02d3c9f566c71986bc62e9545f9ed75cc99d02ece54905caf66976d5b27"
     },
     {
       "path": "docs/OPERATOR_CLI.md",
-      "purpose": "Operator command and safety contract",
+      "purpose": "CLI command and JSON contract reference",
       "sha256": "9cf7aa398b21efc54af33f2779e04ee3c8b598c6a803b69046a26780023f46ea"
     },
     {
       "path": "orchestrator/operator_cli.py",
-      "purpose": "Frozen Operator CLI implementation",
+      "purpose": "Unified read-only operator CLI implementation",
       "sha256": "6b03ce69d6917f0447f5344eade29ec279d0f6cd5db5d72944e509680ecc6672"
     },
     {
       "path": "tests/test_operator_cli.py",
-      "purpose": "109-assertion focused contract suite",
+      "purpose": "109-assertion CLI contract suite",
       "sha256": "d358a031b19da656127b5af0052b7807ff6fe7f01a1599d09af82a5d3a2d4fe2"
+    },
+    {
+      "path": "workspace/validation/byteplus_connectivity_canary.py",
+      "purpose": "Pre-provider canary admission gate",
+      "sha256": "7482be30627c9540246ca69810cae0518b7e63dd367db4f27bdb17e36d44dff3"
     }
   ]
 }
