@@ -1,75 +1,63 @@
 {
   "schema_version": 2,
-  "brief_revision": 31,
-  "created_at": "2026-08-31T03:32:14.917837+00:00",
+  "brief_revision": 32,
+  "created_at": "2026-08-31T05:09:15.010890+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      ".harness/continuity/current.json",
-      "docs/ACTIVE_WORK.json",
-      "docs/CURRENT_STATE.md",
-      "docs/HANDOFF_PROTOCOL.md",
-      "docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md",
-      "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md",
-      "docs/HERMES_RESEARCH_MUNDER.md",
-      "docs/MUNDER_BLUEPRINT.md",
-      "docs/MUNDER_INTEGRATION.md"
-    ],
-    "based_on_head": "920f59dcca4429f9a1eeaa9c2ffe484309b3331f"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "7212f576029e489897ee993d3fe0156380f0d24f"
   },
   "task": {
-    "id": "MUNDER-BOUNDARY-HARDENING",
-    "phase": "complete",
+    "id": "MUNDER-BOUNDARY-REPAIR-RECOVERY",
+    "phase": "complete-awaiting-final-static-review",
     "status": "complete",
-    "next_action": "Independent review of commit 920f59d (boundary hardening) by Codex/Gemini; operator adjudicates limitations and authorizes any canary. No canary/M1-M7 before that."
+    "next_action": "Gemini/Codex perform final static review of fde1585 and live safety state; only the operator may then authorize one manually supervised BytePlus canary."
   },
   "completed": [
-    "4 Munder/AGI boundary gaps closed (hive quiesce, ESTOP tamper, hook deny+ownership, canary marker)",
-    "45/45 model-free suites green; targeted 68 checks (19+22+27, live-measured)",
-    "Commit 920f59d: runtime+tests only; docs pending operator sign-off",
-    "MunderState hook files delivered outside repo (enforce.js, cth-hook.cjs, roster)",
-    "Hermes ownership claimed then released; no live implementation owner remains"
+    "Hermes repair committed at fde1585; quota interrupted bookkeeping only",
+    "Codex independently verified 63+22+27+27 targeted checks and 45/45 full gate",
+    "Canonical docs reconciled and all implementation ownership released",
+    "No provider call, canary authorization, M1-M7, or Phase 2/3 work"
   ],
   "locked_constraints": [
-    "ESTOP engaged until operator-authorized bypass only",
-    "No M1-M7 without passed independent review + HTTP 200 canary + operator authorization",
-    "Munder state stays outside S:\\AGI_like",
-    "Phase 2/3 and dispatch wiring NOT started (operator directive)",
-    "Live repository and runtime state win over this brief",
-    "enforce.js limitations pending review: marker-forgery shell form, non-Claude engine enforcement"
+    "ESTOP remains engaged until an operator-controlled transition",
+    "No canary or M1-M7 before final static review and operator authorization",
+    "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
+    "Munder state remains external to S:\\AGI_like",
+    "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "45/45 green; targeted 19/22/27 all exit 0; continuity validate PASS; diff-check clean; no live calls"
+    "detail": "Targeted 63+22+27+27 PASS; full model-free gate 45/45; diff-check clean; no live calls"
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical hardened state and next action",
-      "sha256": "a2164f8a95e90087340912fae97e6509a546425a18a398eb63b9d0e3510068a2"
+      "purpose": "Canonical recovery state and exact next action",
+      "sha256": "033c162d61aa2aa664199219e5147fe3805af502cf6a8ae434007e40b9b47de3"
     },
     {
-      "path": "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md",
-      "purpose": "Closeout evidence and limitations",
-      "sha256": "496d15abcff596654f08d49f6beaa042734aa3949d6f64cad2bd4b0feab8e25f"
+      "path": "docs/CODEX_HANDOFF_2026-08-31_BOUNDARY_RECOVERY.md",
+      "purpose": "Independent recovery evidence",
+      "sha256": "89a5eb3516487393677b88e8684eef786ebf4d362d71142feb0cc59494e20fd9"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "purpose": "Ownership released at closeout",
-      "sha256": "a601bad1be2fc4416d1be315ec499aaa77b12712225210b68b87ab85311df33d"
+      "purpose": "Released ownership registry",
+      "sha256": "69b4d471d8d0fa0043161ddcdc24c02f66b59a8f3833e135c17beac6f9f7efee"
     },
     {
-      "path": "orchestrator/execution_pause.py",
-      "purpose": "ESTOP + tamper detection",
-      "sha256": "977551a62da6a941053e088165dd70fe7c4e4ec8bed2b226fc55945c6cb63e13"
+      "path": "orchestrator/cohort_hive_quiesce.py",
+      "purpose": "Final fleet/process quiescence implementation",
+      "sha256": "78f471065ee7dadcdc0a3d969477452cd7f6736c4c5622b494bca70059389784"
     },
     {
-      "path": "workspace/validation/cohort_isolation.py",
-      "purpose": "Transactional isolation + hive quiesce",
-      "sha256": "29d46c430158576b41707333f09c4090ccb2ac8f6248d94ba4bc3657001a0a9b"
+      "path": "workspace/validation/byteplus_connectivity_canary.py",
+      "purpose": "Pre-provider canary admission gate",
+      "sha256": "7482be30627c9540246ca69810cae0518b7e63dd367db4f27bdb17e36d44dff3"
     }
   ]
 }
