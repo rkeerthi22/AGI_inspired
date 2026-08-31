@@ -1,87 +1,58 @@
 {
   "schema_version": 2,
-  "brief_revision": 27,
-  "created_at": "2026-08-30T23:45:32.172595+00:00",
+  "brief_revision": 28,
+  "created_at": "2026-08-31T00:55:18.788252+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      ".harness/continuity/current.json",
-      "docs/ACTIVE_WORK.json",
-      "docs/CURRENT_STATE.md",
-      "orchestrator/trajectory.py",
-      "tests/test_trajectory_event_stream.py",
-      "docs/DEEPSEEK_HANDOFF_2026-08-31.md",
-      "hive/",
-      "roster-backups/roster-2026-08-30T23-32-57-498Z-1-write.json",
-      "roster-backups/roster-2026-08-30T23-33-07-540Z-2-write.json",
-      "roster-backups/roster-2026-08-30T23-33-32-165Z-3-write.json",
-      "roster-backups/roster-2026-08-30T23-33-40-554Z-4-write.json",
-      "roster-backups/roster-2026-08-30T23-33-46-238Z-5-write.json",
-      "roster-backups/roster-2026-08-30T23-33-51-707Z-6-write.json",
-      "roster-backups/roster-2026-08-30T23-34-01-126Z-7-write.json",
-      "roster-backups/roster-2026-08-30T23-34-15-193Z-8-write.json",
-      "roster-backups/roster-2026-08-30T23-34-20-978Z-9-write.json",
-      "roster-backups/roster-2026-08-30T23-34-21-899Z-10-write.json",
-      "roster-backups/roster-2026-08-30T23-34-25-560Z-11-write.json",
-      "roster-backups/roster-2026-08-30T23-34-31-130Z-12-write.json",
-      "roster-backups/roster-2026-08-30T23-34-40-540Z-13-write.json",
-      "roster-backups/roster-2026-08-30T23-34-45-810Z-14-write.json",
-      "roster-backups/roster-2026-08-30T23-34-48-439Z-15-write.json",
-      "roster-backups/roster-2026-08-30T23-34-53-085Z-16-write.json",
-      "roster-backups/roster-2026-08-30T23-35-04-426Z-17-write.json",
-      "roster-backups/roster-2026-08-30T23-35-08-464Z-18-write.json",
-      "roster-backups/roster-2026-08-30T23-35-24-163Z-19-write.json",
-      "roster-backups/roster-2026-08-30T23-35-26-455Z-20-write.json",
-      "roster-backups/roster-2026-08-30T23-35-28-657Z-21-write.json",
-      "roster-backups/roster-2026-08-30T23-35-43-302Z-22-write.json",
-      "roster.json"
-    ],
-    "based_on_head": "83c91500cdf2c8a2d4c030a4e3ca05f6128f195b"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "c20dba18dac86c6d02d01454875b25f62a8d191c"
   },
   "task": {
-    "id": "PRE-M1-MODEL-FREE-REPAIR",
-    "phase": "complete-awaiting-independent-review",
+    "id": "PRE-M1-INTEGRATION-BASELINE",
+    "phase": "ready-for-operator-connectivity-canary",
     "status": "complete",
-    "next_action": "Codex/Gemini read-only review; do not run canary or M1 without new authorization"
+    "next_action": "Operator runs exactly one authorized BytePlus connectivity canary; run no M1-M7 unless it returns HTTP 200 and the controlled window is authorized"
   },
   "completed": [
-    "Trajectory reopen resumes from highest valid sequence",
-    "Trajectory tests are isolated from real runs",
+    "Trajectory sequence resumption and test isolation repaired",
     "41/41 model-free suites green",
-    "Coordination ownership released; no live execution owner"
+    "Munder state isolated at S:\\MunderState\\AGI_like",
+    "Dual-orchestrator continuity collision resolved",
+    "All AGI write ownership released"
   ],
   "locked_constraints": [
-    "ESTOP stays engaged",
-    "No live provider or M1-M7 call during this repair",
-    "Live state wins over continuity metadata"
+    "ESTOP stays engaged until an explicitly authorized controlled bypass",
+    "No M1-M7 before a successful connectivity canary and operator authorization",
+    "Munder generated state remains outside S:\\AGI_like",
+    "Live repository and runtime state win over this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "Targeted trajectory PASS; 41/41 model-free suites green; live tier disabled"
+    "detail": "41/41 model-free suites green; targeted trajectory and F59 green; no live calls"
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical current state",
-      "sha256": "772f490b18fae742f82089ffeda405b7d8d1679507bc803b4a309951ac186f06"
+      "purpose": "Canonical pre-M1 state and exact next action",
+      "sha256": "e52817aa3c8c1fc85f5304bda7afe4f9cee40c8cfe28506b09f604f078bb6973"
+    },
+    {
+      "path": "docs/HANDOFF_PROTOCOL.md",
+      "purpose": "Universal handoff protocol and resolved pre-M1 checkpoint",
+      "sha256": "db4f8269ee7e7c25843876027efde25342c492b8e8a7c0544f505a56f24e64f8"
     },
     {
       "path": "docs/DEEPSEEK_HANDOFF_2026-08-31.md",
-      "purpose": "Pre-M1 repair handoff",
+      "purpose": "Trajectory repair evidence",
       "sha256": "f75a4885d5497288433e3a9ff544c21bd7a9114397bf43d5260e77caec996d9e"
     },
     {
       "path": "orchestrator/provider_chat.py",
       "purpose": "Canonical provider boundary",
       "sha256": "65e924a6f8a4cad6610f0a1973e57e232cdaeceadde27ff7c0fec358d277e9b5"
-    },
-    {
-      "path": "workspace/validation/run_cohort.py",
-      "purpose": "Controlled cohort CLI",
-      "sha256": "31f1a3142288689b94aca109f5dd5337944a572d281b3003171ef3b4aa85b4cb"
     },
     {
       "path": "workspace/validation/cohort_isolation.py",
