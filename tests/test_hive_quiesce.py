@@ -214,7 +214,7 @@ with tempfile.TemporaryDirectory() as td:
         pass
     report = cohort_hive_quiesce.tree_taint_report(
         ["docs/A.md"], status_now_provider=lambda: ["docs/A.md"])
-    checks["no new paths → clean taint report"] = (
+    checks["no new paths -> clean taint report"] = (
         report["verified"] is True and report["new_paths"] == [])
     report2 = cohort_hive_quiesce.tree_taint_report(
         ["docs/A.md"], status_now_provider=lambda: ["docs/A.md", "docs/B.md"])
@@ -222,7 +222,7 @@ with tempfile.TemporaryDirectory() as td:
         report2["verified"] is True and report2["new_paths"] == ["docs/B.md"])
     report3 = cohort_hive_quiesce.tree_taint_report(
         None, status_now_provider=lambda: [])
-    checks["missing open snapshot → unverifiable report"] = (
+    checks["missing open snapshot -> unverifiable report"] = (
         report3["verified"] is False)
 
 # Case F: guardian path restores through the extended backend (journal from
