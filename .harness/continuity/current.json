@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "brief_revision": 35,
-  "created_at": "2026-08-31T06:25:22.705279+00:00",
+  "brief_revision": 37,
+  "created_at": "2026-08-31T18:02:55.988094+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
@@ -9,68 +9,74 @@
     "tree_clean": false,
     "changed_paths": [
       ".harness/continuity/current.json",
-      "AGENTS.md",
       "docs/ACTIVE_WORK.json",
       "docs/CURRENT_STATE.md",
-      "docs/ENTERPRISE_READINESS_2026-08-31.md"
+      "tests/tiers.json",
+      "agi.ps1",
+      "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
+      "docs/OPERATOR_CLI.md",
+      "orchestrator/operator_cli.py",
+      "tests/test_operator_cli.py"
     ],
-    "based_on_head": "4e768eba118c0ca7d8ca276d4f6b2610beed983f"
+    "based_on_head": "09ccc0fde2fbd41081c205345426047e05cef595"
   },
   "task": {
-    "id": "MUNDER-BOUNDARY-REPAIR-RECOVERY",
-    "phase": "complete-awaiting-final-static-review",
+    "id": "OPERATOR-CLI-P1-RECOVERY",
+    "phase": "complete-awaiting-independent-review",
     "status": "complete",
-    "next_action": "Gemini/Codex perform final static review of fde1585 and live safety state; only the operator may then authorize one manually supervised BytePlus canary."
+    "next_action": "DeepSeek/Gemini independently review the frozen Operator CLI checkpoint; then follow the human-controlled protection, quiescence, preflight, and single-canary sequence."
   },
   "completed": [
-    "Hermes repair committed at fde1585; quota interrupted bookkeeping only",
-    "Codex independently verified 63+22+27+27 targeted checks and 45/45 full gate",
-    "Canonical docs reconciled and all implementation ownership released",
-    "Enterprise readiness documented at PRE-ENTERPRISE 2.9/5; no recommendation implemented",
-    "No provider call, canary authorization, M1-M7, or Phase 2/3 work"
+    "Hermes completed the Unified Operator CLI implementation; quota interrupted commit/bookkeeping only",
+    "Codex fixed only the confirmed continuity recovery UNKNOWN/PASS defect",
+    "Continuity recovery errors now report valid=null and block canary preflight",
+    "Operator CLI targeted contract passes 109/109 assertions",
+    "Complete model-free gate passes 46/46 suites",
+    "Hermes and Codex own no paths; no active implementation writer remains",
+    "No provider call, canary, M1-M7, ESTOP transition, Phase 2/3, or enterprise package work"
   ],
   "locked_constraints": [
+    "Operator CLI remains observational and never becomes a second safety authority",
+    "Independent DeepSeek/Gemini review is required before operator reliance",
     "ESTOP remains engaged until an operator-controlled transition",
-    "No canary or M1-M7 before final static review and operator authorization",
-    "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
-    "Munder state remains external to S:\\MunderState\\AGI_like",
-    "Enterprise readiness report is planning guidance, not live authorization",
+    "No canary authorization or provider call before the reviewed checkpoint is protected and agents are quiesced",
+    "M1-M7, Phase 2 Memory FTS, Phase 3 drain/dispatch, and enterprise platform packages remain frozen",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "45/45 model-free suites PASS; continuity refreshed after documentation-only review; no live calls"
+    "detail": "109/109 Operator CLI assertions and 46/46 model-free suites PASS; zero live calls"
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical recovery state and exact live next action",
-      "sha256": "27b7b11d5146f6de4a1665f88758bc9bae40c4a9ce6490d940624e1dea3f1cfd"
-    },
-    {
-      "path": "docs/ENTERPRISE_READINESS_2026-08-31.md",
-      "purpose": "Canonical enterprise maturity assessment and roadmap",
-      "sha256": "d3bebf6c091b297ba2b0baffa50fff7b8daf9ed16d8b30482ceed6b888f5a71d"
-    },
-    {
-      "path": "docs/CODEX_HANDOFF_2026-08-31_BOUNDARY_RECOVERY.md",
-      "purpose": "Independent boundary recovery evidence",
-      "sha256": "89a5eb3516487393677b88e8684eef786ebf4d362d71142feb0cc59494e20fd9"
+      "purpose": "Canonical checkpoint state and review sequence",
+      "sha256": "407c810c1c2fc23f670d8a38d30f0a9b2f5828330e0dbe1640c76edbe12c9137"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
       "purpose": "Released ownership registry",
-      "sha256": "eb0ca2f0dd15b063b0a69b117e60f53d8db1fc5bd84701e1993f9925d8edbbe7"
+      "sha256": "02cfcbc037dba8f947dd1c9de40e2224f0db8a2e2d11cc53cf706e015d3fd2c4"
     },
     {
-      "path": "orchestrator/cohort_hive_quiesce.py",
-      "purpose": "Final fleet/process quiescence implementation",
-      "sha256": "78f471065ee7dadcdc0a3d969477452cd7f6736c4c5622b494bca70059389784"
+      "path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
+      "purpose": "Implementation, interrupted closeout, defect, fix, and evidence",
+      "sha256": "57e3e02d3c9f566c71986bc62e9545f9ed75cc99d02ece54905caf66976d5b27"
     },
     {
-      "path": "workspace/validation/byteplus_connectivity_canary.py",
-      "purpose": "Pre-provider canary admission gate",
-      "sha256": "7482be30627c9540246ca69810cae0518b7e63dd367db4f27bdb17e36d44dff3"
+      "path": "docs/OPERATOR_CLI.md",
+      "purpose": "Operator command and safety contract",
+      "sha256": "9cf7aa398b21efc54af33f2779e04ee3c8b598c6a803b69046a26780023f46ea"
+    },
+    {
+      "path": "orchestrator/operator_cli.py",
+      "purpose": "Frozen Operator CLI implementation",
+      "sha256": "6b03ce69d6917f0447f5344eade29ec279d0f6cd5db5d72944e509680ecc6672"
+    },
+    {
+      "path": "tests/test_operator_cli.py",
+      "purpose": "109-assertion focused contract suite",
+      "sha256": "d358a031b19da656127b5af0052b7807ff6fe7f01a1599d09af82a5d3a2d4fe2"
     }
   ]
 }
