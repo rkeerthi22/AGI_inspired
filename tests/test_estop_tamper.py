@@ -169,6 +169,37 @@ with tempfile.TemporaryDirectory() as td:
         proc.returncode != 0 and
         "operator canary authorization" in (proc.stdout + proc.stderr))
 
+# 12b. End-to-end canary quiescence gate: WITH a valid operator marker but a
+#      dirty process inventory injected, the canary must refuse at the
+#      process-quiescence gate AFTER consuming the one-shot marker (model-free:
+#      it aborts before any provider call; the dirty inventory simulates a
+#      live mutation-capable development process).
+with tempfile.TemporaryDirectory() as td12:
+    home3 = Path(td12) / "home3"
+    home3.mkdir()
+    (home3 / "config.yaml").write_text("# test home\n", encoding="utf-8")
+    (home3 / "ESTOP").write_text('{"reason":"test"}\n', encoding="utf-8")
+    inv = Path(td12) / "inventory.json"
+    inv.write_text(json.dumps([{
+        "pid": 424242, "name": "claude.exe",
+        "cmdline": "claude.exe --permission-mode bypassPermissions",
+        "cwd": str(ROOT), "create_time": 12345.0}]), encoding="utf-8")
+    os.environ["HERMES_HOME"] = str(home3)
+    os.environ["AGI_PROCESS_INVENTORY_FILE"] = str(inv)
+    execution_pause.authorize_canary()
+    proc = subprocess.run(
+        [sys.executable, "-B", str(canary), "--authorize-single-estop-bypass"],
+        capture_output=True, text=True, encoding="utf-8", errors="replace",
+        timeout=60, env={**os.environ, "ARK_API_KEY": "dummy-not-used"})
+    combined = proc.stdout + proc.stderr
+    checks["canary CLI refuses with live dev process"] = (
+        proc.returncode != 0 and "mutation-capable" in combined)
+    checks["canary refusal names the offending pid"] = (
+        "pid=424242" in combined)
+    checks["refused canary still burns the one-shot marker"] = (
+        not (home3 / execution_pause.CANARY_AUTH_NAME).exists())
+    os.environ.pop("AGI_PROCESS_INVENTORY_FILE", None)
+
 # 13. batch_runner and run_task call verify_pause_integrity (source check).
     batch_src = (ROOT / "orchestrator" / "batch_runner.py").read_text(encoding="utf-8")
     run_task_src = (ROOT / "orchestrator" / "run_task.py").read_text(encoding="utf-8")

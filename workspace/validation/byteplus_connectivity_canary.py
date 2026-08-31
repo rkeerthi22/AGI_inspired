@@ -43,6 +43,18 @@ def main(argv: list[str] | None = None) -> int:
     if not os.environ.get("ARK_API_KEY", ""):
         raise SystemExit("ABORT: ARK_API_KEY is not present in this process environment")
 
+    # Defense-in-depth (Codex review #2, 2026-08-31): the operator canary must
+    # not execute when a mutation-capable Munder development process is live.
+    # Current canary authorization is a scoped one-shot capability, not
+    # cryptographic human authentication; this gate caps the blast radius of
+    # that known limitation.  It runs AFTER marker consumption on purpose: a
+    # refused canary still burns the one-shot marker.
+    import cohort_hive_quiesce  # noqa: E402  (orchestrator/ is on sys.path)
+    try:
+        cohort_hive_quiesce.ensure_canary_process_quiescence()
+    except cohort_hive_quiesce.HiveQuiesceError as exc:
+        raise SystemExit(f"ABORT: {exc}")
+
     config = yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))
     provider = (config.get("providers") or {}).get(PROVIDER)
     if not isinstance(provider, dict):
