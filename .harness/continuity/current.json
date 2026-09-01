@@ -1,20 +1,20 @@
 {
   "schema_version": 2,
-  "brief_revision": 42,
-  "created_at": "2026-09-01T03:11:34.789334+00:00",
+  "brief_revision": 43,
+  "created_at": "2026-09-01T05:16:45.877676+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "43dc3408df65df62437d0dfc69c1b2a31eb09ee6"
+    "based_on_head": "899d6d3f1fbf81b7bc6ddb7b8c89f0aeb3dbc770"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "m1-complete-m2-pending-operator-authorization",
+    "phase": "m1-m2-complete-m3-pending-operator-authorization",
     "status": "in_progress",
-    "next_action": "M1 passed under the controlled window (task 106: critic PASS, 64,651 mission tokens, 7 retrievals, 1 finalizer, 8 facts, 0 dead citations, accounting reconciled exactly). Operator reviews M1 output, then authorizes M2 as a separate controlled-window run if desired. All later missions remain operator-authorized individually."
+    "next_action": "M2 passed under the controlled window (task 109: critic PASS, browser_navigate executed first on the canonical AIPRM task, 23,000 mission input/output tokens, 4 executed browser retrievals, 1 finalizer, 9 facts, 0 dead citations). Operator reviews M2 output, then authorizes M3 as a separate controlled-window run if desired. M3-M7 remain operator-authorized individually."
   },
   "completed": [
     "Canary + M1 executed under operator authorization via the BytePlus provider",
@@ -23,10 +23,17 @@
     "F66 mission accounting reconciles exactly: worker 62,264 + critic 2,387 = 64,651",
     "F63 bounds held: 7 executed retrievals (<=8), 1 finalizer, deterministic termination",
     "Controlled window opened clean and restored; tree taint check verified, no new paths",
-    "ESTOP re-engaged automatically after window close; canary marker absent"
+    "ESTOP re-engaged automatically after window close; canary marker absent",
+    "M2 task 109 completed with critic PASS and status done",
+    "M2 retrieval audit began with browser_navigate at executed_calls=1 under dynamic_browser_required",
+    "Canonical AIPRM pricing deliverable captured four monthly tiers and the visible NEW2026 promotion",
+    "M2 accounting reconciles: worker 15,715 in + 4,859 out; critic 1,050 in + 1,376 out = 23,000 mission input/output tokens",
+    "M2 extracted 9 facts; citecheck reached the canonical URL with 0 dead citations",
+    "M2 controlled window restored ESTOP, scheduled tasks, cron, gateway, and hive state; tree taint check found zero new paths",
+    "Post-window model-free gate passed 46/46 suites"
   ],
   "locked_constraints": [
-    "Each M2-M7 mission requires separate operator authorization",
+    "Each M3-M7 mission requires separate operator authorization",
     "ESTOP remains engaged between windows until an operator-controlled transition",
     "Munder fleet state regenerates only through supported lifecycle controls",
     "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
@@ -34,28 +41,28 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "M1 window: 109/109 CLI assertions and 46/46 gate held at freeze; mission accounting reconciled; zero unauthorized live calls"
+    "detail": "M2 task 109: critic PASS; first retrieval was browser_navigate under dynamic_browser_required; accounting reconciled; isolation restored; post-window gate 46/46 green"
   },
   "references": [
     {
-      "path": "workspace/shopify/2026-W36_cohort-2026-w36-m1-straightforward-research-prompthero-ai-p.md",
-      "purpose": "M1 deliverable (critic PASS)",
-      "sha256": "f607995c5e1ba1487e203fa56da898260ab11ceac3001c3dbb0e07265dddd0a0"
+      "path": "workspace/shopify/2026-W36_cohort-2026-w36-m2-dynamic-browser-canonical-aiprm-pricing.md",
+      "purpose": "M2 deliverable (task 109, critic PASS)",
+      "sha256": "b8b474b72d39e2f195fa1ffd9ed704c575e675e813995616e68b4b765dcc705e"
     },
     {
-      "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical state",
-      "sha256": "407c810c1c2fc23f670d8a38d30f0a9b2f5828330e0dbe1640c76edbe12c9137"
+      "path": "workspace/validation/cohort_summary.json",
+      "purpose": "M2 controlled-window summary and restoration evidence",
+      "sha256": "76ee83be6f0ef11472c3087df0f73615974e73153723dc3dfa2f0f8a8b8fde59"
     },
     {
-      "path": "docs/OPERATOR_CLI.md",
-      "purpose": "CLI contract reference",
-      "sha256": "9cf7aa398b21efc54af33f2779e04ee3c8b598c6a803b69046a26780023f46ea"
+      "path": "runs/task109_worker.usage.retrieval.jsonl",
+      "purpose": "M2 browser-first retrieval audit",
+      "sha256": "8912781539fd2e8cc1df4e6637796449d7806f29c818deea3d1ecac9f632f705"
     },
     {
-      "path": "workspace/validation/cohort_isolation.py",
-      "purpose": "Controlled window implementation",
-      "sha256": "29d46c430158576b41707333f09c4090ccb2ac8f6248d94ba4bc3657001a0a9b"
+      "path": "runs/task109_mission.usage.json",
+      "purpose": "M2 reconciled mission accounting",
+      "sha256": "efc678584039724c1d2913e968e4cf0ea5e37f492d41026d84201b3d60439e98"
     }
   ]
 }
