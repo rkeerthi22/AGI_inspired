@@ -1,56 +1,70 @@
 {
   "schema_version": 2,
-  "brief_revision": 40,
-  "created_at": "2026-09-01T01:07:00.996664+00:00",
-  "status": "complete",
+  "brief_revision": 41,
+  "created_at": "2026-09-01T02:19:30.073393+00:00",
+  "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md"
-    ],
-    "based_on_head": "7f75e1a3139265b36caa4c9aeeebaadfa5cca546"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "ce8c1a79a99a7922503ed71cabe369ae5dcbc2f9"
   },
   "task": {
-    "id": "MUNDER-BOUNDARY-REMEDIATION",
-    "phase": "complete-model-free-external-cleanup",
-    "status": "complete",
-    "next_action": "Human rotates the exposed Codex and GitHub credentials from a separate terminal, configures Codex keyring storage, then regenerates Munder fleet state through supported controls before any controlled M1-M7 window."
+    "id": "PRE-VALIDATION-CLOSEOUT",
+    "phase": "operator-disconnection-verification",
+    "status": "in_progress",
+    "next_action": "Operator closes remaining terminal sessions; re-run agi preflight canary from the human terminal; when all blockers are green the operator issues a fresh single-use marker and runs the supervised BytePlus connectivity canary."
   },
   "completed": [
-    "Operator CLI inventory isolation fixed at e7d0692",
-    "109/109 targeted and 46/46 model-free suites PASS",
-    "Both Hive histories scrubbed of all .codex paths; no remotes",
-    "Session junctions removed; bypassPermissions removed from live and backup rosters",
-    "Munder ACLs tightened; historical GitHub token copy removed"
+    "Codex resume handoff recorded; Claude CLI review committed at ce8c1a7",
+    "Revoked GitHub token cleared from Munder mcpDefaults (value never read)",
+    "Expired canary marker removed after operator confirmed revocation",
+    "Munder fleet left honestly stale; canary gate is process-scan only",
+    "Operator CLI 109/109; model-free gate 46/46; continuity validated"
   ],
   "locked_constraints": [
     "ESTOP remains engaged until an operator-controlled transition",
-    "No provider, canary, or M1-M7 was run by this remediation",
-    "Active credential rotation remains human-only",
-    "Namespace migration and enforcement pinning remain deferred until after M1-M7",
+    "No canary or M1-M7 before operator authorization",
+    "Fleet state must only be regenerated through supported Munder lifecycle controls",
+    "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
+    "Munder state remains external to S:\\MunderState\\AGI_like",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "109/109 Operator CLI; 46/46 model-free; Munder boundary 27/27; Hive quiescence 63/63; zero live calls"
+    "detail": "109/109 Operator CLI assertions; 46/46 model-free suites; zero live calls"
   },
   "references": [
     {
+      "path": "docs/CODEX_HANDOFF_2026-09-01_HERMES_RESUME.md",
+      "purpose": "Codex resume baseline and pre-validation sequence",
+      "sha256": "c69bf05387ed3ab36a3d9c7385c5b9d3e122ce772562e27299db2f451022c089"
+    },
+    {
+      "path": "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md",
+      "purpose": "Favorable static CLI review",
+      "sha256": "21ad2a968711c2253af1f1be504b92b5564dc4bab041a680755758acf81016e0"
+    },
+    {
+      "path": "docs/CURRENT_STATE.md",
+      "purpose": "Canonical state",
+      "sha256": "407c810c1c2fc23f670d8a38d30f0a9b2f5828330e0dbe1640c76edbe12c9137"
+    },
+    {
       "path": "docs/ACTIVE_WORK.json",
-      "purpose": "Released ownership registry",
-      "sha256": "b370a7b1c2af6ff20a256f06fbd20f93e865afd301869e97b238e1519733fe28"
+      "purpose": "Ownership registry",
+      "sha256": "5ec00ba68d0b0eb6b61e6af4b29d684ed1eaabbc8e83f03d9eaca44ef6adcf40"
     },
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
-      "purpose": "External remediation evidence and human follow-up",
-      "sha256": "4730be8e5de8c47ac789287013fa1e7d052cc2845a1cb3dc90c2714ac7204473"
+      "path": "docs/OPERATOR_CLI.md",
+      "purpose": "CLI contract reference",
+      "sha256": "9cf7aa398b21efc54af33f2779e04ee3c8b598c6a803b69046a26780023f46ea"
     },
     {
-      "path": "tests/test_operator_cli.py",
-      "purpose": "Deterministic process-inventory isolation regression",
-      "sha256": "40913c33c3d61a2f2c1a3781f4e080928ff78ba09bfc461083dd57a7d627b0fd"
+      "path": "workspace/validation/byteplus_connectivity_canary.py",
+      "purpose": "Canary admission gate",
+      "sha256": "7482be30627c9540246ca69810cae0518b7e63dd367db4f27bdb17e36d44dff3"
     }
   ]
 }
