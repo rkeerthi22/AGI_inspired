@@ -1,50 +1,46 @@
 {
   "schema_version": 2,
-  "brief_revision": 41,
-  "created_at": "2026-09-01T02:19:30.073393+00:00",
+  "brief_revision": 42,
+  "created_at": "2026-09-01T03:11:34.789334+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "ce8c1a79a99a7922503ed71cabe369ae5dcbc2f9"
+    "based_on_head": "43dc3408df65df62437d0dfc69c1b2a31eb09ee6"
   },
   "task": {
-    "id": "PRE-VALIDATION-CLOSEOUT",
-    "phase": "operator-disconnection-verification",
+    "id": "M1-M7-VALIDATION",
+    "phase": "m1-complete-m2-pending-operator-authorization",
     "status": "in_progress",
-    "next_action": "Operator closes remaining terminal sessions; re-run agi preflight canary from the human terminal; when all blockers are green the operator issues a fresh single-use marker and runs the supervised BytePlus connectivity canary."
+    "next_action": "M1 passed under the controlled window (task 106: critic PASS, 64,651 mission tokens, 7 retrievals, 1 finalizer, 8 facts, 0 dead citations, accounting reconciled exactly). Operator reviews M1 output, then authorizes M2 as a separate controlled-window run if desired. All later missions remain operator-authorized individually."
   },
   "completed": [
-    "Codex resume handoff recorded; Claude CLI review committed at ce8c1a7",
-    "Revoked GitHub token cleared from Munder mcpDefaults (value never read)",
-    "Expired canary marker removed after operator confirmed revocation",
-    "Munder fleet left honestly stale; canary gate is process-scan only",
-    "Operator CLI 109/109; model-free gate 46/46; continuity validated"
+    "Canary + M1 executed under operator authorization via the BytePlus provider",
+    "M1 verdict PASS: explicit bounded-unavailability declaration accepted per harmonized criteria",
+    "8 facts extracted to ledgerbook (6 at confidence 3 from prompthero.com/plans)",
+    "F66 mission accounting reconciles exactly: worker 62,264 + critic 2,387 = 64,651",
+    "F63 bounds held: 7 executed retrievals (<=8), 1 finalizer, deterministic termination",
+    "Controlled window opened clean and restored; tree taint check verified, no new paths",
+    "ESTOP re-engaged automatically after window close; canary marker absent"
   ],
   "locked_constraints": [
-    "ESTOP remains engaged until an operator-controlled transition",
-    "No canary or M1-M7 before operator authorization",
-    "Fleet state must only be regenerated through supported Munder lifecycle controls",
+    "Each M2-M7 mission requires separate operator authorization",
+    "ESTOP remains engaged between windows until an operator-controlled transition",
+    "Munder fleet state regenerates only through supported lifecycle controls",
     "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
-    "Munder state remains external to S:\\MunderState\\AGI_like",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "109/109 Operator CLI assertions; 46/46 model-free suites; zero live calls"
+    "detail": "M1 window: 109/109 CLI assertions and 46/46 gate held at freeze; mission accounting reconciled; zero unauthorized live calls"
   },
   "references": [
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-01_HERMES_RESUME.md",
-      "purpose": "Codex resume baseline and pre-validation sequence",
-      "sha256": "c69bf05387ed3ab36a3d9c7385c5b9d3e122ce772562e27299db2f451022c089"
-    },
-    {
-      "path": "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md",
-      "purpose": "Favorable static CLI review",
-      "sha256": "21ad2a968711c2253af1f1be504b92b5564dc4bab041a680755758acf81016e0"
+      "path": "workspace/shopify/2026-W36_cohort-2026-w36-m1-straightforward-research-prompthero-ai-p.md",
+      "purpose": "M1 deliverable (critic PASS)",
+      "sha256": "f607995c5e1ba1487e203fa56da898260ab11ceac3001c3dbb0e07265dddd0a0"
     },
     {
       "path": "docs/CURRENT_STATE.md",
@@ -52,19 +48,14 @@
       "sha256": "407c810c1c2fc23f670d8a38d30f0a9b2f5828330e0dbe1640c76edbe12c9137"
     },
     {
-      "path": "docs/ACTIVE_WORK.json",
-      "purpose": "Ownership registry",
-      "sha256": "5ec00ba68d0b0eb6b61e6af4b29d684ed1eaabbc8e83f03d9eaca44ef6adcf40"
-    },
-    {
       "path": "docs/OPERATOR_CLI.md",
       "purpose": "CLI contract reference",
       "sha256": "9cf7aa398b21efc54af33f2779e04ee3c8b598c6a803b69046a26780023f46ea"
     },
     {
-      "path": "workspace/validation/byteplus_connectivity_canary.py",
-      "purpose": "Canary admission gate",
-      "sha256": "7482be30627c9540246ca69810cae0518b7e63dd367db4f27bdb17e36d44dff3"
+      "path": "workspace/validation/cohort_isolation.py",
+      "purpose": "Controlled window implementation",
+      "sha256": "29d46c430158576b41707333f09c4090ccb2ac8f6248d94ba4bc3657001a0a9b"
     }
   ]
 }
