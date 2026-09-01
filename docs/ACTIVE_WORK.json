@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-08-31T17:59:20Z",
+  "last_updated": "2026-09-01T01:05:33Z",
   "active_agents": [
     {
       "agent": "hermes",
@@ -17,16 +17,16 @@
     },
     {
       "agent": "codex",
-      "role": "Narrow Operator CLI Continuity Recovery Implementer - completed",
-      "task_id": "OPERATOR-CLI-P1-RECOVERY",
+      "role": "Munder Boundary Remediation Implementer - completed",
+      "task_id": "MUNDER-BOUNDARY-REMEDIATION",
       "mode": "completed",
       "owned_paths": [],
       "started_at": "2026-08-31T09:20:37Z",
-      "last_update": "2026-08-31T17:59:20Z",
+      "last_update": "2026-09-01T01:05:33Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
-      "notes": "Only the confirmed continuity UNKNOWN/PASS defect was fixed. 109/109 targeted and 46/46 model-free green; canonical closeout completed; no live calls; all ownership released."
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
+      "notes": "Completed the model-free test-isolation correction and external Munder history/junction/roster/ACL cleanup. 109/109 targeted and 46/46 full gate green. Human credential rotation and supported fleet regeneration remain; namespace migration and enforcement pinning are deferred. No live calls or safety-state changes."
     },
     {
       "agent": "deepseek-cade",

@@ -1,76 +1,58 @@
 {
   "schema_version": 2,
-  "brief_revision": 38,
-  "created_at": "2026-08-31T23:44:20.359997+00:00",
+  "brief_revision": 39,
+  "created_at": "2026-09-01T01:06:16.724717+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "cb504fe986874af8915b8f8e8be53cec105d7c20"
+    "tree_clean": false,
+    "changed_paths": [
+      "docs/ACTIVE_WORK.json",
+      "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
+      "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md"
+    ],
+    "based_on_head": "e7d0692b1c644648c514b42d4e73ca7d19d222bc"
   },
   "task": {
-    "id": "OPERATOR-CLI-P1-RECOVERY",
-    "phase": "complete-independent-review-passed-frozen",
+    "id": "MUNDER-BOUNDARY-REMEDIATION",
+    "phase": "complete-model-free-external-cleanup",
     "status": "complete",
-    "next_action": "Frozen checkpoint cb504fe passed DeepSeek technical and Gemini architectural review and was pushed to origin. Operator performs the human-controlled sequence: quiescence, ARK_API_KEY, single-use canary marker, supervised connectivity canary, then optionally the controlled M1 window."
+    "next_action": "Human rotates the exposed Codex and GitHub credentials from a separate terminal, configures Codex keyring storage, then regenerates Munder fleet state through supported controls before any controlled M1-M7 window."
   },
   "completed": [
-    "Unified Operator CLI implemented, reviewed, frozen at cb504fe",
-    "DeepSeek TECHNICALLY APPROVED; Gemini ARCHITECTURALLY APPROVED",
-    "Targeted Operator CLI checks 109/109; full model-free gate 46/46",
-    "Continuity recovery UNKNOWN/PASS defect fixed; fail-closed verified",
-    "Baseline preserved off-machine: cb504fe pushed to origin/master",
-    "No provider call, canary, M1-M7, ESTOP transition, or Phase 2/3 work"
+    "Operator CLI inventory isolation fixed at e7d0692",
+    "109/109 targeted and 46/46 model-free suites PASS",
+    "Both Hive histories scrubbed of all .codex paths; no remotes",
+    "Session junctions removed; bypassPermissions removed from live and backup rosters",
+    "Munder ACLs tightened; historical GitHub token copy removed"
   ],
   "locked_constraints": [
     "ESTOP remains engaged until an operator-controlled transition",
-    "No canary or M1-M7 before operator authorization",
-    "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
-    "Munder state remains external to S:\\MunderState\\AGI_like",
-    "Development frozen for live-validation preparation",
+    "No provider, canary, or M1-M7 was run by this remediation",
+    "Active credential rotation remains human-only",
+    "Namespace migration and enforcement pinning remain deferred until after M1-M7",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "109/109 Operator CLI assertions and 46/46 model-free suites PASS; zero live calls"
+    "detail": "109/109 Operator CLI; 46/46 model-free; Munder boundary 27/27; Hive quiescence 63/63; zero live calls"
   },
   "references": [
     {
-      "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical state and exact live next action",
-      "sha256": "407c810c1c2fc23f670d8a38d30f0a9b2f5828330e0dbe1640c76edbe12c9137"
-    },
-    {
       "path": "docs/ACTIVE_WORK.json",
       "purpose": "Released ownership registry",
-      "sha256": "02cfcbc037dba8f947dd1c9de40e2224f0db8a2e2d11cc53cf706e015d3fd2c4"
+      "sha256": "b370a7b1c2af6ff20a256f06fbd20f93e865afd301869e97b238e1519733fe28"
     },
     {
-      "path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
-      "purpose": "Implementation handoff with review scope",
-      "sha256": "57e3e02d3c9f566c71986bc62e9545f9ed75cc99d02ece54905caf66976d5b27"
-    },
-    {
-      "path": "docs/OPERATOR_CLI.md",
-      "purpose": "CLI command and JSON contract reference",
-      "sha256": "9cf7aa398b21efc54af33f2779e04ee3c8b598c6a803b69046a26780023f46ea"
-    },
-    {
-      "path": "orchestrator/operator_cli.py",
-      "purpose": "Unified read-only operator CLI implementation",
-      "sha256": "6b03ce69d6917f0447f5344eade29ec279d0f6cd5db5d72944e509680ecc6672"
+      "path": "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
+      "purpose": "External remediation evidence and human follow-up",
+      "sha256": "4730be8e5de8c47ac789287013fa1e7d052cc2845a1cb3dc90c2714ac7204473"
     },
     {
       "path": "tests/test_operator_cli.py",
-      "purpose": "109-assertion CLI contract suite",
-      "sha256": "d358a031b19da656127b5af0052b7807ff6fe7f01a1599d09af82a5d3a2d4fe2"
-    },
-    {
-      "path": "workspace/validation/byteplus_connectivity_canary.py",
-      "purpose": "Pre-provider canary admission gate",
-      "sha256": "7482be30627c9540246ca69810cae0518b7e63dd367db4f27bdb17e36d44dff3"
+      "purpose": "Deterministic process-inventory isolation regression",
+      "sha256": "40913c33c3d61a2f2c1a3781f4e080928ff78ba09bfc461083dd57a7d627b0fd"
     }
   ]
 }
