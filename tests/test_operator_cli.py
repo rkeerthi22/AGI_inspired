@@ -263,7 +263,13 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     inv.write_text(json.dumps([
         {"pid": 999999, "name": "Munder.exe", "cmdline": "C:/Munder/Munder.exe",
          "cwd": "C:/MunderState"}]), encoding="utf-8")
-    data = operator_cli.collect_status()
+    # Keep the second probe inside the injected inventory environment too.
+    # Otherwise it inspects the reviewer's live process table and makes this
+    # model-free contract test depend on whichever development CLI is running.
+    with mock.patch.dict(os.environ, {"HERMES_HOME": env["HERMES_HOME"],
+                                       "AGI_COHORT_JOURNAL": env["AGI_COHORT_JOURNAL"],
+                                       "AGI_PROCESS_INVENTORY_FILE": str(inv)}):
+        data = operator_cli.collect_status()
     q = data["munder_quiescence"]
     check("injected offender reports not quiesced", q["quiesced"], False)
     check("offender classified as munder_host",
