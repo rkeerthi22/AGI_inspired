@@ -1,32 +1,37 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-01T01:05:33Z",
+  "last_updated": "2026-09-01T02:55:00Z",
   "active_agents": [
     {
       "agent": "hermes",
-      "role": "Unified Operator CLI Implementer - implementation complete, closeout interrupted by provider quota",
-      "task_id": "OPERATOR-CLI-P1",
-      "mode": "completed",
-      "owned_paths": [],
-      "started_at": "2026-08-31T06:55:00Z",
-      "last_update": "2026-08-31T09:20:37Z",
-      "status": "completed",
+      "role": "Pre-validation closeout owner (documentation/operational only)",
+      "task_id": "PRE-VALIDATION-CLOSEOUT",
+      "mode": "implementation",
+      "owned_paths": [
+        "docs/CODEX_HANDOFF_2026-09-01_HERMES_RESUME.md",
+        "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md",
+        "docs/ACTIVE_WORK.json",
+        ".harness/continuity/current.json"
+      ],
+      "started_at": "2026-09-01T02:55:00Z",
+      "last_update": "2026-09-01T02:55:00Z",
+      "status": "in_progress",
       "blocked_by": "Ollama/GLM HTTP 429 interrupted final commit and canonical bookkeeping",
       "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
-      "notes": "Implementation and tests completed. Recovery transferred to Codex for verification, canonical closeout, and one scoped checkpoint commit only; Hermes retains no owned paths."
+      "notes": "Read-only/documented scope: clear revoked Munder github-token field via supported settings, support fleet regeneration, commit handoff + review + registry, then release for operator preflight. No providers, canary, M1-M7, ESTOP, or Phase 2/3."
     },
     {
       "agent": "codex",
-      "role": "Munder Boundary Remediation Implementer - completed",
-      "task_id": "MUNDER-BOUNDARY-REMEDIATION",
+      "role": "Hermes Resume Documentation Owner - handed off to Hermes; session closed",
+      "task_id": "HERMES-RESUME-HANDOFF",
       "mode": "completed",
       "owned_paths": [],
       "started_at": "2026-08-31T09:20:37Z",
-      "last_update": "2026-09-01T01:05:33Z",
+      "last_update": "2026-09-01T02:55:00Z",
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
-      "notes": "Completed the model-free test-isolation correction and external Munder history/junction/roster/ACL cleanup. 109/109 targeted and 46/46 full gate green. Human credential rotation and supported fleet regeneration remain; namespace migration and enforcement pinning are deferred. No live calls or safety-state changes."
+      "notes": "Documentation-only reconciliation complete; ownership transferred to Hermes for closeout (credential field clear, fleet regen, doc commit). No runtime changes, provider calls, canary, ESTOP transition, or Phase 2/3."
     },
     {
       "agent": "deepseek-cade",
