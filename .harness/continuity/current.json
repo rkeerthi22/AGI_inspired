@@ -1,18 +1,16 @@
 {
   "schema_version": 2,
-  "brief_revision": 39,
-  "created_at": "2026-09-01T01:06:16.724717+00:00",
+  "brief_revision": 40,
+  "created_at": "2026-09-01T01:07:00.996664+00:00",
   "status": "complete",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
-      "docs/ACTIVE_WORK.json",
-      "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
       "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md"
     ],
-    "based_on_head": "e7d0692b1c644648c514b42d4e73ca7d19d222bc"
+    "based_on_head": "7f75e1a3139265b36caa4c9aeeebaadfa5cca546"
   },
   "task": {
     "id": "MUNDER-BOUNDARY-REMEDIATION",
