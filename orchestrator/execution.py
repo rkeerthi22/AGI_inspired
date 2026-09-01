@@ -58,7 +58,8 @@ CHARS_PER_TOKEN = 4          # rough English ratio -- only ever used for a fits/
 RESPONSE_RESERVE_TOKENS = 1500   # a deliverable still has to fit in the reply
 
 def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
-                  timeout: int = WORKER_TIMEOUT_S) -> tuple[str, dict]:
+                  timeout: int = WORKER_TIMEOUT_S,
+                  retrieval_profile: str | None = None) -> tuple[str, dict]:
     # SECURITY (docs/INCIDENTS.md 2026-07-18): an unrestricted worker previously wrote
     # its own rows straight into ledger.db/ledgerbook.db and self-graded its own task.
     # Tried `-t web` to strip file/terminal/code tools -- it does NOT map to a real
@@ -88,6 +89,10 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # Authorize a dedicated local headless browser instead of attaching to the
     # user's Chrome (which requires interactive remote-debugging approval).
     env["HARNESS_UNATTENDED_BROWSER"] = "1"
+    if retrieval_profile:
+        # The profile is harness-owned control metadata, not model-selected
+        # prompt text. The controlled child validates it before any model call.
+        env["HARNESS_RETRIEVAL_PROFILE"] = retrieval_profile
     audit_path = usage_path.with_suffix(".retrieval.jsonl")
     # A retry reuses task<N>_worker.usage.json. Its audit must describe this
     # attempt alone just as the usage file does, not append to the prior run.
@@ -285,7 +290,9 @@ def _failover_candidates(worker_cfg: dict, allow_local: bool = True) -> list[dic
 
 def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
                          log_prefix: str,
-                         allow_local: bool = True) -> tuple[str, dict, dict, bool]:
+                         allow_local: bool = True,
+                         retrieval_profile: str | None = None
+                         ) -> tuple[str, dict, dict, bool]:
     """hermes_worker() with failover on QUOTA ERRORS ONLY. A genuine subprocess timeout
     on any one candidate still raises subprocess.TimeoutExpired exactly as before --
     the caller's existing except-block handles it unchanged. This only widens what
@@ -330,7 +337,12 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
         attempt_path = usage_path if i == 0 else usage_path.with_name(
             f"{usage_path.stem}_fallback{i}{usage_path.suffix}")
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else WORKER_TIMEOUT_S
-        out, usage = hermes_worker(prompt, cfg, attempt_path, timeout=timeout)
+        if retrieval_profile:
+            out, usage = hermes_worker(
+                prompt, cfg, attempt_path, timeout=timeout,
+                retrieval_profile=retrieval_profile)
+        else:
+            out, usage = hermes_worker(prompt, cfg, attempt_path, timeout=timeout)
         cfg_used = cfg
         combined_error = f"{out} {usage.get('process_error', '')}".strip()
         if not is_quota_error(combined_error):

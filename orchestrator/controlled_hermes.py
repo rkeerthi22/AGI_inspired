@@ -74,7 +74,16 @@ def main(argv: list[str] | None = None) -> int:
         unattended_browser=os.environ.get("HARNESS_UNATTENDED_BROWSER") == "1"
     )
     audit = os.environ.get("HARNESS_RETRIEVAL_AUDIT")
-    install_hermes_adapter(Path(audit) if audit else None)
+    profile = os.environ.get("HARNESS_RETRIEVAL_PROFILE")
+    if profile:
+        # Resolve explicit profiles lazily so the long-standing generic launch
+        # path retains the original one-argument adapter contract. Unknown
+        # profiles still fail closed before run_oneshot can contact a provider.
+        from retrieval_progress import retrieval_policy_for_profile
+        retrieval_policy = retrieval_policy_for_profile(profile)
+        install_hermes_adapter(Path(audit) if audit else None, retrieval_policy)
+    else:
+        install_hermes_adapter(Path(audit) if audit else None)
     original_args = ["-z", args.oneshot]
     for flag, value in (("--provider", args.provider), ("-m", args.model),
                         ("-t", args.toolsets), ("--usage-file", args.usage_file)):

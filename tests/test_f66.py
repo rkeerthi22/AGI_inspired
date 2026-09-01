@@ -3,8 +3,11 @@
 import asyncio
 import json
 import os
+import re
 import sys
 import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest.mock import patch
 
@@ -50,6 +53,72 @@ check("extract schema disclaims JavaScript", "does not execute JavaScript" in de
 check("extract schema points dynamic content to browser", "browser capability" in description)
 check("interactive browser_exec is hidden", registry.get_entry("browser_exec").check_fn(), False)
 check("built-in browser navigation is available", registry.get_entry("browser_navigate").check_fn(), True)
+
+
+class _DynamicFixtureHandler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        page = b"""<!doctype html><html><body><main id='app'></main><script>
+let annual = false;
+function render() {
+  const cadence = annual ? 'Annual billing' : 'Monthly billing';
+  const price = annual ? '$200/year' : '$20/month';
+  document.getElementById('app').innerHTML = `
+    <h1>JavaScript Pricing Fixture</h1>
+    <button id='billing'>${annual ? 'Monthly billing' : 'Annual billing'}</button>
+    <table aria-label='Pricing plans'><tr><th>Tier</th><th>Price</th><th>Seats</th></tr>
+    <tr><td>Fixture Pro</td><td>${price}</td><td>3 seats</td></tr></table>
+    <p>${cadence}</p>`;
+  document.getElementById('billing').onclick = () => { annual = !annual; render(); };
+}
+render();
+</script></body></html>"""
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(page)))
+        self.end_headers()
+        self.wfile.write(page)
+
+    def log_message(self, _format, *_args):
+        return
+
+
+# Behavioral browser preflight: render JavaScript and interact with a local-only
+# fixture. This contacts no provider or external host and catches a capability
+# that is merely advertised but cannot launch, render, snapshot, or click.
+from tools import browser_tool
+
+fixture_server = ThreadingHTTPServer(("127.0.0.1", 0), _DynamicFixtureHandler)
+fixture_thread = threading.Thread(target=fixture_server.serve_forever, daemon=True)
+fixture_thread.start()
+fixture_task = "f66-dynamic-browser-fixture"
+test_tmp_root = ROOT / ".tmp"
+test_tmp_root.mkdir(parents=True, exist_ok=True)
+original_tempdir = tempfile.tempdir
+try:
+    with tempfile.TemporaryDirectory(dir=test_tmp_root) as browser_tmp:
+        tempfile.tempdir = browser_tmp
+        try:
+            fixture_url = f"http://127.0.0.1:{fixture_server.server_port}/pricing"
+            navigated = json.loads(browser_tool.browser_navigate(fixture_url, task_id=fixture_task))
+            check("local JavaScript browser navigation succeeds", navigated.get("success"), True)
+            monthly_text = json.dumps(navigated, ensure_ascii=False)
+            check("browser renders JavaScript-populated monthly price", "$20/month" in monthly_text, True)
+            check("browser renders JavaScript-populated seat count", "3 seats" in monthly_text, True)
+            match = re.search(r'Annual billing.*?ref[=:\\" ]+([A-Za-z0-9_-]+)', monthly_text)
+            check("browser exposes annual-toggle accessibility ref", bool(match), True)
+            if match:
+                clicked = json.loads(browser_tool.browser_click(match.group(1), task_id=fixture_task))
+                check("browser clicks JavaScript billing toggle", clicked.get("success"), True)
+                annual = json.loads(browser_tool.browser_snapshot(task_id=fixture_task))
+                annual_text = json.dumps(annual, ensure_ascii=False)
+                check("browser captures JavaScript-populated annual price", "$200/year" in annual_text, True)
+        finally:
+            browser_tool.cleanup_browser(fixture_task)
+finally:
+    tempfile.tempdir = original_tempdir
+    fixture_server.shutdown()
+    fixture_server.server_close()
+    fixture_thread.join(timeout=5)
 
 async def exercise_handler():
     with patch.object(hermes_capabilities, "_fetch_static",

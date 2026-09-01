@@ -691,6 +691,20 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
         ok = False
     check("status --json subprocess emits valid JSON", ok, True)
 
+    if os.name == "nt":
+        launcher = subprocess.run(
+            ["powershell.exe", "-NoProfile", "-ExecutionPolicy", "Bypass",
+             "-File", str(ROOT / "agi.ps1"), "status", "-Json"],
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            env=env, cwd=str(ROOT), timeout=120)
+        check("agi.ps1 status -Json exits 0", launcher.returncode, 0)
+        try:
+            launcher_payload = json.loads(launcher.stdout)
+            launcher_ok = launcher_payload.get("command") == "status"
+        except ValueError:
+            launcher_ok = False
+        check("agi.ps1 status -Json emits valid JSON", launcher_ok, True)
+
     # preflight subprocess: blocked world -> nonzero
     world2 = build_world(Path(raw) / "w2", marker=True, batch_lock=True,
                          isolation_phase="open")

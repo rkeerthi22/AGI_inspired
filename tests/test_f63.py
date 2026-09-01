@@ -8,8 +8,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 
 from retrieval_progress import (  # noqa: E402
+    DYNAMIC_BROWSER_PROFILE,
     RetrievalPolicy,
     RetrievalProgressController,
+    retrieval_policy_for_profile,
     tool_stage,
 )
 import execution  # noqa: E402
@@ -57,9 +59,9 @@ check("search budget exactly bounded", c.state.calls[0], 3)
 check("required direct fetch", c.required_strategy, "direct_fetch")
 check("search now forcibly redirected",
       c.before("web_search", {"query": "fourth wording"})["code"],
-      "retrieval_strategy_halt")
+      "retrieval_strategy_redirect")
 check("redirect still consumes no retrieval call", c.executed_calls, 3)
-check("second rejected attempt is terminal", c.state.rejected_calls, 2)
+check("nonconsecutive second rejection remains recoverable", c.state.rejected_calls, 2)
 
 # Direct HTTP hidden in a general code tool is still part of the direct stage.
 direct_args = {"code": "import requests; requests.get('https://one.example/a')"}
@@ -161,7 +163,7 @@ check("setup disabled after research",
       setup.before("skill_view", {"name": "a"})["code"],
       "retrieval_strategy_halt")
 
-# Full ceiling: eight successful calls, two rejected attempts, one and only
+# Full budget: eight successful calls, a bounded consecutive-feedback halt, and
 # one compact evidence-only finalizer. No model-selected tool name can escape.
 ceiling = RetrievalProgressController(policy)
 for stage, name in ((0, "web_search"), (1, "terminal"), (2, "computer_use")):
@@ -175,8 +177,9 @@ check("first post-retrieval tool rejected",
       ceiling.before("read_file", {"path": "escape"})["terminal"], False)
 check("second post-retrieval tool terminates research",
       ceiling.before("write_file", {"path": "escape"})["terminal"], True)
-check("two rejected attempts total", ceiling.state.rejected_calls, 2)
-check("inference call ceiling includes setup and finalizer", ceiling.total_call_ceiling, 13)
+check("consecutive halt uses two rejected attempts", ceiling.state.rejected_calls, 2)
+check("inference call ceiling includes setup, rejects, and finalizer",
+      ceiling.total_call_ceiling, 14)
 ceiling.finalization_started()
 check("exactly one finalization call", ceiling.state.finalization_calls, 1)
 try:
@@ -220,7 +223,8 @@ check("controlled Hermes passes BytePlus provider into finalization",
       finalizer_call_options(["-z", "ping", "--provider", "custom:byteplus-coding"]),
       {"provider": "byteplus_coding", "purpose": "retrieval_finalization"})
 
-# The rejection ceiling is global, not a streak that successful work can reset.
+# A successful compliant call resets the consecutive-feedback streak, while a
+# separate global ceiling still bounds repeated redirections.
 separated = RetrievalProgressController(policy)
 first_reject = separated.before("browser_exec", {})
 check("first separated rejection continues", first_reject["terminal"], False)
@@ -228,8 +232,10 @@ separated.before("web_search", {"query": "progress"})
 separated.after("web_search", {"query": "progress"},
                 useful("https://separated.example", "progress"), False)
 second_reject = separated.before("terminal", {"command": "escape"})
-check("second separated rejection terminates", second_reject["terminal"], True)
-check("global rejected count pinned at two", separated.state.rejected_calls, 2)
+check("second nonconsecutive rejection continues", second_reject["terminal"], False)
+third_reject = separated.before("terminal", {"command": "escape-again"})
+check("consecutive repeat reaches bounded halt", third_reject["terminal"], True)
+check("global rejected count pinned at three", separated.state.rejected_calls, 3)
 
 # Failures count as low novelty and audit contains measurements/transitions only,
 # never query text or raw fetched content.
@@ -246,6 +252,9 @@ try:
     raw = audit.read_text(encoding="utf-8")
     check("audit excludes query", "secret query" in raw, False)
     check("audit excludes raw result", "backend" in raw, False)
+    check("audit classifies tool failure without raw content",
+          rows[0]["result_class"], "tool_error")
+    check("audit records active profile", rows[0]["profile"], "default")
 finally:
     audit.unlink(missing_ok=True)
 
@@ -275,7 +284,8 @@ try:
         "ARK_API_KEY": "test-only-placeholder"}
     out, measured = execution.hermes_worker(
         "mission", {"provider": "p", "model": "m",
-                    "authentication_reference": "env:ARK_API_KEY"}, usage)
+                    "authentication_reference": "env:ARK_API_KEY"}, usage,
+        retrieval_profile=DYNAMIC_BROWSER_PROFILE)
     check("worker output preserved", out, "controlled output")
     check("missing usage remains empty", measured, {})
     check("venv Python selected", captured["cmd"][0].endswith("python.exe"), True)
@@ -284,6 +294,9 @@ try:
     check("per-attempt audit injected",
           captured["kwargs"]["env"]["HARNESS_RETRIEVAL_AUDIT"].endswith(
               "test_f63.usage.retrieval.jsonl"), True)
+    check("structured retrieval profile injected",
+          captured["kwargs"]["env"]["HARNESS_RETRIEVAL_PROFILE"],
+          DYNAMIC_BROWSER_PROFILE)
     check("declared provider credential injected into Hermes child only",
           captured["kwargs"]["env"].get("ARK_API_KEY"), "test-only-placeholder")
     check("prior attempt audit removed before launch", audit_attempt.exists(), False)
@@ -293,5 +306,61 @@ finally:
     execution.provider_transport.authentication_env_from_config = real_auth_env
     usage.unlink(missing_ok=True)
     audit_attempt.unlink(missing_ok=True)
+
+# The structured profile must survive the failover wrapper too; otherwise the
+# first quota reroute would silently fall back to the generic search-first policy.
+real_candidates = execution._failover_candidates
+real_worker = execution.hermes_worker
+profiles_seen = []
+try:
+    execution._failover_candidates = lambda cfg, allow_local=True: [cfg]
+
+    def profile_worker(prompt, cfg, path, timeout=None, retrieval_profile=None):
+        profiles_seen.append(retrieval_profile)
+        return "usable controlled output", {"total_tokens": 1}
+
+    execution.hermes_worker = profile_worker
+    _, _, _, exhausted = execution.worker_with_failover(
+        "mission", {"provider": "p", "model": "m"}, usage,
+        "test profile", retrieval_profile=DYNAMIC_BROWSER_PROFILE)
+    check("failover wrapper preserves profile", profiles_seen,
+          [DYNAMIC_BROWSER_PROFILE])
+    check("profile-preserving attempt is usable", exhausted, False)
+finally:
+    execution._failover_candidates = real_candidates
+    execution.hermes_worker = real_worker
+
+# M2's explicit profile starts in browser mode and reallocates the unchanged
+# eight-call retrieval ceiling to dynamic interactions.
+dynamic_policy = retrieval_policy_for_profile(DYNAMIC_BROWSER_PROFILE)
+dynamic = RetrievalProgressController(dynamic_policy)
+check("dynamic profile starts in browser", dynamic.required_strategy, "browser")
+check("dynamic profile keeps eight-call ceiling", sum(dynamic_policy.max_calls), 8)
+check("dynamic first browser navigate allowed",
+      dynamic.before("browser_navigate", {"url": "https://app.aiprm.com/pricing?lang=en"}),
+      None)
+large_snapshot = useful("https://app.aiprm.com/pricing?lang=en", "monthly") + "x" * 12000
+dynamic.after("browser_navigate", {}, large_snapshot, False)
+check("dynamic evidence excerpt expanded", len(dynamic.evidence[0]["content"]), 10000)
+check("dynamic search is outside profile",
+      dynamic.before("web_search", {"query": "aiprm pricing"})["code"],
+      "retrieval_strategy_redirect")
+try:
+    retrieval_policy_for_profile("invented-profile")
+    raise AssertionError("unknown profile unexpectedly accepted")
+except ValueError:
+    checks += 1
+
+cohort = json.loads((ROOT / "workspace" / "validation" / "cohort_missions.json")
+                    .read_text(encoding="utf-8"))
+m2 = next(item for item in cohort["specs"] if item["id"] == "M2")
+check("M2 declares explicit retrieval profile", m2["retrieval_profile"],
+      DYNAMIC_BROWSER_PROFILE)
+check("M2 pins canonical pricing URL",
+      "https://app.aiprm.com/pricing?lang=en" in m2["spec"], True)
+cohort_runner = (ROOT / "workspace" / "validation" / "run_cohort.py").read_text(
+    encoding="utf-8")
+check("cohort propagates structured profile",
+      'retrieval_profile=spec.get("retrieval_profile")' in cohort_runner, True)
 
 print(f"F63 retrieval-progress controller: {checks}/{checks} assertions passed")

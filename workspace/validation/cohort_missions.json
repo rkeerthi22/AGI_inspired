@@ -13,8 +13,9 @@
     {
       "id": "M2",
       "type": "dynamic_browser_required",
+      "retrieval_profile": "dynamic_browser_required",
       "mission_id": "001-shopify-competitor-intel",
-      "spec": "[cohort-2026-W36][M2][dynamic-browser] AIPRM pricing page: capture the full plan table (tier names + monthly AND annual prices + seat counts) including any current promo discount visible on the page.",
+      "spec": "[cohort-2026-W36][M2][dynamic-browser] Canonical AIPRM pricing page https://app.aiprm.com/pricing?lang=en: capture the full rendered plan table (tier names + monthly AND annual prices + seat counts) including any current promo discount visible on the page.",
       "pass_criteria": "- [ ] Deliverable exists at the workspace path written by the harness\n- [ ] At least 4 distinct plan tiers identified by name\n- [ ] Monthly price for each tier\n- [ ] Annual price for each tier (or explicit 'not shown' per tier)\n- [ ] Any current promo or discount visible on the page\n- [ ] Direct evidence from the canonical AIPRM pricing URL with retrieval date + confidence 3"
     },
     {

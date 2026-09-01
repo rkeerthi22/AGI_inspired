@@ -28,7 +28,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 $repoRoot = Split-Path -Parent $MyInvocation.MyCommand.Path
-$cli = Join-Path $repoRoot "orchestrator" "operator_cli.py"
+$cli = Join-Path (Join-Path $repoRoot "orchestrator") "operator_cli.py"
 
 if (-not (Test-Path $cli)) {
     Write-Error "operator_cli.py not found at $cli"

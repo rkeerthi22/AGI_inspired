@@ -20,6 +20,9 @@ import runtime_context as rc
 import scheduler
 import trajectory
 import workflow
+from retrieval_progress import (DEFAULT_RETRIEVAL_PROFILE,
+                                DYNAMIC_BROWSER_PROFILE,
+                                retrieval_policy_for_profile)
 from health_events import emit as emit_health_event
 
 
@@ -29,6 +32,7 @@ class _TaskContext:
     mission: dict
     roles: dict
     row: dict
+    retrieval_profile: str = DEFAULT_RETRIEVAL_PROFILE
 
 
 @dataclass(frozen=True)
@@ -42,8 +46,11 @@ def _load_task(tid: int) -> dict:
         return dict(c.execute("SELECT * FROM tasks WHERE task_id=?", (tid,)).fetchone())
 
 
-def _prepare_task_input(tid: int, mission: dict, roles: dict, row: dict) -> _TaskContext:
-    return _TaskContext(tid=tid, mission=mission, roles=roles, row=row)
+def _prepare_task_input(tid: int, mission: dict, roles: dict, row: dict,
+                        retrieval_profile: str = DEFAULT_RETRIEVAL_PROFILE
+                        ) -> _TaskContext:
+    return _TaskContext(tid=tid, mission=mission, roles=roles, row=row,
+                        retrieval_profile=retrieval_profile)
 
 
 def _run_synthesis_task(context: _TaskContext, out_dir, wk, baseline, baseline_note) -> str:
@@ -157,11 +164,48 @@ def _run_research_task(context: _TaskContext) -> str:
     # F31: same note the critic is given, from the same function -- see prompts.task_scope_note().
     scope_note = prompts.task_scope_note(row["spec"], mission)
     scope_block = f"\n\nSCOPE OF THIS TASK: {scope_note}"
+    dynamic_browser = context.retrieval_profile == DYNAMIC_BROWSER_PROFILE
+    if dynamic_browser:
+        retrieval_block = (
+            "Use the rendered canonical page for every fact. RETRIEVAL PROFILE: "
+            "dynamic_browser_required. The external controller starts in browser mode. "
+            "Your first retrieval call must be browser_navigate to the exact canonical URL "
+            "named in the task. Then use browser snapshots, clicks, and scrolling to capture "
+            "the complete table in both monthly and annual states, including seat counts and "
+            "any promotion visibly rendered on the page. Do not call web_search, web_extract, "
+            "requests, terminal, or code tools; they are outside this profile. Never attempt "
+            "to solve or bypass a CAPTCHA, WAF, or access challenge. If one appears, record it "
+            "as the blocking browser evidence."
+        )
+        fallback_block = ""
+        tool_scope_block = (
+            "IMPORTANT: this is a browser-only research task. Use ONLY browser tools to "
+            "render and inspect the canonical page. Do NOT use file, terminal, requests, "
+            "code-execution, memory, or search tools for any reason. A separate system "
+            "persists your output; your job is only to research and reply with the "
+            "deliverable markdown as your final message text, nothing else."
+        )
+    else:
+        retrieval_block = "Use web search for every fact."
+        fallback_block = (
+            "\n\nIf you fail to find sources after exhausting your web_search tool limits, "
+            "DO NOT give up. Immediately fallback to using the requests tool to query known "
+            "endpoints, or use yt-dlp if applicable."
+        )
+        tool_scope_block = (
+            "IMPORTANT: this is a research-only task. Use ONLY web/browser tools to look "
+            "things up. The only exceptions are the requests and yt-dlp fallbacks above "
+            "after web_search is exhausted. Otherwise, do NOT use any file, terminal, "
+            "code-execution, or memory tool for ANY reason -- do not create, write, or edit "
+            "any file, and do not run any command except the requests/yt-dlp fallbacks above. "
+            "A separate system persists your output; your job is only to research and reply "
+            "with the deliverable markdown as your final message text, nothing else."
+        )
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
         f"YOUR TASK THIS RUN (one task only):\n{row['spec']}"
         f"{requirements_block}{scope_block}{baseline_note}{prior_feedback}{skills_block}\n\n"
-        f"Use web search for every fact. RULES: every fact needs a source URL + retrieval date "
+        f"{retrieval_block} RULES: every fact needs a source URL + retrieval date "
         f"({datetime.now().date()}) + confidence 1-3. No fact without a live source. Seed names "
         f"are unverified â€” verify each is real before citing it. Write the deliverable as clean "
         f"markdown.\n\n"
@@ -189,17 +233,8 @@ def _run_research_task(context: _TaskContext) -> str:
         f"evidence. Mark any fact that could only be sourced from a failed tool call as "
         f"confidence 1 and note the tool failure. An empty deliverable or one containing only "
         f"error text is a FAIL.\n\n"
-        f"If you fail to find sources after exhausting your web_search tool limits, DO NOT give "
-        f"up. Immediately fallback to using the requests tool to query known endpoints, or use "
-        f"yt-dlp if applicable.\n\n"
-        f"IMPORTANT: this is a research-only task. Use ONLY web/browser tools to look things up. "
-        f"The only exceptions are the requests and yt-dlp fallbacks above after web_search is "
-        f"exhausted. Otherwise, do NOT use any file, terminal, code-execution, or memory tool for "
-        f"ANY reason â€” do not "
-        f"create, write, or edit any file, and do not run any command except the requests/yt-dlp "
-        f"fallbacks above. A separate system persists "
-        f"your output; your job is only to research and reply with the deliverable markdown as "
-        f"your final message text, nothing else."
+        f"{fallback_block}\n\n"
+        f"{tool_scope_block}"
         + (f"\n\n{compliance_block}" if compliance_block else "")
     )
     # F8/F13 (docs/HARDENING.md): Ollama reports no $, so token count is the real
@@ -240,8 +275,12 @@ def _run_research_task(context: _TaskContext) -> str:
     fs_snapshot = integrity.fs_integrity_snapshot()
     try:
         with integrity.DatabaseMutationGuard(f"task {tid} worker call"):
+            worker_options = {}
+            if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
+                worker_options["retrieval_profile"] = context.retrieval_profile
             out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
-                prompt, worker_cfg, usage_path, log_prefix=f"task {tid}")
+                prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
+                **worker_options)
     except subprocess.TimeoutExpired:
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes="worker timeout",
@@ -406,7 +445,8 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
 
 
 
-def run_task(tid: int, mission: dict, roles: dict) -> str:
+def run_task(tid: int, mission: dict, roles: dict,
+             retrieval_profile: str | None = None) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
     tw = trajectory.begin(tid, mission["id"])
     try:
@@ -417,7 +457,14 @@ def run_task(tid: int, mission: dict, roles: dict) -> str:
             worker_model=worker_cfg.get("model", ""),
             worker_provider=worker_cfg.get("provider", ""),
         )
-        context = _prepare_task_input(tid, mission, roles, row)
+        normalized_profile = retrieval_policy_for_profile(retrieval_profile).profile
+        if normalized_profile == DEFAULT_RETRIEVAL_PROFILE:
+            # Preserve the established four-argument helper contract for all
+            # generic callers and test doubles.
+            context = _prepare_task_input(tid, mission, roles, row)
+        else:
+            context = _prepare_task_input(
+                tid, mission, roles, row, normalized_profile)
         return _run_research_task(context)
     except Exception as exc:
         tw.task_failed(f"unhandled task runner exception: {exc}", failure_stage="task_runner")

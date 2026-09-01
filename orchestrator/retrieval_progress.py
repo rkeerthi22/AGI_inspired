@@ -24,11 +24,14 @@ TRACKING_KEYS = {"fbclid", "gclid", "ref", "ref_", "source"}
 
 @dataclass(frozen=True)
 class RetrievalPolicy:
+    profile: str = "default"
+    initial_stage: int = 0
     low_novelty_limit: int = 2
     max_calls: tuple[int, int, int] = (3, 3, 2)
     min_search_chars: int = 80
     min_content_chars: int = 240
     max_redirect_violations: int = 2
+    max_rejected_calls: int = 3
     max_setup_calls: int = 2
     max_evidence_chars_per_call: int = 5000
     max_evidence_chars_total: int = 30000
@@ -54,9 +57,31 @@ class RetrievalState:
 
 
 STAGE_NAMES = ("search", "direct_fetch", "browser")
+DEFAULT_RETRIEVAL_PROFILE = "default"
+DYNAMIC_BROWSER_PROFILE = "dynamic_browser_required"
 OPAQUE_RETRIEVAL_PROXIES = {"delegate_task"}
 NON_RETRIEVAL_SETUP_TOOLS = {"skill_view"}
 _ACTIVE_CONTROLLERS: list["RetrievalProgressController"] = []
+
+
+def retrieval_policy_for_profile(profile: str | None) -> RetrievalPolicy:
+    """Return the bounded policy for an explicit harness retrieval profile."""
+    normalized = (profile or DEFAULT_RETRIEVAL_PROFILE).strip().lower()
+    if normalized == DEFAULT_RETRIEVAL_PROFILE:
+        return RetrievalPolicy()
+    if normalized == DYNAMIC_BROWSER_PROFILE:
+        # A known canonical JavaScript page does not benefit from six mandatory
+        # search/static calls before the first browser interaction. Reallocate
+        # the unchanged eight-call retrieval ceiling to browser navigation,
+        # snapshots, toggles, and scrolling. Three 10k excerpts still respect
+        # the existing 30k total evidence ceiling used by the finalizer.
+        return RetrievalPolicy(
+            profile=DYNAMIC_BROWSER_PROFILE,
+            initial_stage=2,
+            max_calls=(0, 0, 8),
+            max_evidence_chars_per_call=10_000,
+        )
+    raise ValueError(f"unsupported retrieval profile: {profile!r}")
 
 
 def tool_stage(tool_name: str, args: Mapping[str, Any] | None = None) -> int | None:
@@ -107,7 +132,9 @@ class RetrievalProgressController:
                  audit_path: Path | None = None,
                  trajectory_writer: Any = None):
         self.policy = policy or RetrievalPolicy()
-        self.state = RetrievalState()
+        if not 0 <= self.policy.initial_stage < len(STAGE_NAMES):
+            raise ValueError(f"invalid initial retrieval stage: {self.policy.initial_stage}")
+        self.state = RetrievalState(stage=self.policy.initial_stage)
         self.audit_path = audit_path
         self._lock = threading.RLock()
         self.evidence: list[dict[str, Any]] = []
@@ -132,7 +159,7 @@ class RetrievalProgressController:
     def total_call_ceiling(self) -> int:
         """Research, bounded setup, rejected turns, and one finalizer."""
         return (sum(self.policy.max_calls) + self.policy.max_setup_calls
-                + self.policy.max_redirect_violations + 1)
+                + self.policy.max_rejected_calls + 1)
 
     def begin_tool_batch(self) -> None:
         """Mark one assistant-emitted tool batch as a feedback unit."""
@@ -255,9 +282,20 @@ class RetrievalProgressController:
             reason = "strategy call budget reached"
         elif self.state.low_novelty_streak >= self.policy.low_novelty_limit:
             reason = "consecutive low-novelty results"
+        lowered = text.lower()
+        if "timed out" in lowered or "timeout" in lowered:
+            result_class = "timeout"
+        elif any(marker in lowered for marker in (
+                "cloudflare", "captcha", "access denied", "forbidden", "http 403",
+                "challenge page")):
+            result_class = "challenge_or_access_block"
+        elif failed:
+            result_class = "tool_error"
+        else:
+            result_class = "ok"
         self._audit("observation", tool=tool_name, stage=STAGE_NAMES[stage], novel=novel,
                     new_urls=len(new_urls), new_words=len(new_words), failed=failed,
-                    stale=stale)
+                    stale=stale, result_chars=len(text), result_class=result_class)
         if self.trajectory_writer:
             self.trajectory_writer.tool_call_finished(
                 tool_name, STAGE_NAMES[stage], self.state.calls[stage],
@@ -295,17 +333,25 @@ class RetrievalProgressController:
         self.state.rejected_calls += 1
         if count_violation:
             self.state.redirect_violations += 1
-        terminal = self.state.rejected_calls >= self.policy.max_redirect_violations
+        terminal_reason = ""
+        terminal = self.state.redirect_violations >= self.policy.max_redirect_violations
+        if terminal:
+            terminal_reason = "consecutive_feedback_violations"
+        elif self.state.rejected_calls >= self.policy.max_rejected_calls:
+            terminal = True
+            terminal_reason = "global_rejection_ceiling"
         # Calls dispatched in one parallel batch cannot react to a redirect
         # returned to an earlier sibling. Account every blocked call, but do
         # not call that deliberate repeated noncompliance until the reserved
         # batch has completed and the model has had a feedback opportunity.
         if not count_violation:
             terminal = False
+            terminal_reason = ""
         self._audit("redirect", tool=tool_name, required=self.required_strategy,
                     count_violation=count_violation,
                     redirect_violations=self.state.redirect_violations,
-                    rejected_calls=self.state.rejected_calls)
+                    rejected_calls=self.state.rejected_calls,
+                    terminal=terminal, terminal_reason=terminal_reason)
         if self.trajectory_writer:
             self.trajectory_writer.tool_redirect(
                 tool_name, self.required_strategy, count_violation=bool(count_violation))
@@ -320,6 +366,7 @@ class RetrievalProgressController:
             return
         self.state.sequence += 1
         record = {"sequence": self.state.sequence, "event": event,
+                  "profile": self.policy.profile,
                   "required_strategy": self.required_strategy,
                   "executed_calls": self.executed_calls, **data}
         self.audit_path.parent.mkdir(parents=True, exist_ok=True)

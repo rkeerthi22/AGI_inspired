@@ -91,7 +91,9 @@ def run_one_mission(spec: dict) -> dict:
     rc.set_log_file(rc.RUNS / f"cohort_{spec['id']}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
     status = None
     with runlock.acquire(rc.RUNS / batch_runner.LOCK_PATH_NAME):
-        status = batch_runner.run_task(task_id, mission, validation_roles())
+        status = batch_runner.run_task(
+            task_id, mission, validation_roles(),
+            retrieval_profile=spec.get("retrieval_profile"))
     elapsed = time.time() - started
     after = task_row(task_id)
     print(f"  status: {status} ({elapsed:.1f}s)")

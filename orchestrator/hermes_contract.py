@@ -15,13 +15,18 @@ import uuid
 from retrieval_progress import RetrievalProgressController
 
 
-CONTRACT_VERSION = 1
+CONTRACT_VERSION = 2
 AUDIT_BASE_FIELDS = frozenset({
-    "sequence", "event", "required_strategy", "executed_calls",
+    "sequence", "event", "profile", "required_strategy", "executed_calls",
 })
 AUDIT_EVENT_FIELDS = {
     "redirect": frozenset({
         "tool", "count_violation", "redirect_violations", "rejected_calls",
+        "terminal", "terminal_reason",
+    }),
+    "observation": frozenset({
+        "tool", "stage", "novel", "new_urls", "new_words", "failed", "stale",
+        "result_chars", "result_class",
     }),
     "research_finished": frozenset({
         "api_calls", "input_tokens", "output_tokens", "total_tokens",
@@ -111,7 +116,9 @@ def _revision(root: Path) -> str:
 def validate_harness_adapter() -> None:
     controller = RetrievalProgressController()
     if not isinstance(controller, RetrievalAdapterProtocol):
-        raise ContractViolation("RetrievalProgressController does not satisfy contract v1")
+        raise ContractViolation(
+            f"RetrievalProgressController does not satisfy contract v{CONTRACT_VERSION}"
+        )
 
     audit = (Path(__file__).resolve().parents[1] / "workspace" /
              f"contract_{uuid.uuid4().hex}.jsonl")
@@ -156,7 +163,7 @@ def validate_harness_adapter() -> None:
 
 
 def validate_installed_hermes(root: Path | None = None) -> ContractReport:
-    """Fail loudly when installed Hermes no longer satisfies contract v1."""
+    """Fail loudly when installed Hermes no longer satisfies the active contract."""
     root = (root or locate_installed_hermes()).resolve()
     run_tree = ast.parse((root / "run_agent.py").read_text(encoding="utf-8"))
     executor_tree = ast.parse(
@@ -192,6 +199,6 @@ def validate_installed_hermes(root: Path | None = None) -> ContractReport:
         contract_version=CONTRACT_VERSION,
         hermes_root=root,
         hermes_revision=_revision(root),
-        capabilities=("batch_lifecycle", "halt_propagation", "audit_jsonl_v1",
+        capabilities=("batch_lifecycle", "halt_propagation", "audit_jsonl_v2",
                       "retrieval_finalization_v1"),
     )

@@ -109,8 +109,8 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as raw:
     patch(tr.ledger, "add_lesson", lambda *a, **k: events.append(("lesson",)))
     output = "A" * 260
 
-    def worker(prompt, cfg, usage_path, log_prefix):
-        events.append(("worker", prompt, usage_path))
+    def worker(prompt, cfg, usage_path, log_prefix, **options):
+        events.append(("worker", prompt, usage_path, options))
         return output, {"tokens_in": 3, "tokens_out": 5}, cfg, False
 
     patch(tr.execution, "worker_with_failover", worker)
@@ -143,6 +143,20 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as raw:
     finish = next(e[1] for e in events if e[0] == "finish")
     check("tokens accumulated", (finish["tokens_in"], finish["tokens_out"]), (10, 16))
     check("passed output writes facts", ("facts",) in events, True)
+
+    events.clear()
+    dynamic_status = tr.run_task(
+        60, mission, roles, retrieval_profile=tr.DYNAMIC_BROWSER_PROFILE)
+    dynamic_event = next(e for e in events if e[0] == "worker")
+    check("dynamic profile task succeeds under stub", dynamic_status, "done")
+    check("dynamic prompt requires browser first",
+          "first retrieval call must be browser_navigate" in dynamic_event[1], True)
+    check("dynamic prompt prohibits search/static detour",
+          "Do not call web_search, web_extract" in dynamic_event[1], True)
+    check("dynamic prompt has no generic requests exception",
+          "only exceptions are the requests" in dynamic_event[1], False)
+    check("dynamic profile reaches worker transport",
+          dynamic_event[3].get("retrieval_profile"), tr.DYNAMIC_BROWSER_PROFILE)
 
     # Both budget gates are pre-start and preserve their distinct public statuses.
     patch(tr.policy, "token_budget_breached", lambda: True)
