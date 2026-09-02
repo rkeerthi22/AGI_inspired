@@ -207,6 +207,119 @@ checks.update({
         _row_9001.get("status") != "running",
 })
 
+# --- synthesis mission accounting writes and reconciles (2026-09-02) ---------
+# The first cohort review flagged synthesis missions as producing no
+# mission.usage.json. d88286c added the build_mission_usage call to
+# run_synthesis (workflow.py:201), but NOTHING proves it: no regression, no
+# live synthesis run since. Task 113 (a synthesis seed) must not be the first
+# place we find out. Hermetic proof: run_synthesis with patched collaborators
+# (workflow.py's documented seam -- module-qualified calls resolve at call
+# time) must WRITE task<TID>_mission.usage.json and reconcile exactly.
+# Synthesis is tool-free: executed=rejected=0 is the correct shape, but
+# worker+critic tokens must still merge across roles.
+
+import workflow as workflow_module
+
+_synth_patches = []  # (module_obj, prior_dict)
+
+
+def _patch(mod, **attrs):
+    prior = {k: getattr(mod, k) for k in attrs}
+    for k, v in attrs.items():
+        setattr(mod, k, v)
+    _synth_patches.append((mod, prior))
+
+
+def _fake_synth_failover(prompt, cfg, log_prefix="", usage_out=None):
+    if usage_out is not None:
+        usage_out.update({"input_tokens": 3000, "output_tokens": 700,
+                          "api_calls": 1})
+    return ("synthesis deliverable text " * 40, cfg, False)
+
+
+def _fake_critic_pass(row, out, roles, baseline, scope_note="", usage_out=None):
+    if usage_out is not None:
+        usage_out.update({"input_tokens": 400, "output_tokens": 120,
+                          "api_calls": 1, "total_tokens": 520})
+    return "pass", "VERDICT: PASS (fake critic)"
+
+
+_synth_finish_calls = []
+
+import prompts as _prompts_mod
+import execution as _execution_mod
+import evaluation as _evaluation_mod
+import policy as _policy_mod
+import integrity as _integrity_mod
+import ledger as _ledger_mod
+
+_patch(_prompts_mod, build_brief_block=lambda briefs: "briefs",
+       _recent_fact_lines=lambda: "facts",
+       mission_objective=lambda mission: "objective",
+       deliverable_requirements=lambda mission: "",
+       task_scope_note=lambda spec, mission: "scope")
+_patch(_execution_mod, synthesis_with_failover=_fake_synth_failover,
+       _strip_tool_chatter=lambda out: out)
+_patch(_evaluation_mod, run_critic=_fake_critic_pass)
+_patch(_policy_mod, token_budget_breached=lambda: False)
+_patch(_integrity_mod, escalate=lambda msg, **kwargs: None)
+_patch(_ledger_mod, finish_task=lambda task_id, **kw: _synth_finish_calls.append(kw),
+       update_model_used=lambda tid, model: None,
+       add_lesson=lambda tid, lesson, kind: None)
+
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
+    import json as _json2
+    # rc.ROOT is used by relative_to for the artifact path, so out_dir must
+    # live under a repointed ROOT; rc.RUNS must land in the same temp root.
+    tmp_root = Path(raw)
+    tmp_out = tmp_root / "workspace"
+    tmp_out.mkdir()
+    _prior_runs = workflow_module.rc.RUNS
+    _prior_root = workflow_module.rc.ROOT
+    workflow_module.rc.RUNS = tmp_root / "runs"
+    workflow_module.rc.RUNS.mkdir()
+    workflow_module.rc.ROOT = tmp_root
+    _prior_eval_runs = _evaluation_mod.RUNS
+    _evaluation_mod.RUNS = workflow_module.rc.RUNS  # build_mission_usage writes here
+    try:
+        _synth_status = workflow_module.run_synthesis(
+            9002, {"spec": "[2026-W36][seed 4] Synthesis: build the changes brief",
+                   "tokens_in": 0, "tokens_out": 0, "critic_verdict": None},
+            mission={"id": "001-shopify-competitor-intel"},
+            roles={"worker": {"provider": "fake", "model": "fake-model"},
+                   "critic": {"provider": "fake", "model": "fake-critic"}},
+            out_dir=tmp_out, wk="2026-W36", baseline=True, baseline_note="")
+        # read artifacts BEFORE the temp directory is cleaned up
+        _mu_path = workflow_module.rc.RUNS / "task9002_mission.usage.json"
+        _mu_written = _mu_path.is_file()
+        _mu = _json2.loads(_mu_path.read_text(encoding="utf-8")) if _mu_written else {}
+    finally:
+        workflow_module.rc.RUNS = _prior_runs
+        workflow_module.rc.ROOT = _prior_root
+        _evaluation_mod.RUNS = _prior_eval_runs
+        for mod, prior in reversed(_synth_patches):
+            for k, v in prior.items():
+                setattr(mod, k, v)
+        _synth_patches.clear()
+
+_last_finish = _synth_finish_calls[-1] if _synth_finish_calls else {}
+
+checks.update({
+    "synthesis run returns done": _synth_status == "done",
+    "synthesis writes mission.usage.json": _mu_written,
+    "synthesis tokens reconcile exactly":
+        _mu.get("total_tokens") == 3000 + 700 + 400 + 120,
+    "synthesis tokens equal worker+critic splits":
+        _mu.get("input_tokens") == 3400 and _mu.get("output_tokens") == 820,
+    "synthesis api calls reconcile": _mu.get("api_calls") == 2,
+    "synthesis is tool-free (zero retrieval)":
+        _mu.get("executed_agent_retrieval_calls") == 0
+        and _mu.get("rejected_agent_retrieval_attempts") == 0,
+    "synthesis finish_task received merged tokens":
+        _last_finish.get("tokens_in") == 3400 and _last_finish.get("tokens_out") == 820,
+    "synthesis finish_task status done": _last_finish.get("status") == "done",
+})
+
 failed = []
 for name, ok in checks.items():
     print(f"  [{'PASS' if ok else 'FAIL'}] {name}")

@@ -2406,3 +2406,38 @@ Regression: `tests/test_onboarding_contract_red.py` (existing, covers recovery
 idempotency for all phases including DOMAIN_COMMITTED). Found by the DeepSeek
 architectural review (`docs/reviews/DEEPSEEK_ONBOARDING_REVIEW_2026-08-29.md`).
 · `orchestrator/onboarding_autonomy.py:573`
+
+## F101 — worker-launch exception left task row 'running' with a dead process · **P2 · PROVEN, found + fixed 2026-09-02**
+
+Incident: the 2026-09-02 07:19 mission launch (batch_20260902_071903.log)
+queued current-week seeds 111-113, started task 110, then the launching
+process died. The row stayed `status='running'` with a dead owner process
+and an unexpired lease (06:29:04Z) — nothing except lease expiry +
+`reconcile_interrupted_tasks()` (H3) would clean it up, and the seed stayed
+blocked for the rest of the week by dedup in the meantime.
+
+Root cause: `_run_research_task` handled only `subprocess.TimeoutExpired` and
+`integrity.DatabaseMutationViolation` around the worker call. Any other
+exception from `execution.worker_with_failover` propagated out of
+`task_runner` with the row still 'running' — an honest close only happened
+if the launch retried, which weekly-dedup does not guarantee.
+
+Fix: a generic `except Exception` after the two specific handlers closes the
+row as `infra_failed` with a `worker launch failure: <exc>` note
+(`append_note=True` preserves prior token accounting per F21) and emits a
+`task_failed` trajectory event, mirroring task 105's existing behavior.
+
+Row repair (this instance): supported path only — lease expiry at 06:29:04Z
+then `reconcile_interrupted_tasks()` demotes the row to `interrupted` with
+attempt_count+1. No hand-editing of the ledger. Rows 111-113 are legitimate
+current-week queued seeds and were left untouched.
+
+Regression: `tests/test_critical_path_regressions.py` — hermetic
+module-fake proof that a launch exception returns `infra_failed`, closes the
+row with the note, and never lingers as `running`.
+
+Related hardening decided but deliberately deferred (operator-sequenced):
+owner-process identity in `start_task` so reconcile can recover immediately
+when the recorded owner is provably dead, instead of waiting out the lease.
+
+· `orchestrator/task_runner.py:300` · commit `2de64b5`
