@@ -1,54 +1,53 @@
 {
   "schema_version": 2,
-  "brief_revision": 44,
-  "created_at": "2026-09-02T05:36:36.050081+00:00",
+  "brief_revision": 45,
+  "created_at": "2026-09-02T06:29:35.592995+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "2de64b517ff39f0efc7fb336df4abb1332dc76c4"
+    "based_on_head": "b6fef62cace067b0b45b1c50e693870b38ba7296"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "m2-passing-post-launch-failure-hardening",
+    "phase": "post-incident-repair-complete-cohort-resumable",
     "status": "in_progress",
-    "next_action": "M2 passed (task 109, canonical AIPRM spec, 9 facts). Task 110 lease expires 06:29Z; then reconcile_interrupted_tasks demotes it to interrupted (supported H3 path) and the operator may rerun the aborted seed mission. Rows 111-113 are legitimate queued seeds. All further missions remain operator-authorized individually."
+    "next_action": "Task 110 recovered to interrupted (attempt 1) via lease expiry + reconcile (supported H3 path) - VERIFIED 2026-09-02 06:29Z. Synthesis mission accounting is now regression-proven (b6fef62), so the synthesis seed (113) can be evaluated fairly. Operator resumes operator-authorized mission windows (aborted seed rerun, M3-M7); each remains separately authorized."
   },
   "completed": [
-    "M1 passed (task 106): critic PASS, 64,651 tokens, 8 facts, accounting exact",
-    "M2 passed (task 109): canonical AIPRM pricing spec, 9 facts, browser-rung content",
-    "Worker-launch exception path hardened: research rows close infra_failed at failure time",
-    "test_f35 tightened to the real invariant (previous-week stranded rows)",
-    "Hermetic regression added (11 checks in critical-path suite)",
-    "Full model-free gate 54/54 green at 2de64b5"
+    "Task 110: lease expired 06:29:04Z, reconcile demoted to interrupted, attempt 1 - verified ('interrupted', 1)",
+    "Synthesis mission accounting regression-proven: run_synthesis writes mission.usage.json and reconciles exactly (8 checks)",
+    "HARDENING.md F101 registered: 2026-09-02 launch-failure root cause, fix 2de64b5, supported-path repair",
+    "M1 passed (task 106); M2 passed (task 109); full gate 54/54 green at b6fef62"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
     "ESTOP remains engaged between windows",
-    "Task 110 recovery only via lease-expiry + reconcile (supported path), never hand-edited",
+    "No F63 controller/prompt changes during the cohort",
+    "Rows 111-113 are legitimate queued seeds; no hand-editing",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "54/54 model-free suites green; continuity validated; tree clean"
+    "detail": "54/54 model-free suites green; continuity validated; tree clean; pushed"
   },
   "references": [
+    {
+      "path": "docs/HARDENING.md",
+      "purpose": "F101 incident registry entry",
+      "sha256": "344a293e8eb81e200ab40c0f7b7b3b76a6d917c2be42b7449794fcda1ca55579"
+    },
+    {
+      "path": "tests/test_critical_path_regressions.py",
+      "purpose": "Launch-failure + synthesis-accounting regressions",
+      "sha256": "27ced188369f01a0a7bb8d958ae579311c714a587227f61e61129cd775543069"
+    },
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
       "sha256": "ce186c97e29876032f2616fd2a714b6bc8a5781cb44241446a4ec0c959f46526"
-    },
-    {
-      "path": "orchestrator/task_runner.py",
-      "purpose": "Hardened launch-failure path",
-      "sha256": "e4964bf542d2920f50b615000552d1716caad444c52079e57e78bf39ceb01957"
-    },
-    {
-      "path": "tests/test_critical_path_regressions.py",
-      "purpose": "Launch-failure regression coverage",
-      "sha256": "c227e0da107458f72e51e5b19f21b07f9cb30d8f17f75d7666239ae861b6a749"
     },
     {
       "path": "workspace/validation/cohort_missions.json",
