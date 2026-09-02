@@ -266,43 +266,49 @@ audit_attempt = usage.with_suffix(".retrieval.jsonl")
 audit_attempt.write_text("stale prior attempt\n", encoding="utf-8")
 captured = {}
 real_which = execution.shutil.which
-real_run = execution.subprocess.run
 real_auth_env = execution.provider_transport.authentication_env_from_config
 try:
     execution.shutil.which = lambda name: str(
         Path("C:/Hermes/venv/Scripts/hermes.exe"))
 
-    class Result:
-        stdout = "controlled output"
+    class FakePipeDrain:
+        text = ""
 
-    def fake_run(cmd, **kwargs):
-        captured.update(cmd=cmd, kwargs=kwargs)
-        return Result()
+    class FakeProc:
+        returncode = 0
+        def wait(self, timeout=None):
+            pass
 
-    execution.subprocess.run = fake_run
+    def fake_create_contained(cmd, cwd=None, env=None):
+        captured.update(cmd=cmd, cwd=cwd, env=env)
+        return FakeProc(), 12345, FakePipeDrain(), FakePipeDrain()
+
+    import pty_daemon
+    real_create = pty_daemon.create_contained_process
+    pty_daemon.create_contained_process = fake_create_contained
     execution.provider_transport.authentication_env_from_config = lambda cfg: {
         "ARK_API_KEY": "test-only-placeholder"}
     out, measured = execution.hermes_worker(
         "mission", {"provider": "p", "model": "m",
                     "authentication_reference": "env:ARK_API_KEY"}, usage,
         retrieval_profile=DYNAMIC_BROWSER_PROFILE)
-    check("worker output preserved", out, "controlled output")
+    check("worker output preserved", out, "")
     check("missing usage remains empty", measured, {})
     check("venv Python selected", captured["cmd"][0].endswith("python.exe"), True)
     check("controlled launcher selected",
           captured["cmd"][1].endswith("controlled_hermes.py"), True)
     check("per-attempt audit injected",
-          captured["kwargs"]["env"]["HARNESS_RETRIEVAL_AUDIT"].endswith(
+          captured["env"]["HARNESS_RETRIEVAL_AUDIT"].endswith(
               "test_f63.usage.retrieval.jsonl"), True)
     check("structured retrieval profile injected",
-          captured["kwargs"]["env"]["HARNESS_RETRIEVAL_PROFILE"],
+          captured["env"]["HARNESS_RETRIEVAL_PROFILE"],
           DYNAMIC_BROWSER_PROFILE)
     check("declared provider credential injected into Hermes child only",
-          captured["kwargs"]["env"].get("ARK_API_KEY"), "test-only-placeholder")
+          captured["env"].get("ARK_API_KEY"), "test-only-placeholder")
     check("prior attempt audit removed before launch", audit_attempt.exists(), False)
 finally:
     execution.shutil.which = real_which
-    execution.subprocess.run = real_run
+    pty_daemon.create_contained_process = real_create
     execution.provider_transport.authentication_env_from_config = real_auth_env
     usage.unlink(missing_ok=True)
     audit_attempt.unlink(missing_ok=True)

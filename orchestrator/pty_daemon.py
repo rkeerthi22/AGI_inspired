@@ -167,12 +167,24 @@ class PipeDrain:
 def create_contained_process(
     command_list: list[str],
     cwd: str | Path | None = None,
+    env: dict[str, str] | None = None,
 ) -> tuple[subprocess.Popen, int, PipeDrain, PipeDrain]:
     """Create a contained process tree via Windows Job Objects.
 
     The process is spawned suspended, assigned to a Job Object with
     ``KILL_ON_JOB_CLOSE``, then resumed.  The returned ``h_job`` handle
     must be closed (or terminated) to reap the entire tree.
+
+    Parameters
+    ----------
+    command_list : list[str]
+        The command and arguments to execute.
+    cwd : str | Path | None
+        Working directory for the child process.
+    env : dict[str, str] | None
+        Environment variables for the child process.  If ``None`` the
+        parent's environment is inherited (the default ``Popen``
+        behaviour).
 
     Returns
     -------
@@ -191,6 +203,7 @@ def create_contained_process(
         proc = subprocess.Popen(
             command_list,
             cwd=str(cwd) if cwd else None,
+            env=env,
             creationflags=CREATE_SUSPENDED,
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,

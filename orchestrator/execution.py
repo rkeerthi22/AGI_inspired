@@ -72,6 +72,9 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # even with tools present; (2) db_integrity_guard() below verifies no write
     # happened and reverts it if one did. Prevention-by-ignorance + verification,
     # not a trust-the-flag claim.
+    #
+    # Phase 4 (Munder Blueprint §5): workers are now contained in Windows Job
+    # Objects with KILL_ON_JOB_CLOSE, ensuring orphan-free termination.
     hermes_exe = shutil.which("hermes")
     if not hermes_exe:
         raise FileNotFoundError("hermes executable not found")
@@ -98,8 +101,30 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # attempt alone just as the usage file does, not append to the prior run.
     audit_path.unlink(missing_ok=True)
     env["HARNESS_RETRIEVAL_AUDIT"] = str(audit_path)
-    proc = subprocess.run(cmd, capture_output=True, text=True, encoding="utf-8",
-                          errors="replace", timeout=timeout, cwd=str(ROOT), env=env)
+
+    # Spawn the worker inside a Windows Job Object for process containment.
+    try:
+        import pty_daemon as _pty
+        proc, h_job, sout, serr = _pty.create_contained_process(cmd, cwd=str(ROOT), env=env)
+        _pty.close_job(h_job)  # KILL_ON_JOB_CLOSE reaps the tree when done
+    except Exception as exc:
+        raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
+
+    try:
+        proc.wait(timeout=timeout)
+    except subprocess.TimeoutExpired:
+        try:
+            _pty.terminate_job(h_job)
+        except Exception:
+            pass
+        proc.kill()
+        proc.wait()
+        raise
+
+    # Collect output from pipe drains.
+    stdout_text = sout.text
+    stderr_text = serr.text
+
     usage = {}
     if usage_path.exists():
         usage = json.loads(usage_path.read_text(encoding="utf-8"))
@@ -109,10 +134,9 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     process_returncode = int(getattr(proc, "returncode", 0) or 0)
     if process_returncode:
         usage["process_returncode"] = process_returncode
-    process_error = getattr(proc, "stderr", "") or ""
-    if process_error:
-        usage["process_error"] = process_error.strip()[:2000]
-    return (proc.stdout or "").strip(), usage
+    if stderr_text:
+        usage["process_error"] = stderr_text.strip()[:2000]
+    return stdout_text.strip(), usage
 
 
 def ollama_chat(model: str, prompt: str, timeout: int = 300,
