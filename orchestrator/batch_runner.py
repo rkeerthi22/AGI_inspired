@@ -138,11 +138,11 @@ def main() -> int:
     ap.add_argument("--max-tasks", type=int, default=MAX_WORKER_CALLS_PER_RUN)
     args = ap.parse_args()
 
-    from execution_pause import pause_engaged
+    import execution_pause
     # Boundary hardening 2026-08-31: an absent sentinel must be an *authorized*
     # absence. Tamper re-engages ESTOP and the pause gate below then refuses.
     execution_pause.verify_pause_integrity()
-    if pause_engaged():
+    if execution_pause.pause_engaged():
         log("global ESTOP is engaged — batch execution refused")
         return 75
 

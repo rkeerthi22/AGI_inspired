@@ -5,6 +5,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+from contextlib import contextmanager
 from unittest import mock
 from pathlib import Path
 
@@ -58,6 +59,11 @@ def run_script(path, args, env):
                           capture_output=True, text=True, timeout=30)
 
 
+@contextmanager
+def _dummy_lock():
+    yield
+
+
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
     home = Path(td) / "hermes"
     home.mkdir()
@@ -108,5 +114,20 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as td:
             os.environ.pop("HERMES_HOME", None)
         else:
             os.environ["HERMES_HOME"] = original_home
+
+    import batch_runner
+    import execution_pause as batch_execution_pause
+    with mock.patch.object(sys, "argv",
+                           ["batch_runner.py", "--mission", "001-shopify-competitor-intel"]), \
+         mock.patch.object(batch_execution_pause, "verify_pause_integrity",
+                           return_value="authorized:operator_clear_marker"), \
+         mock.patch.object(batch_execution_pause, "pause_engaged",
+                           return_value=False), \
+         mock.patch("migrations.migrate_all", return_value={}), \
+         mock.patch("runlock.acquire", side_effect=lambda *args, **kwargs: _dummy_lock()), \
+         mock.patch.object(batch_runner, "_run", return_value=0), \
+         mock.patch.object(batch_runner, "set_log_file"):
+        check("batch_runner authorized clear path enters main without NameError",
+              batch_runner.main() == 0)
 
 raise SystemExit(1 if failures else 0)
