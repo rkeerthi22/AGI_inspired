@@ -13,7 +13,8 @@ OBSERVATIONAL AND DIAGNOSTIC ONLY:
     (tests are read-only by contract; containment suites run in a disposable
     fixture repository).
   * It never contacts a provider or executes a mission. Provider state is
-    reported from RECORDED health events only, marked UNKNOWN when absent.
+    inferred from recorded health events only, including persisted canary
+    results when available.
 
 Unknown states are reported as "unknown" -- never guessed as pass.
 """
@@ -40,7 +41,6 @@ if str(ORCH) not in sys.path:
 import secrets as credential_vault
 
 RUNS = ROOT / "runs"
-HEALTH_EVENTS = RUNS / "health_events.jsonl"
 ACTIVE_WORK = ROOT / "docs" / "ACTIVE_WORK.json"
 TIERS_MANIFEST = ROOT / "tests" / "tiers.json"
 BATCH_LOCK = RUNS / ".batch.lock"
@@ -269,10 +269,10 @@ def _utc_timestamp_seconds() -> float:
 
 
 def _provider_state() -> dict:
-    """RECORDED provider health only. No probe, no network, no secrets."""
+    """Recorded provider health only. No probe, no network, no secrets."""
     events = []
     try:
-        text = HEALTH_EVENTS.read_text(encoding="utf-8")
+        text = (RUNS / "health_events.jsonl").read_text(encoding="utf-8")
         events = [json.loads(ln) for ln in text.splitlines() if ln.strip()]
     except (OSError, ValueError):
         events = []
@@ -285,17 +285,39 @@ def _provider_state() -> dict:
         if subsystem:
             latest[subsystem] = event
     out = {}
+    latest_probe = None
     for subsystem, event in sorted(latest.items()):
         error = event.get("error")
         out[subsystem] = {
             "recorded_at": event.get("timestamp") or event.get("ts") or _UNKNOWN,
             "ok": False if error else True,
             "error": str(error)[:120] if error else None,
-            "probed": False,
-            "note": "recorded health events only; no live probe performed",
+            "probed": bool(event.get("probed")),
+            "note": "recorded health event only; no live probe performed by agi status",
         }
-    return {"probed": False, "note": "no provider contact; recorded events only",
-            "recorded_subsystems": out}
+        if subsystem == "provider" and event.get("operation") == "connectivity_canary":
+            latest_probe = {
+                "recorded_at": event.get("timestamp") or event.get("ts") or _UNKNOWN,
+                "ok": False if error else bool(event.get("ok", True)),
+                "provider": event.get("provider"),
+                "purpose": event.get("purpose"),
+                "model": event.get("model"),
+                "request_id": event.get("request_id"),
+                "latency_seconds": event.get("latency_seconds"),
+                "input_tokens": event.get("input_tokens"),
+                "output_tokens": event.get("output_tokens"),
+                "finish_reason": event.get("finish_reason"),
+                "retryable": event.get("retryable"),
+                "error_category": event.get("error_category"),
+                "error": str(error)[:120] if error else None,
+            }
+    return {
+        "probed": latest_probe is not None,
+        "note": ("latest provider probe reconstructed from recorded health events"
+                 if latest_probe else "no provider contact; recorded events only"),
+        "latest_probe": latest_probe,
+        "recorded_subsystems": out,
+    }
 
 
 def collect_status() -> dict:

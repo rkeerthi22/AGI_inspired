@@ -290,7 +290,7 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     check("unreadable inventory reports unknown source",
           data["munder_quiescence"]["source"], "unknown")
 
-# Provider state: recorded-only, never probed
+# Provider state: recorded health events only; may surface persisted probe results
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     world = build_world(Path(raw))
     env = world["env"]
@@ -307,6 +307,37 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     check("provider recorded subsystem surfaced", "estop" in p.get("recorded_subsystems", {}), True)
     check("provider recorded event flagged not-ok",
           p["recorded_subsystems"]["estop"]["ok"], False)
+
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
+    world = build_world(Path(raw))
+    env = world["env"]
+    (world["td"] / "runs" / "health_events.jsonl").write_text(
+        json.dumps({
+            "subsystem": "provider",
+            "operation": "connectivity_canary",
+            "provider": "byteplus_coding",
+            "purpose": "connectivity_canary",
+            "probed": True,
+            "ok": True,
+            "model": "ark-code-latest",
+            "request_id": "req-123",
+            "latency_seconds": 1.234,
+            "input_tokens": 5,
+            "output_tokens": 7,
+            "finish_reason": "stop",
+            "timestamp": "2026-09-02T20:14:55Z",
+        }) + "\n",
+        encoding="utf-8")
+    with mock.patch.dict(os.environ, {"HERMES_HOME": env["HERMES_HOME"],
+                                       "AGI_COHORT_JOURNAL": env["AGI_COHORT_JOURNAL"]}), \
+         mock.patch.object(operator_cli, "RUNS", world["td"] / "runs"):
+        data = operator_cli.collect_status()
+    p = data["provider"]
+    check("provider probe event sets probed true", p["probed"], True)
+    check("provider latest probe surfaced", p["latest_probe"]["provider"], "byteplus_coding")
+    check("provider latest probe retains model", p["latest_probe"]["model"], "ark-code-latest")
+    check("provider subsystem marked probed",
+          p["recorded_subsystems"]["provider"]["probed"], True)
 
 # --------------------------------------------------------------------------
 # Section 2: agi status --json stability

@@ -26,12 +26,21 @@ with tempfile.TemporaryDirectory() as td:
     os.environ["AGI_HEALTH_EVENTS_PATH"] = str(target)
     try:
         ok = health_events.emit("prediction", "before_task_runs", RuntimeError("boom"), task_id=7)
-        event = json.loads(target.read_text(encoding="utf-8"))
+        lines = [json.loads(line) for line in target.read_text(encoding="utf-8").splitlines() if line.strip()]
+        event = lines[0]
         check("append succeeds", ok)
         check("stable schema", event["schema"] == "agi.health_event.v1")
         check("operation identified", event["subsystem"] == "prediction" and event["operation"] == "before_task_runs")
         check("context preserved", event["task_id"] == 7)
         check("event UTC", event["timestamp"].endswith("Z"))
+        ok = health_events.record("provider", "connectivity_canary", provider="byteplus_coding",
+                                  probed=True, ok=True, request_id="req-1")
+        lines = [json.loads(line) for line in target.read_text(encoding="utf-8").splitlines() if line.strip()]
+        event = lines[-1]
+        check("record succeeds", ok)
+        check("record omits error fields", "error" not in event and "error_type" not in event)
+        check("record keeps explicit probe state",
+              event["subsystem"] == "provider" and event["probed"] is True and event["ok"] is True)
     finally:
         if old is None: os.environ.pop("AGI_HEALTH_EVENTS_PATH", None)
         else: os.environ["AGI_HEALTH_EVENTS_PATH"] = old

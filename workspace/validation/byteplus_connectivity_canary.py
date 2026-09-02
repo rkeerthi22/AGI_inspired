@@ -16,6 +16,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "orchestrator"))
 
 import execution_pause  # noqa: E402
+import health_events  # noqa: E402
 import provider_chat  # noqa: E402
 
 PROVIDER = "byteplus_coding"
@@ -72,11 +73,35 @@ def main(argv: list[str] | None = None) -> int:
     try:
         result = provider_chat.chat(request, pause_bypass=permit)
     except provider_chat.ProviderChatError as exc:
+        health_events.emit(
+            "provider",
+            "connectivity_canary",
+            exc,
+            provider=PROVIDER,
+            purpose=PURPOSE,
+            retryable=exc.retryable,
+            error_category=exc.category.value,
+            probed=True,
+        )
         print(json.dumps({"ok": False, "provider": PROVIDER,
                           "error_category": exc.category.value,
                           "retryable": exc.retryable, "error": str(exc)}))
         return 2
 
+    health_events.record(
+        "provider",
+        "connectivity_canary",
+        provider=result.provider,
+        purpose=PURPOSE,
+        probed=True,
+        ok=True,
+        model=result.model,
+        request_id=result.request_id,
+        latency_seconds=round(result.latency_seconds, 3),
+        input_tokens=result.input_tokens,
+        output_tokens=result.output_tokens,
+        finish_reason=result.finish_reason,
+    )
     print(json.dumps({
         "ok": True,
         "provider": result.provider,
