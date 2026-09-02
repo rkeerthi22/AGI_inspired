@@ -29,6 +29,8 @@ import sys
 from pathlib import Path
 from typing import Any, Callable
 
+from dotenv import dotenv_values
+
 ROOT = Path(__file__).resolve().parents[1]
 ORCH = ROOT / "orchestrator"
 
@@ -76,6 +78,18 @@ def _safe(func: Callable[[], Any], fail: Any = _UNKNOWN) -> Any:
         return func()
     except Exception:
         return fail
+
+
+def _provider_secret_present(provider: str, env_name: str) -> bool:
+    """Read-only presence check aligned with the runtime secret resolver."""
+    if credential_vault.get_api_key(provider) is not None:
+        return True
+    try:
+        import execution_pause
+        loaded = dotenv_values(execution_pause.estop_path().parent / ".env")
+        return bool(str(loaded.get(env_name) or "").strip())
+    except Exception:
+        return False
 
 
 # ------------------------------------------------------------------ status --
@@ -403,9 +417,9 @@ def _canary_prerequisites() -> list[dict]:
     add("provider_configured", provider_ok, detail, True)
 
     # 5. Credential presence only. The vault reader never reports the value.
-    key_present = credential_vault.get_api_key("byteplus_coding") is not None
+    key_present = _provider_secret_present("byteplus_coding", "ARK_API_KEY")
     add("ark_api_key_present_in_env", key_present,
-        "Credential Manager or environment presence only; value never reported", True)
+        "Credential Manager, environment, or Hermes private .env presence only; value never reported", True)
 
     # 6. Batch lock must be free.
     add("batch_lock_free", not BATCH_LOCK.is_file(),

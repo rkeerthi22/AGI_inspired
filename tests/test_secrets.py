@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -45,6 +46,7 @@ class FakeCredentialManager:
 
 original_backend = credential_vault._win32cred
 original_env = os.environ.get("ARK_API_KEY")
+original_home = os.environ.get("HERMES_HOME")
 original_vault_getter = provider_chat.credential_vault.get_api_key
 original_cli_getter = operator_cli.credential_vault.get_api_key
 try:
@@ -79,6 +81,20 @@ try:
     check("preflight accepts vault credential presence", credential_check["ok"], True)
     check("preflight never includes credential value", "vault-presence-only" in credential_check["detail"], False)
 
+    operator_cli.credential_vault.get_api_key = lambda provider: None
+    with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as td:
+        hermes_home = Path(td)
+        (hermes_home / "config.yaml").write_text("{}\n", encoding="utf-8")
+        (hermes_home / ".env").write_text("ARK_API_KEY=private-dotenv-only\n",
+                                          encoding="utf-8")
+        os.environ["HERMES_HOME"] = str(hermes_home)
+        os.environ.pop("ARK_API_KEY", None)
+        credential_check = next(item for item in operator_cli._canary_prerequisites()
+                                if item["check"] == "ark_api_key_present_in_env")
+    check("preflight accepts Hermes private dotenv presence", credential_check["ok"], True)
+    check("preflight detail still withholds dotenv secret value",
+          "private-dotenv-only" in credential_check["detail"], False)
+
     canary_source = (ROOT / "workspace" / "validation" /
                      "byteplus_connectivity_canary.py").read_text(encoding="utf-8")
     check("canary checks the vault rather than process environment",
@@ -87,6 +103,10 @@ finally:
     credential_vault._win32cred = original_backend
     provider_chat.credential_vault.get_api_key = original_vault_getter
     operator_cli.credential_vault.get_api_key = original_cli_getter
+    if original_home is None:
+        os.environ.pop("HERMES_HOME", None)
+    else:
+        os.environ["HERMES_HOME"] = original_home
     if original_env is None:
         os.environ.pop("ARK_API_KEY", None)
     else:
