@@ -29,6 +29,7 @@ What lives here for utility reasons:
 
 
 import sys
+from time import monotonic
 from pathlib import Path
 from datetime import datetime
 import json
@@ -109,16 +110,30 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     except Exception as exc:
         raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
 
+    # ESTOP watchdog: poll pause_engaged() during the worker's lifetime so
+    # engaging ESTOP terminates the in-flight process tree immediately
+    # instead of only gating the next task.
+    from execution_pause import pause_engaged as _pause_engaged
+    _WATCHDOG_POLL_S = 5
     try:
-        proc.wait(timeout=timeout)
-    except subprocess.TimeoutExpired:
-        try:
-            _pty.terminate_job(h_job)
-        except Exception:
-            pass
-        proc.kill()
-        proc.wait()
-        raise
+        _deadline = monotonic() + timeout
+        while True:
+            if _pause_engaged():
+                _pty.terminate_job(h_job)
+                proc.kill()
+                proc.wait()
+                raise RuntimeError("worker killed by ESTOP")
+            remaining = _deadline - monotonic()
+            if remaining <= 0:
+                _pty.terminate_job(h_job)
+                proc.kill()
+                proc.wait()
+                raise subprocess.TimeoutExpired(cmd, timeout)
+            try:
+                proc.wait(timeout=min(_WATCHDOG_POLL_S, remaining))
+                break  # process finished normally
+            except subprocess.TimeoutExpired:
+                continue  # check ESTOP again
     finally:
         # KILL_ON_JOB_CLOSE: the job handle must stay open until the process
         # finishes; closing it early would terminate the worker prematurely.

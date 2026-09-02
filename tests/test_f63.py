@@ -15,6 +15,7 @@ from retrieval_progress import (  # noqa: E402
     tool_stage,
 )
 import execution  # noqa: E402
+import execution_pause  # noqa: E402
 from controlled_hermes import (finalizer_call_options, finalizer_provider,
                                merge_finalization_usage)  # noqa: E402
 
@@ -267,6 +268,7 @@ audit_attempt.write_text("stale prior attempt\n", encoding="utf-8")
 captured = {}
 real_which = execution.shutil.which
 real_auth_env = execution.provider_transport.authentication_env_from_config
+real_pause = execution_pause.pause_engaged
 try:
     execution.shutil.which = lambda name: str(
         Path("C:/Hermes/venv/Scripts/hermes.exe"))
@@ -278,6 +280,8 @@ try:
         returncode = 0
         def wait(self, timeout=None):
             pass
+        def kill(self):
+            pass
 
     def fake_create_contained(cmd, cwd=None, env=None):
         captured.update(cmd=cmd, cwd=cwd, env=env)
@@ -288,6 +292,9 @@ try:
     pty_daemon.create_contained_process = fake_create_contained
     execution.provider_transport.authentication_env_from_config = lambda cfg: {
         "ARK_API_KEY": "test-only-placeholder"}
+    # Mock pause_engaged to False so the ESTOP watchdog doesn't kill
+    # the mock process (real ESTOP is engaged on this system).
+    execution_pause.pause_engaged = lambda: False
     out, measured = execution.hermes_worker(
         "mission", {"provider": "p", "model": "m",
                     "authentication_reference": "env:ARK_API_KEY"}, usage,
@@ -310,6 +317,7 @@ finally:
     execution.shutil.which = real_which
     pty_daemon.create_contained_process = real_create
     execution.provider_transport.authentication_env_from_config = real_auth_env
+    execution_pause.pause_engaged = real_pause
     usage.unlink(missing_ok=True)
     audit_attempt.unlink(missing_ok=True)
 
