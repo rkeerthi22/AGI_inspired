@@ -1,20 +1,20 @@
 {
   "schema_version": 2,
-  "brief_revision": 49,
-  "created_at": "2026-09-02T20:13:42.893872+00:00",
+  "brief_revision": 50,
+  "created_at": "2026-09-02T20:20:05.058949+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "adfddab3ac3cc9b1825abb2e8011b35bf408c99a"
+    "based_on_head": "0a15a03a4cc88c986b553ec2eac30da9d52333cb"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
     "phase": "post-incident-repair-enterprise-gap-hardening-complete-cohort-resumable",
     "status": "in_progress",
-    "next_action": "From clean checkpoint adfddab, run one supervised BytePlus connectivity canary; if it returns HTTP 200-equivalent success, update canonical state and then separately decide on the resumed aborted seed or next cohort window."
+    "next_action": "From clean checkpoint 0a15a03, run one supervised BytePlus connectivity canary that persists a provider health event; then update canonical state and enterprise readiness with the live result."
   },
   "completed": [
     "Task 110: lease expired 06:29:04Z, reconcile demoted to interrupted, attempt 1 - verified ('interrupted', 1)",
@@ -25,7 +25,8 @@
     "Immediate dead-owner recovery landed: task rows now carry owner process identity and reconcile no longer waits for lease expiry when the owner is provably gone",
     "Citecheck redirect hardening landed: every redirect target is revalidated and public-to-private hops are blocked fail-closed",
     "Repo-native Windows CI workflow added: .github/workflows/model_free_gate.yml",
-    "Fresh full gate green: 55/55 suites passed after the new hardening"
+    "Fresh full gate green: 55/55 suites passed after the new hardening",
+    "Provider observability landed: connectivity canary results now persist to health_events and surface through agi status"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
@@ -36,7 +37,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "55/55 model-free suites green at adfddab; continuity resynced to a clean tree and provider proof still pending a fresh authorized canary."
+    "detail": "55/55 model-free suites green at 0a15a03; continuity resync pending commit and live provider proof can now be persisted into operator status."
   },
   "references": [
     {
