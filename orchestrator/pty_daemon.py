@@ -18,6 +18,7 @@ from typing import Callable
 # ── kernel32 types and constants (ctypes only, no pywin32 dependency) ──────
 
 _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
+_ntdll = ctypes.WinDLL("ntdll", use_last_error=True)  # type: ignore[attr-defined]
 
 CREATE_SUSPENDED = 0x00000004
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
@@ -48,10 +49,21 @@ class _JOBOBJECT_BASIC_LIMIT_INFORMATION(ctypes.Structure):
     ]
 
 
+class _IO_COUNTERS(ctypes.Structure):
+    _fields_ = [
+        ("ReadOperationCount", ctypes.c_ulonglong),
+        ("WriteOperationCount", ctypes.c_ulonglong),
+        ("OtherOperationCount", ctypes.c_ulonglong),
+        ("ReadTransferCount", ctypes.c_ulonglong),
+        ("WriteTransferCount", ctypes.c_ulonglong),
+        ("OtherTransferCount", ctypes.c_ulonglong),
+    ]
+
+
 class _JOBOBJECT_EXTENDED_LIMIT_INFORMATION(ctypes.Structure):
     _fields_ = [
         ("BasicLimitInformation", _JOBOBJECT_BASIC_LIMIT_INFORMATION),
-        ("IoInfo", wintypes.DWORD * 8),  # IO_COUNTERS placeholder
+        ("IoInfo", _IO_COUNTERS),
         ("ProcessMemoryLimit", ctypes.c_size_t),
         ("JobMemoryLimit", ctypes.c_size_t),
         ("PeakProcessMemoryUsed", ctypes.c_size_t),
@@ -93,11 +105,16 @@ def _assign_process_to_job(h_job: int, h_process: int) -> None:
         raise ctypes.WinError()
 
 
-def _resume_thread(h_process: int) -> None:
-    """Resume the process's primary thread (suspended by ``CREATE_SUSPENDED``)."""
-    count = _kernel32.ResumeThread(h_process)
-    if count == -1:  # 0xFFFFFFFF
-        raise ctypes.WinError()
+def _resume_process(h_process: int) -> None:
+    """Resume a suspended process after job assignment.
+
+    ``subprocess.Popen`` exposes the process handle, not the primary thread
+    handle, so ``ResumeThread`` is not viable here. ``NtResumeProcess`` uses
+    the process handle directly and resumes all threads in the suspended tree.
+    """
+    status = _ntdll.NtResumeProcess(ctypes.c_void_p(int(h_process)))
+    if status != 0:
+        raise OSError(f"NtResumeProcess failed with NTSTATUS 0x{status:08x}")
 
 
 def _terminate_job(h_job: int, exit_code: int = 75) -> None:
@@ -142,7 +159,12 @@ class PipeDrain:
 
     def _drain(self) -> None:
         try:
-            for line in iter(self._stream.readline, ""):
+            while True:
+                line = self._stream.readline()
+                if not line:
+                    break
+                if isinstance(line, bytes):
+                    line = line.decode("utf-8", errors="replace")
                 with self._lock:
                     self._buf.append(line)
         except ValueError:
@@ -208,11 +230,15 @@ def create_contained_process(
             stdin=subprocess.PIPE,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
         )
 
         try:
             _assign_process_to_job(h_job, proc._handle)
-            _resume_thread(proc._handle)
+            _resume_process(proc._handle)
         except Exception:
             _terminate_job(h_job)
             proc.kill()

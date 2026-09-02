@@ -41,14 +41,20 @@ def _make_mock_kernel32() -> MagicMock:
     k32.CreateJobObjectW.return_value = 12345
     k32.SetInformationJobObject.return_value = True
     k32.AssignProcessToJobObject.return_value = True
-    k32.ResumeThread.return_value = 1
     k32.TerminateJobObject.return_value = True
     k32.CloseHandle.return_value = True
     return k32
 
 
+def _make_mock_ntdll() -> MagicMock:
+    ntdll = MagicMock()
+    ntdll.NtResumeProcess.return_value = 0
+    return ntdll
+
+
 # Patch BEFORE importing pty_daemon so all references point to the mock.
 _mock_kernel32 = _make_mock_kernel32()
+_mock_ntdll = _make_mock_ntdll()
 _mock_popen = MagicMock()
 _mock_proc = MagicMock()
 _mock_proc._handle = 9999
@@ -57,13 +63,16 @@ _mock_proc.stderr = MagicMock()
 _mock_popen.return_value = _mock_proc
 
 patcher_k32 = patch("pty_daemon._kernel32", _mock_kernel32)
+patcher_ntdll = patch("pty_daemon._ntdll", _mock_ntdll)
 patcher_popen = patch("pty_daemon.subprocess", _mock_popen)
 patcher_k32.start()
+patcher_ntdll.start()
 patcher_popen.start()
 
 import pty_daemon  # noqa: E402
 
 patcher_k32.stop()
+patcher_ntdll.stop()
 patcher_popen.stop()
 
 
@@ -74,11 +83,12 @@ print("=== create_contained_process ===")
 
 # Re-patch for the create_contained_process call
 with patch("pty_daemon._kernel32", _mock_kernel32), \
+     patch("pty_daemon._ntdll", _mock_ntdll), \
      patch("pty_daemon.subprocess", _mock_popen):
 
     _mock_kernel32.CreateJobObjectW.reset_mock()
     _mock_kernel32.AssignProcessToJobObject.reset_mock()
-    _mock_kernel32.ResumeThread.reset_mock()
+    _mock_ntdll.NtResumeProcess.reset_mock()
     _mock_popen.reset_mock()
 
     proc, h_job, sout, serr = pty_daemon.create_contained_process(
@@ -92,9 +102,11 @@ with patch("pty_daemon._kernel32", _mock_kernel32), \
 
     # Verify assign-before-resume: AssignProcessToJobObject called before ResumeThread
     assign_calls = _mock_kernel32.AssignProcessToJobObject.mock_calls
-    resume_calls = _mock_kernel32.ResumeThread.mock_calls
+    resume_calls = _mock_ntdll.NtResumeProcess.mock_calls
     check("assign was called", len(assign_calls) >= 1)
     check("resume was called", len(resume_calls) >= 1)
+    check("stdout pipe requested in text mode",
+          _mock_popen.Popen.call_args.kwargs.get("text"), True)
 
     # 2. Empty command list
     try:
