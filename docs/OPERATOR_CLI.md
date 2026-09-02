@@ -45,9 +45,10 @@ Consolidates, read-only:
   (`cohort_hive_quiesce.scan_mutation_processes`); fails closed: an
   unreadable inventory is reported NOT quiesced, never guessed.
 - **Backup freshness** — per-DB newest backup age; offsite configured or not.
-- **Provider health** — **recorded health events only**. Never probed; no
-  network; no secret access. Subsystems with no recorded events simply do not
-  appear.
+- **Provider health** — reconstructed from **recorded health events only**,
+  including persisted connectivity-canary results when available. `agi status`
+  never probes the network itself and never reads secrets; it only reports what
+  prior authorized runtime paths recorded.
 
 ### `agi health --model-free`
 
@@ -106,7 +107,7 @@ never guessed as pass.
 
 ---
 
-## Safety contract (enforced by 109 assertions in `tests/test_operator_cli.py`)
+## Safety contract (enforced by 115 assertions in `tests/test_operator_cli.py`)
 
 The CLI never mutates:
 
@@ -136,7 +137,7 @@ authoritative modules it reads.
 | File | Purpose |
 |---|---|
 | `orchestrator/operator_cli.py` | Implementation (read-only collectors, renderers, argparse) |
-| `tests/test_operator_cli.py` | 109-assertion contract suite (unit tier) |
+| `tests/test_operator_cli.py` | 115-assertion contract suite (unit tier) |
 | `agi.ps1` | Routing/launcher (Windows) |
 | `tests/tiers.json` | `test_operator_cli` registered in the unit tier |
 
@@ -171,8 +172,9 @@ not contact a provider or alter ESTOP, canary authorization, or isolation state.
 
 ## Known limitations
 
-- Provider state is only as fresh as the last recorded health event; there is
-  no live probe by design (probes remain operator-gated).
+- Provider state is only as fresh as the last recorded health event. `agi`
+  still performs no live probe by design; probes remain separately
+  operator-gated.
 - `health --model-free` runs the full gate (minutes); there is no fast mode.
 - Continuity discrepancy reporting reflects live repo drift at collection
   time; during active development the tree is intentionally dirty.

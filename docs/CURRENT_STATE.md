@@ -1,9 +1,9 @@
 # Canonical Project State - AGI_like Harness
 
-**Last Updated:** 2026-09-02T20:15:00Z
+**Last Updated:** 2026-09-02T20:21:00Z
 **Phase:** Post-incident repair and enterprise-gap hardening complete; cohort resumable under operator authorization
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Live Verification:** `python -B tests/run_all.py` -> `55/55` green | continuity and operator preflight re-verified after this sync
+**Live Verification:** `python -B tests/run_all.py` -> `55/55` green | continuity and operator preflight re-verified | supervised BytePlus canary succeeded and is now persisted through `agi status`
 
 ---
 
@@ -12,9 +12,10 @@
 The 2026-09-02 launch-failure incident is repaired, regression-covered, and
 documented. The highest-value remaining enterprise gaps that were still code-
 addressable in this session are now also closed: immediate dead-owner recovery,
-redirect-safe citecheck egress, and repo-native Windows CI wiring. The harness
-is resumable, not enterprise-grade finished: live mission windows still require
-separate authorization and longer-run operational evidence cannot be faked.
+redirect-safe citecheck egress, repo-native Windows CI wiring, and persisted
+provider canary observability. The harness is resumable and freshly live-proven,
+not enterprise-grade finished: mission windows still require separate
+authorization and longer-run operational evidence cannot be faked.
 
 Live state verified on 2026-09-02:
 
@@ -29,6 +30,7 @@ Live state verified on 2026-09-02:
 | Windows CI workflow | VERIFIED | `.github/workflows/model_free_gate.yml` runs `scripts/bootstrap.ps1` and `scripts/ci.ps1` on `windows-latest` |
 | Full model-free gate | VERIFIED | `55/55` suites green |
 | Continuity brief | VERIFIED | Current continuity revision re-recovers cleanly with no live discrepancies |
+| BytePlus connectivity canary | VERIFIED LIVE | `2026-09-02T20:20:41Z`: `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, `5` input tokens, `1245` output tokens, `12.904s`, persisted to `runs/health_events.jsonl` and surfaced by `agi status` |
 
 ---
 
@@ -58,8 +60,9 @@ Those are now part of the canonical state and are also recorded in
   supported runtime paths.
 * Live repository, runtime, and process state outrank historical documents.
 
-Provider status remains historical until a newly authorized canary is run. The
-last successful BytePlus connectivity observation is not current proof.
+Provider status is no longer historical only. A supervised BytePlus canary on
+2026-09-02 succeeded from a clean checkpoint and is now persisted as a provider
+health event that `agi status` surfaces without probing the network itself.
 
 ---
 
@@ -69,13 +72,13 @@ The control-plane hardening is materially stronger than the 2026-08-31
 enterprise review reflects, but several enterprise-grade requirements still
 cannot be truthfully claimed complete in one coding pass:
 
-* no fresh live provider proof yet; readiness remains historical until a newly
-  authorized canary runs;
 * no centralized tamper-evident audit retention layer yet;
 * no measured SLO / alert pipeline yet;
 * no restricted worker service identity or engine-independent egress sandbox;
 * no 30-60 day production-like evidence window, external penetration test, or
   long-mission soak evidence.
+* only a single supervised live provider proof exists so far; this is current
+  evidence, not yet a reliability history.
 
 This means the correct project label is "strong enterprise-candidate
 groundwork," not "enterprise-grade finished."
@@ -85,16 +88,12 @@ groundwork," not "enterprise-grade finished."
 ## 5. Next Exact Action
 
 1. Protect the reviewed checkpoint off-machine and quiesce all development
-   agents.
-2. Run the read-only preflight:
-
-```powershell
-agi preflight canary
-```
-
-3. If preflight passes, choose the next separately authorized live action:
+   agents before the next live window.
+2. Choose the next separately authorized live action:
    rerun the recovered aborted seed first, or open the next frozen cohort
    window (`M3` onward).
+3. Keep ESTOP engaged between windows and verify the post-window state with
+   `agi status`.
 4. After the cohort closes, focus the next enterprise pass on audit retention,
    metrics/SLOs, restore-drill evidence, and the stronger worker isolation
    boundary.
