@@ -1,68 +1,59 @@
 {
   "schema_version": 2,
-  "brief_revision": 43,
-  "created_at": "2026-09-01T05:16:45.877676+00:00",
+  "brief_revision": 44,
+  "created_at": "2026-09-02T05:36:36.050081+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "899d6d3f1fbf81b7bc6ddb7b8c89f0aeb3dbc770"
+    "based_on_head": "2de64b517ff39f0efc7fb336df4abb1332dc76c4"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "m1-m2-complete-m3-pending-operator-authorization",
+    "phase": "m2-passing-post-launch-failure-hardening",
     "status": "in_progress",
-    "next_action": "M2 passed under the controlled window (task 109: critic PASS, browser_navigate executed first on the canonical AIPRM task, 23,000 mission input/output tokens, 4 executed browser retrievals, 1 finalizer, 9 facts, 0 dead citations). Operator reviews M2 output, then authorizes M3 as a separate controlled-window run if desired. M3-M7 remain operator-authorized individually."
+    "next_action": "M2 passed (task 109, canonical AIPRM spec, 9 facts). Task 110 lease expires 06:29Z; then reconcile_interrupted_tasks demotes it to interrupted (supported H3 path) and the operator may rerun the aborted seed mission. Rows 111-113 are legitimate queued seeds. All further missions remain operator-authorized individually."
   },
   "completed": [
-    "Canary + M1 executed under operator authorization via the BytePlus provider",
-    "M1 verdict PASS: explicit bounded-unavailability declaration accepted per harmonized criteria",
-    "8 facts extracted to ledgerbook (6 at confidence 3 from prompthero.com/plans)",
-    "F66 mission accounting reconciles exactly: worker 62,264 + critic 2,387 = 64,651",
-    "F63 bounds held: 7 executed retrievals (<=8), 1 finalizer, deterministic termination",
-    "Controlled window opened clean and restored; tree taint check verified, no new paths",
-    "ESTOP re-engaged automatically after window close; canary marker absent",
-    "M2 task 109 completed with critic PASS and status done",
-    "M2 retrieval audit began with browser_navigate at executed_calls=1 under dynamic_browser_required",
-    "Canonical AIPRM pricing deliverable captured four monthly tiers and the visible NEW2026 promotion",
-    "M2 accounting reconciles: worker 15,715 in + 4,859 out; critic 1,050 in + 1,376 out = 23,000 mission input/output tokens",
-    "M2 extracted 9 facts; citecheck reached the canonical URL with 0 dead citations",
-    "M2 controlled window restored ESTOP, scheduled tasks, cron, gateway, and hive state; tree taint check found zero new paths",
-    "Post-window model-free gate passed 46/46 suites"
+    "M1 passed (task 106): critic PASS, 64,651 tokens, 8 facts, accounting exact",
+    "M2 passed (task 109): canonical AIPRM pricing spec, 9 facts, browser-rung content",
+    "Worker-launch exception path hardened: research rows close infra_failed at failure time",
+    "test_f35 tightened to the real invariant (previous-week stranded rows)",
+    "Hermetic regression added (11 checks in critical-path suite)",
+    "Full model-free gate 54/54 green at 2de64b5"
   ],
   "locked_constraints": [
-    "Each M3-M7 mission requires separate operator authorization",
-    "ESTOP remains engaged between windows until an operator-controlled transition",
-    "Munder fleet state regenerates only through supported lifecycle controls",
-    "Phase 2 Memory FTS and Phase 3 drain/dispatch remain frozen",
+    "Each further mission requires separate operator authorization",
+    "ESTOP remains engaged between windows",
+    "Task 110 recovery only via lease-expiry + reconcile (supported path), never hand-edited",
     "Live repository/runtime/process state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "M2 task 109: critic PASS; first retrieval was browser_navigate under dynamic_browser_required; accounting reconciled; isolation restored; post-window gate 46/46 green"
+    "detail": "54/54 model-free suites green; continuity validated; tree clean"
   },
   "references": [
     {
-      "path": "workspace/shopify/2026-W36_cohort-2026-w36-m2-dynamic-browser-canonical-aiprm-pricing.md",
-      "purpose": "M2 deliverable (task 109, critic PASS)",
-      "sha256": "b8b474b72d39e2f195fa1ffd9ed704c575e675e813995616e68b4b765dcc705e"
+      "path": "docs/CURRENT_STATE.md",
+      "purpose": "Canonical state",
+      "sha256": "ce186c97e29876032f2616fd2a714b6bc8a5781cb44241446a4ec0c959f46526"
     },
     {
-      "path": "workspace/validation/cohort_summary.json",
-      "purpose": "M2 controlled-window summary and restoration evidence",
-      "sha256": "76ee83be6f0ef11472c3087df0f73615974e73153723dc3dfa2f0f8a8b8fde59"
+      "path": "orchestrator/task_runner.py",
+      "purpose": "Hardened launch-failure path",
+      "sha256": "e4964bf542d2920f50b615000552d1716caad444c52079e57e78bf39ceb01957"
     },
     {
-      "path": "runs/task109_worker.usage.retrieval.jsonl",
-      "purpose": "M2 browser-first retrieval audit",
-      "sha256": "8912781539fd2e8cc1df4e6637796449d7806f29c818deea3d1ecac9f632f705"
+      "path": "tests/test_critical_path_regressions.py",
+      "purpose": "Launch-failure regression coverage",
+      "sha256": "c227e0da107458f72e51e5b19f21b07f9cb30d8f17f75d7666239ae861b6a749"
     },
     {
-      "path": "runs/task109_mission.usage.json",
-      "purpose": "M2 reconciled mission accounting",
-      "sha256": "efc678584039724c1d2913e968e4cf0ea5e37f492d41026d84201b3d60439e98"
+      "path": "workspace/validation/cohort_missions.json",
+      "purpose": "Frozen cohort specs",
+      "sha256": "cd139598cd4a7f08b678e97bab9b4677dc7fa5cd11fa14258ad7c5ed9d641f3f"
     }
   ]
 }
