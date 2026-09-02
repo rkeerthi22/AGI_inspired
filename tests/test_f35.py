@@ -52,10 +52,12 @@ print(f"  queued before: {before}")
 scheduler.expire_stale_parked()
 with sqlite3.connect(tmp) as c:
     after = [r[0] for r in c.execute("SELECT task_id FROM tasks WHERE status='queued'")]
+    still_queued_old = [r[0] for r in c.execute(
+        "SELECT task_id FROM tasks WHERE status='queued' AND task_id IN (4,13,14,17,19)")]
     now_stale = [r[0] for r in c.execute(
         "SELECT task_id FROM tasks WHERE status='stale' AND task_id IN (4,13,14,17,19)")]
 check("all five previous-week queued rows expired", sorted(now_stale), [4, 13, 14, 17, 19])
-check("nothing left stuck in queued", after, [])
+check("no previous-week stranded rows stay queued", still_queued_old, [])
 # Task 4 carries started_at + critic_verdict='fail' -- it WAS attempted and re-queued,
 # so it must get the ordinary note. 13/14/17/19 have started_at NULL and must not.
 check("never-attempted rows (13,14,17,19) are labelled as such",

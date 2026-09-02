@@ -297,6 +297,15 @@ def _run_research_task(context: _TaskContext) -> str:
         if tw:
             tw.task_failed("database containment violation", failure_stage="execution")
         return "infra_failed"
+    except Exception as exc:
+        ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                           critic_notes=f"worker launch failure: {exc}",
+                           append_note=True)
+        rc.log(f"task {tid}: infra_failed (worker launch failure: {exc})")
+        if tw:
+            tw.task_failed("worker launch failure", failure_stage="execution",
+                           detail=str(exc)[:200])
+        return "infra_failed"
 
     integrity.fs_integrity_check(fs_snapshot, context=f"task {tid} worker call")
     # Persist the FULL raw output regardless of what happens next -- a misclassified
