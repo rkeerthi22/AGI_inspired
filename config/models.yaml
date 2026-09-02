@@ -59,6 +59,18 @@ providers:
     routing_model: ark-code-latest
     hermes_provider: custom:byteplus-coding
 
+  anthropic:
+    endpoint: https://api.anthropic.com/v1
+    authentication_reference: env:ANTHROPIC_API_KEY
+    routing_model: claude-sonnet-5
+    hermes_provider: custom:anthropic
+
+  openai:
+    endpoint: https://api.openai.com/v1
+    authentication_reference: env:OPENAI_API_KEY
+    routing_model: gpt-4o
+    hermes_provider: custom:openai
+
 # Cross-PROVIDER fallback chain (429 is account-level, not per-model — §1.6).
 # A second Ollama model does NOT survive quota exhaustion; a second provider does.
 #
@@ -71,9 +83,11 @@ providers:
 fallback_chain:
   - { provider: ollama, model: glm-5.2:cloud,        quota_group: ollama-cloud }
   - { provider: ollama, model: kimi-k2.7-code:cloud, quota_group: ollama-cloud }
-  # - { provider: anthropic, model: claude-sonnet-5 }   # uncomment when key added
-  #   ^ note the ABSENT quota_group: a genuinely separate account is the whole point, and
-  #     is the only thing that makes this chain cross-PROVIDER rather than cross-model.
+  - { provider: anthropic, model: claude-sonnet-5 }                              # no quota_group — genuinely separate
+  - { provider: openai, model: gpt-4o }                                          # no quota_group — genuinely separate
+  # The two rungs above have NO quota_group: a genuinely separate account is the
+  # whole point, and is the only thing that makes this chain cross-PROVIDER rather
+  # than cross-model.
   # F38 (docs/HARDENING.md), 2026-07-29: was plain `gemma4:12b`, which had NEVER once
   # completed a task -- every attempt died with llama-server OOM at startup. The cause was
   # not the 7.6GB weights on a 4GB GPU but the KV CACHE, sized from this model's default

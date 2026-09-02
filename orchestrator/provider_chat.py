@@ -324,6 +324,20 @@ def register(provider: str, adapter: ChatAdapter) -> None:
     _ADAPTERS[provider] = adapter
 
 
+# Register third-party SDK adapters (installed packages, lazy-imported).
+try:
+    from providers.anthropic_provider import AnthropicAdapter  # noqa: F811
+    _ADAPTERS["anthropic"] = AnthropicAdapter()
+except Exception:
+    pass
+
+try:
+    from providers.openai_provider import OpenAIAdapter  # noqa: F811
+    _ADAPTERS["openai"] = OpenAIAdapter()
+except Exception:
+    pass
+
+
 def chat(request: ChatRequest, *,
          pause_bypass: _SinglePausedCanaryPermit | None = None) -> ChatResult:
     # This is the single tool-free invocation boundary. Check immediately before

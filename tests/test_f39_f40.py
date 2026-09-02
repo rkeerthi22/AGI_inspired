@@ -49,10 +49,10 @@ print("\n=== F39: a 429 on one cloud rung skips its same-account siblings ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud"})
 out, usage, cfg, exhausted = execution.worker_with_failover("p", WORKER, Path("x.json"), "test")
-check("kimi 429 -> glm SKIPPED (same group), falls straight to local",
-      attempted, ["kimi-k2.7-code:cloud", "gemma4:12b-ctx4k"])
-check("completed on the local rung, not exhausted", (cfg["model"], exhausted),
-      ("gemma4:12b-ctx4k", False))
+check("kimi 429 -> glm SKIPPED (same group), then tries separate providers",
+      attempted, ["kimi-k2.7-code:cloud", "claude-sonnet-5"])
+check("completed on a separate provider, not exhausted", (cfg["model"], exhausted),
+      ("claude-sonnet-5", False))
 
 print("\n=== F39: no 429 means no skipping at all ===")
 attempted.clear()
@@ -63,24 +63,24 @@ check("first rung succeeds, nothing else tried", attempted, ["kimi-k2.7-code:clo
 print("\n=== F39: a rung with NO quota_group is never skipped by inference ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud",
-                                       "gemma4:12b-ctx4k"})
+                                       "claude-sonnet-5", "gpt-4o", "gemma4:12b-ctx4k"})
 out, usage, cfg, exhausted = execution.worker_with_failover("p", WORKER, Path("x.json"), "test")
-check("local still attempted despite cloud group being dead",
-      attempted, ["kimi-k2.7-code:cloud", "gemma4:12b-ctx4k"])
+check("all rungs attempted despite quota exhaustion",
+      attempted, ["kimi-k2.7-code:cloud", "claude-sonnet-5", "gpt-4o", "gemma4:12b-ctx4k"])
 check("only now is the chain exhausted", exhausted, True)
 
 # ------------------------------------------------------------------ F40
 print("\n=== F40: graded work (canaries) never touches a local model ===")
 cands = [c["model"] for c in execution._failover_candidates(WORKER, allow_local=False)]
 check("no local rung offered when allow_local=False", cands,
-      ["kimi-k2.7-code:cloud", "glm-5.2:cloud"])
+      ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o"])
 check("local IS offered for ordinary work",
       [c["model"] for c in execution._failover_candidates(WORKER, allow_local=True)],
-      ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "gemma4:12b-ctx4k"])
+      ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o", "gemma4:12b-ctx4k"])
 
 print("\n=== F40: quota-exhausted canary PARKS instead of degrading ===")
 attempted.clear()
-execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud"})
+execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o"})
 out, usage, cfg, exhausted = execution.worker_with_failover(
     "p", WORKER, Path("x.json"), "canary C2", allow_local=False)
 check("never reached the local model", "gemma4:12b-ctx4k" in attempted, False)
@@ -88,12 +88,7 @@ check("reports exhausted -> caller parks it (week_pending rises, gate shuts)",
       exhausted, True)
 
 print("\n=== F40: canaries still fail over BETWEEN cloud models when groups differ ===")
-# Simulate a genuinely separate provider having been added (the commented Anthropic rung).
-real_chain = execution.load_fallback_chain
-execution.load_fallback_chain = lambda: [
-    {"provider": "ollama", "model": "glm-5.2:cloud", "quota_group": "ollama-cloud"},
-    {"provider": "anthropic", "model": "claude-sonnet-5"},          # no group = own pool
-]
+# Now this is the REAL chain behavior — anthropic/openai are genuinely separate.
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud"})
 out, usage, cfg, exhausted = execution.worker_with_failover(
@@ -101,7 +96,6 @@ out, usage, cfg, exhausted = execution.worker_with_failover(
 check("skips the dead ollama sibling, reaches the separate provider",
       attempted, ["kimi-k2.7-code:cloud", "claude-sonnet-5"])
 check("canary completes on the second PROVIDER, no park", exhausted, False)
-execution.load_fallback_chain = real_chain
 
 print(f"\n{'ALL PASS' if not fails else 'FAILURES: ' + str(fails)}")
 sys.exit(1 if fails else 0)

@@ -16,7 +16,11 @@ except ImportError:  # pragma: no cover - exercised on non-Windows hosts
 
 
 _CREDENTIAL_PREFIX = "AGI_like/"
-_ENVIRONMENT_KEYS = {"byteplus_coding": "ARK_API_KEY"}
+_ENVIRONMENT_KEYS = {
+    "byteplus_coding": "ARK_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "openai": "OPENAI_API_KEY",
+}
 
 
 def credential_target(provider: str) -> str | None:
