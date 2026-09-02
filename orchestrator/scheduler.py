@@ -50,6 +50,7 @@ import yaml
 from runtime_context import MISSIONS, log
 
 import ledger  # noqa: E402  -- orchestrator sibling; lazy-importable
+import runlock  # noqa: E402  -- process identity inspection for immediate orphan recovery
 from prompts import pass_criteria_for  # noqa: E402  -- only pass_criteria_for is needed
 
 
@@ -170,17 +171,41 @@ def reconcile_interrupted_tasks() -> int:
     Recovered rows go to 'interrupted' (dedup-resumable, see queue_mission_tasks) with an
     incremented attempt_count. Past MAX_TASK_ATTEMPTS, mark 'failed' instead of retrying
     forever -- an honest give-up beats a silent crash-loop. Always logged, never silent;
-    surfaced on the scorecard so the operator sees it happened."""
+    surfaced on the scorecard so the operator sees it happened.
+
+    September 2, 2026 follow-up: rows that carry exact owner identity
+    (`owner_pid` + `owner_process_start_id`) no longer wait for lease expiry
+    when the recorded owner is positively gone or reused. Inspection failures
+    still fail closed and fall back to the lease path."""
     import sqlite3
     n_recovered = n_gave_up = 0
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
-        expired = c.execute(
-            "SELECT task_id, attempt_count FROM tasks WHERE status='running' "
-            "AND (lease_expires_at IS NULL OR lease_expires_at < datetime('now'))"
+        running = c.execute(
+            "SELECT task_id, attempt_count, owner_pid, owner_process_start_id, "
+            "lease_expires_at FROM tasks WHERE status='running'"
         ).fetchall()
-        for row in expired:
+        for row in running:
             tid, attempts = row["task_id"], (row["attempt_count"] or 0) + 1
+            owner_pid = row["owner_pid"]
+            owner_identity = row["owner_process_start_id"]
+            immediate_orphan = False
+            if isinstance(owner_pid, int) and isinstance(owner_identity, str) and owner_identity:
+                try:
+                    current_identity = runlock._process_start_identity(owner_pid)
+                except OSError:
+                    current_identity = "__unknown__"
+                immediate_orphan = (current_identity is None or
+                                    (current_identity != "__unknown__" and
+                                     current_identity != owner_identity))
+            lease_expired = (row["lease_expires_at"] is None or
+                             c.execute("SELECT ? < datetime('now')",
+                                       (row["lease_expires_at"],)).fetchone()[0] == 1)
+            if not (immediate_orphan or lease_expired):
+                continue
+            note = (" | recovered from an orphaned running state "
+                    "(dead owner process, attempt " if immediate_orphan
+                    else " | recovered from an orphaned running state (attempt ")
             if attempts >= ledger.MAX_TASK_ATTEMPTS:
                 c.execute(
                     "UPDATE tasks SET status='failed', attempt_count=?, "
@@ -191,9 +216,8 @@ def reconcile_interrupted_tasks() -> int:
             else:
                 c.execute(
                     "UPDATE tasks SET status='interrupted', attempt_count=?, "
-                    "critic_notes=COALESCE(critic_notes,'') || "
-                    "' | recovered from an orphaned running state (attempt ' || ? || ')' "
-                    "WHERE task_id=?", (attempts, attempts, tid))
+                    "critic_notes=COALESCE(critic_notes,'') || ? || ? || ')' "
+                    "WHERE task_id=?", (attempts, note, attempts, tid))
                 n_recovered += 1
     if n_recovered or n_gave_up:
         log(f"crash recovery: {n_recovered} task(s) recovered for retry, "

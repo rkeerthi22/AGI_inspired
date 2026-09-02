@@ -66,6 +66,17 @@ SELECT 1;
 """,
         check="SELECT 1 FROM sqlite_master WHERE type='table' AND name='tasks'",
     ),
+    Migration(
+        version=2,
+        description="Add task owner-process identity columns for immediate orphan recovery",
+        up="""ALTER TABLE tasks ADD COLUMN owner_pid INTEGER;
+ALTER TABLE tasks ADD COLUMN owner_process_start_id TEXT;
+""",
+        down="""ALTER TABLE tasks DROP COLUMN owner_process_start_id;
+ALTER TABLE tasks DROP COLUMN owner_pid;
+""",
+        check="SELECT 1 FROM pragma_table_info('tasks') WHERE name='owner_pid'",
+    ),
 )
 
 LEDGERBOOK_MIGRATIONS: Sequence[Migration] = (
@@ -77,6 +88,17 @@ LEDGERBOOK_MIGRATIONS: Sequence[Migration] = (
 SELECT 1;
 """,
         check="SELECT 1 FROM sqlite_master WHERE type='table' AND name='tasks'",
+    ),
+    Migration(
+        version=2,
+        description="Add task owner-process identity columns for immediate orphan recovery parity",
+        up="""ALTER TABLE tasks ADD COLUMN owner_pid INTEGER;
+ALTER TABLE tasks ADD COLUMN owner_process_start_id TEXT;
+""",
+        down="""ALTER TABLE tasks DROP COLUMN owner_process_start_id;
+ALTER TABLE tasks DROP COLUMN owner_pid;
+""",
+        check="SELECT 1 FROM pragma_table_info('tasks') WHERE name='owner_pid'",
     ),
 )
 

@@ -198,8 +198,8 @@ register_database("ledgerbook", lambda: tmp_ledgerbook, LEDGERBOOK_MIGRATIONS)
 register_database("fts_index", lambda: tmp_fts, FTS_INDEX_MIGRATIONS)
 
 results = migrate_all()
-check("ledger migrated", results["ledger"][1] >= 1)
-check("ledgerbook migrated", results["ledgerbook"][1] >= 1)
+check("ledger migrated", results["ledger"][1] >= 2)
+check("ledgerbook migrated", results["ledgerbook"][1] >= 2)
 check("fts_index migrated", results["fts_index"][1] >= 1)
 
 # Verify version bumps
@@ -209,7 +209,13 @@ for name in ["ledger", "ledgerbook", "fts_index"]:
         tmp_ledgerbook if name == "ledgerbook" else tmp_fts
     )) as conn:
         ver = conn.execute("PRAGMA user_version").fetchone()[0]
-        check(f"{name} version >= 1", ver >= 1)
+        minimum = 2 if name in ("ledger", "ledgerbook") else 1
+        check(f"{name} version >= {minimum}", ver >= minimum)
+        if name in ("ledger", "ledgerbook"):
+            cols = [r[1] for r in conn.execute("PRAGMA table_info(tasks)")]
+            check(f"{name} owner_pid column exists", "owner_pid" in cols)
+            check(f"{name} owner_process_start_id column exists",
+                  "owner_process_start_id" in cols)
 
 
 # ── Summary ──────────────────────────────────────────────────────────────────

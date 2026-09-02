@@ -3,6 +3,7 @@ Stdlib only. The orchestrator and any hand-run go through here so the ledger sta
 the single source of truth (HARNESS_DESIGN.md §3)."""
 import json
 import argparse
+import os
 import sqlite3
 import uuid
 from pathlib import Path
@@ -87,13 +88,34 @@ def start_task(task_id: int, model_used: str) -> None:
     # Python's, or the comparison is silently wrong by the local UTC offset (caught by
     # the H3 test: a "10 minutes ago, local time" lease looked like it hadn't expired
     # yet from SQLite's UTC point of view). Persist every lifecycle timestamp in UTC.
+    owner_pid = os.getpid()
+    owner_process_start_id = None
+    try:
+        from runlock import _process_start_identity
+        owner_process_start_id = _process_start_identity(owner_pid)
+    except Exception:
+        owner_process_start_id = None
+
     with _conn() as c:
-        c.execute(
-            "UPDATE tasks SET status='running', started_at=?, model_used=?, "
-            "lease_expires_at=datetime('now', ? || ' seconds') WHERE task_id=?",
-            (utc_iso(), model_used,
-             f"+{LEASE_SECONDS}", task_id),
-        )
+        try:
+            c.execute(
+                "UPDATE tasks SET status='running', started_at=?, model_used=?, "
+                "lease_expires_at=datetime('now', ? || ' seconds'), owner_pid=?, "
+                "owner_process_start_id=? WHERE task_id=?",
+                (utc_iso(), model_used, f"+{LEASE_SECONDS}",
+                 owner_pid, owner_process_start_id, task_id),
+            )
+        except sqlite3.OperationalError as exc:
+            # Older schemas legitimately lack the owner-identity columns until
+            # migrations run. Preserve the pre-migration behavior rather than
+            # refusing to start the task.
+            if "owner_pid" not in str(exc) and "owner_process_start_id" not in str(exc):
+                raise
+            c.execute(
+                "UPDATE tasks SET status='running', started_at=?, model_used=?, "
+                "lease_expires_at=datetime('now', ? || ' seconds') WHERE task_id=?",
+                (utc_iso(), model_used, f"+{LEASE_SECONDS}", task_id),
+            )
 
 
 def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, tokens_out=None,

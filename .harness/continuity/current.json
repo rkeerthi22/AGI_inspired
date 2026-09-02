@@ -1,26 +1,46 @@
 {
   "schema_version": 2,
-  "brief_revision": 45,
-  "created_at": "2026-09-02T06:29:35.592995+00:00",
+  "brief_revision": 48,
+  "created_at": "2026-09-02T20:09:18.1077180Z",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "b6fef62cace067b0b45b1c50e693870b38ba7296"
+    "tree_clean": false,
+    "changed_paths": [
+      ".harness/continuity/current.json",
+      "docs/ACTIVE_WORK.json",
+      "docs/CODEX_HANDOFF_2026-09-02_WATCHDOG_AND_LIVE_RUN.md",
+      "docs/CURRENT_STATE.md",
+      "orchestrator/citecheck.py",
+      "orchestrator/ledger.py",
+      "orchestrator/migrations.py",
+      "orchestrator/scheduler.py",
+      "tests/test_critical_path_regressions.py",
+      "tests/test_migrations.py",
+      "tests/tiers.json",
+      ".github/workflows/model_free_gate.yml",
+      "docs/ENTERPRISE_READINESS_2026-09-02.md",
+      "tests/test_citecheck.py"
+    ],
+    "based_on_head": "d18acf4006e665885870f7d6e6ef28b8fbc51b54"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "post-incident-repair-complete-cohort-resumable",
+    "phase": "post-incident-repair-enterprise-gap-hardening-complete-cohort-resumable",
     "status": "in_progress",
-    "next_action": "Task 110 recovered to interrupted (attempt 1) via lease expiry + reconcile (supported H3 path) - VERIFIED 2026-09-02 06:29Z. Synthesis mission accounting is now regression-proven (b6fef62), so the synthesis seed (113) can be evaluated fairly. Operator resumes operator-authorized mission windows (aborted seed rerun, M3-M7); each remains separately authorized."
+    "next_action": "Continuity and operator-facing docs are now synced to the live 55/55 state. Run `agi preflight canary`; if it passes, separately authorize either the recovered aborted seed rerun or the next frozen cohort window."
   },
   "completed": [
     "Task 110: lease expired 06:29:04Z, reconcile demoted to interrupted, attempt 1 - verified ('interrupted', 1)",
     "Synthesis mission accounting regression-proven: run_synthesis writes mission.usage.json and reconciles exactly (8 checks)",
     "HARDENING.md F101 registered: 2026-09-02 launch-failure root cause, fix 2de64b5, supported-path repair",
-    "M1 passed (task 106); M2 passed (task 109); full gate 54/54 green at b6fef62"
+    "M1 passed (task 106); M2 passed (task 109); full gate 54/54 green at b6fef62",
+    "Operator-facing documentation synced: CURRENT_STATE updated, stale live-run handoff superseded, ACTIVE_WORK completion rule corrected to 55/55",
+    "Immediate dead-owner recovery landed: task rows now carry owner process identity and reconcile no longer waits for lease expiry when the owner is provably gone",
+    "Citecheck redirect hardening landed: every redirect target is revalidated and public-to-private hops are blocked fail-closed",
+    "Repo-native Windows CI workflow added: .github/workflows/model_free_gate.yml",
+    "Fresh full gate green: 55/55 suites passed after the new hardening"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
@@ -31,7 +51,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "54/54 model-free suites green; continuity validated; tree clean; pushed"
+    "detail": "55/55 model-free suites green; continuity re-synced after enterprise-gap hardening; working tree contains code, test, CI, and documentation edits"
   },
   "references": [
     {
@@ -42,12 +62,12 @@
     {
       "path": "tests/test_critical_path_regressions.py",
       "purpose": "Launch-failure + synthesis-accounting regressions",
-      "sha256": "27ced188369f01a0a7bb8d958ae579311c714a587227f61e61129cd775543069"
+      "sha256": "c1bd9c81fa169639f7d6013e9042a8595551c9d0bd6ca946438c8a242456a7be"
     },
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "ce186c97e29876032f2616fd2a714b6bc8a5781cb44241446a4ec0c959f46526"
+      "sha256": "39b1b20aa4d780c60892ff555fe50df76bbc55d95dd59370f3c3b1b635788f76"
     },
     {
       "path": "workspace/validation/cohort_missions.json",

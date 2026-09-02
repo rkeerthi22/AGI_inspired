@@ -207,6 +207,57 @@ checks.update({
         _row_9001.get("status") != "running",
 })
 
+# --- dead owner process recovers immediately before lease expiry (2026-09-02) --
+# F101's first fix still waited out the lease. Once owner identity is present on
+# the row, reconcile_interrupted_tasks() should recover immediately when the
+# recorded PID is positively gone or reused.
+
+import ledger as _ledger_mod
+import runlock as _runlock_mod
+import scheduler as _scheduler_mod
+
+with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
+    _db = Path(raw) / "ledger.db"
+    with sqlite3.connect(_db) as _conn:
+        _conn.execute("""CREATE TABLE tasks (
+            task_id INTEGER PRIMARY KEY,
+            status TEXT,
+            attempt_count INTEGER,
+            critic_notes TEXT,
+            lease_expires_at TEXT,
+            owner_pid INTEGER,
+            owner_process_start_id TEXT
+        )""")
+        _conn.execute(
+            "INSERT INTO tasks (task_id, status, attempt_count, critic_notes, "
+            "lease_expires_at, owner_pid, owner_process_start_id) "
+            "VALUES (9101, 'running', 0, '', datetime('now', '+30 minutes'), 999999, 'dead-owner')"
+        )
+    _prior_db = _ledger_mod.LEDGER_DB
+    _prior_identity = _runlock_mod._process_start_identity
+    try:
+        _ledger_mod.LEDGER_DB = _db
+        _runlock_mod._process_start_identity = lambda pid: None if pid == 999999 else "live"
+        _recovered = _scheduler_mod.reconcile_interrupted_tasks()
+        with sqlite3.connect(_db) as _conn:
+            _row = _conn.execute(
+                "SELECT status, attempt_count, critic_notes FROM tasks WHERE task_id=9101"
+            ).fetchone()
+    finally:
+        _ledger_mod.LEDGER_DB = _prior_db
+        _runlock_mod._process_start_identity = _prior_identity
+
+checks.update({
+    "dead owner process triggers immediate recovery":
+        _recovered == 1,
+    "immediate recovery demotes row to interrupted":
+        _row[0] == "interrupted",
+    "immediate recovery increments attempt_count":
+        _row[1] == 1,
+    "immediate recovery records dead-owner note":
+        "dead owner process" in (_row[2] or ""),
+})
+
 # --- synthesis mission accounting writes and reconciles (2026-09-02) ---------
 # The first cohort review flagged synthesis missions as producing no
 # mission.usage.json. d88286c added the build_mission_usage call to

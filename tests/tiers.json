@@ -7,7 +7,7 @@
     "test_throughput", "test_prediction_paths", "test_prediction_daily_safety", "test_tier_live_guard",
     "test_timebase_health", "test_trajectory_event_stream", "test_mailbus",
     "test_secrets", "test_task_worktree", "test_memory_fts",
-    "test_provider_chat", "test_fallback_chain",
+    "test_provider_chat", "test_fallback_chain", "test_citecheck",
     "test_pty_daemon",
     "test_migrations",
     "test_operator_auth"

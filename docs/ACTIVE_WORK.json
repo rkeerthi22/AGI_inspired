@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-02T15:00:00Z",
+  "last_updated": "2026-09-02T20:15:00Z",
   "active_agents": [
     {
       "agent": "claude-code",
@@ -86,7 +86,7 @@
     "3. Multi-agent concurrent implementations require ephemeral git worktrees.",
     "4. All agents must inspect ACTIVE_WORK.json and AGENTS.md before modifying any file.",
     "5. An agent must update its handoff when stopping, being quota-blocked, or transferring ownership.",
-    "6. Completion requires evidence: files exist, full model-free gate green (46/46 suites), continuity validates, handoff updated.",
+    "6. Completion requires evidence: files exist, full model-free gate green (55/55 suites), continuity validates, handoff updated.",
     "7. Edit/Write to S:/AGI_like from hive agents must pass the enforce.js ownership check; deny + audit on conflict."
   ]
 }

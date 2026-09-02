@@ -21,11 +21,12 @@ import socket
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from urllib.parse import urlparse
+from urllib.parse import urljoin, urlparse
 
 MAX_CITATIONS = 15
 FETCH_TIMEOUT_S = 8
 MAX_WORKERS = 4
+MAX_REDIRECTS = 5
 # F23 (docs/HARDENING.md): 20_000 silently made the literal check a coin flip on any
 # real page. Measured 2026-07-28 against the pages this harness actually cites:
 # promptbase.com/apps is 232,645 chars and the claimed "4.9" sits at char 85,999 --
@@ -69,6 +70,16 @@ _JSONLD_RE = re.compile(
 _PRIVATE_NETS = [ipaddress.ip_network(n) for n in (
     "127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16",
     "169.254.0.0/16", "0.0.0.0/8", "::1/128", "fc00::/7", "fe80::/10")]
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Return 30x responses to the caller instead of following them blindly."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        return None
+
+
+_NO_REDIRECT_OPENER = urllib.request.build_opener(_NoRedirectHandler)
 
 
 def _key_literal(claim_text: str) -> str | None:
@@ -231,19 +242,57 @@ def _resolve_safety(hostname: str) -> str | None:
 
 
 def _fetch_one(cite: dict) -> dict:
-    result = {**cite, "reachable": False, "http_status": None, "literal_found": None}
-    parsed = urlparse(cite["url"])
-    if parsed.scheme not in ("http", "https") or not parsed.hostname:
-        result["error"] = "unsupported scheme"
+    result = {**cite, "reachable": False, "http_status": None, "literal_found": None,
+              "final_url": cite["url"], "redirects_followed": 0}
+
+    def _validated_target(target: str) -> tuple[str | None, str | None]:
+        parsed_target = urlparse(target)
+        if parsed_target.scheme not in ("http", "https") or not parsed_target.hostname:
+            return None, "unsupported scheme"
+        unsafe = _resolve_safety(parsed_target.hostname)
+        if unsafe:
+            return None, unsafe
+        return target, None
+
+    current_url, error = _validated_target(cite["url"])
+    if error:
+        result["error"] = error
         return result
-    unsafe_reason = _resolve_safety(parsed.hostname)
-    if unsafe_reason:
-        result["error"] = unsafe_reason
-        return result
-    req = urllib.request.Request(
-        cite["url"], headers={"User-Agent": "Mozilla/5.0 (compatible; AGI-harness-citecheck/1.0)"})
+
     try:
-        with urllib.request.urlopen(req, timeout=FETCH_TIMEOUT_S) as resp:
+        for _ in range(MAX_REDIRECTS + 1):
+            req = urllib.request.Request(
+                current_url,
+                headers={"User-Agent": "Mozilla/5.0 (compatible; AGI-harness-citecheck/1.0)"},
+            )
+            try:
+                resp = _NO_REDIRECT_OPENER.open(req, timeout=FETCH_TIMEOUT_S)
+                break
+            except urllib.error.HTTPError as e:
+                if 300 <= e.code < 400:
+                    location = e.headers.get("Location")
+                    if not location:
+                        result["error"] = "redirect missing location"
+                        return result
+                    next_url, error = _validated_target(urljoin(current_url, location))
+                    if error:
+                        result["error"] = f"blocked redirect target: {error}"
+                        return result
+                    current_url = next_url
+                    result["redirects_followed"] += 1
+                    continue
+                raise
+        else:
+            result["error"] = f"too many redirects (>{MAX_REDIRECTS})"
+            return result
+
+        with resp:
+            result["final_url"] = getattr(resp, "geturl", lambda: current_url)()
+            final_url, error = _validated_target(result["final_url"])
+            if error:
+                result["error"] = f"blocked final target: {error}"
+                return result
+            result["final_url"] = final_url
             result["http_status"] = resp.status
             result["reachable"] = 200 <= resp.status < 400
             if cite["literal"] and result["reachable"]:
