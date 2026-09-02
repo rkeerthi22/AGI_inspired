@@ -39,6 +39,14 @@ BytePlus connectivity canary on 2026-09-02 also succeeded against
 `byteplus_coding` / `ark-code-latest` and is now retained in the operator
 surface rather than only in transient terminal output.
 
+There is now a second piece of live evidence that matters just as much for an
+honest enterprise score: the recovered task 110 seed was rerun in a controlled
+window on 2026-09-02, cleared the old `secrets.token_bytes` crash, then failed
+for a new real reason. The primary Ollama rung hit quota, the same quota group
+skipped the sibling cloud rung, failover reached `anthropic/claude-sonnet-5`,
+and that rung returned unusable output. So the system's provider depth exists
+in code, but not every live failover branch is yet operationally clean.
+
 ## What Is Still Not Truthfully Complete
 
 The project is still not enterprise-grade finished. The main remaining gaps are:
@@ -51,6 +59,8 @@ The project is still not enterprise-grade finished. The main remaining gaps are:
 * no independent penetration test or external compliance review.
 * only one fresh supervised provider probe exists so far; there is still no
   repeated live reliability history.
+* one real live failover defect remains on the Anthropic path exposed by task
+  110's controlled rerun.
 
 ## Current Reading
 
@@ -60,6 +70,7 @@ provider abstraction, worktree-based coordination, and fresh live provider
 proof on the current hardened path.
 
 What it still lacks is not mostly "more code." It lacks the harder enterprise
-layers: fresh live proof, retained audit, operational evidence, stronger host
-isolation, and time-based reliability history. The fresh live proof exists now;
-the missing part is repetition, retention, and long-window evidence.
+layers: repeated live proof, retained audit, operational evidence, stronger
+host isolation, and time-based reliability history. The first fresh live proof
+exists now, but the Anthropic task-110 failure shows why the rating remains
+below enterprise-ready even after the canary success.

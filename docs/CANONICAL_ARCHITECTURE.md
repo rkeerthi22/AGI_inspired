@@ -69,7 +69,7 @@ The AGI_like harness is an autonomous cognitive execution environment designed t
   - `payload`: Structured event parameters with deep recursive secret redaction for API keys and Bearer tokens.
 
 ### D. Provider Transport Layer (`orchestrator/provider_chat.py`)
-* Enforces a typed provider interface across BytePlus ModelArk (`byteplus_coding`), Ollama Cloud (`ollama`), and local models.
+* Enforces a typed provider interface across BytePlus ModelArk (`byteplus_coding`), Ollama Cloud (`ollama`), Anthropic (`anthropic`), OpenAI (`openai`), and local models.
 * Credentials are securely resolved via `_secure_env_value()` from Hermes private environment configuration (`%LOCALAPPDATA%\hermes\.env`), keeping secrets out of repository files and logs.
 
 ---
@@ -81,8 +81,10 @@ The AGI_like harness is an autonomous cognitive execution environment designed t
 │ P0 (CURRENT / ACTIVE):                                                 │
 │   [x] Unified Trajectory Event Stream (.trajectory.jsonl) [VERIFIED]  │
 │   [x] M1 Criteria Harmonization for Bounded Private Gaps [APPROVED]    │
-│   [ ] Controlled M1 Canary Rerun (Awaiting BytePlus Quota Reset)       │
-│   [ ] Cohort Baseline Execution (M2–M7)                                │
+│   [x] Supervised BytePlus connectivity canary [VERIFIED LIVE]          │
+│   [x] Controlled task 110 rerun reached the next real blocker          │
+│   [ ] Repair Anthropic unusable-output failover path for task 110      │
+│   [ ] Resume separately authorized frozen cohort windows (M3–M7)       │
 ├────────────────────────────────────────────────────────────────────────┤
 │ P1 (PRE-CODING AUTONOMY):                                              │
 │   [ ] Minimal F63 Fallback Search (10-line HTTP 4xx/5xx relaxation)    │

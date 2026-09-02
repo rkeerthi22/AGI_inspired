@@ -3,6 +3,13 @@
 **Version:** 1.0 (2026-08-30)  
 **Applicability:** Universal standard for Gemini, DeepSeek/Cade, Claude, Codex, Hermes, and the Human Operator.
 
+**Current shared runtime handoff:** `docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md`
+
+Historical handoffs remain useful for implementation detail, but resuming
+agents should treat the shared 2026-09-02 post-canary/task110 handoff plus
+`docs/CURRENT_STATE.md` and `.harness/continuity/current.json` as the current
+authoritative state.
+
 ---
 
 ## 1. Core Principles

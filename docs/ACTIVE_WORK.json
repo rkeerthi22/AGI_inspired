@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-02T20:21:00Z",
+  "last_updated": "2026-09-02T21:02:41Z",
   "active_agents": [
     {
       "agent": "claude-code",
@@ -12,8 +12,8 @@
       "last_update": "2026-09-02T20:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md",
-      "notes": "ALL 4 ACTIONS COMPLETE: provider adapters (Anthropic + OpenAI), Job Object containment, SQLite migrations, operator identity. 54/54 green. ESTOP engaged. No live provider calls."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
+      "notes": "Historical implementation details remain in docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff: 55/55 green, BytePlus canary succeeded, task 110 rerun now blocked by Anthropic unusable output."
     },
     {
       "agent": "hermes",
@@ -25,8 +25,8 @@
       "last_update": "2026-09-02T10:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
-      "notes": "Read-only/documented scope: clear revoked Munder github-token field via supported settings, support fleet regeneration, commit handoff + review + registry, then release for operator preflight. No providers, canary, M1-M7, ESTOP, or Phase 2/3."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
+      "notes": "Historical implementation details remain in docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
     },
     {
       "agent": "codex",
@@ -38,8 +38,8 @@
       "last_update": "2026-09-01T02:55:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md",
-      "notes": "Documentation-only reconciliation complete; ownership transferred to Hermes for closeout (credential field clear, fleet regen, doc commit). No runtime changes, provider calls, canary, ESTOP transition, or Phase 2/3."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
+      "notes": "Historical implementation details remain in docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md and later Codex handoffs. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
     },
     {
       "agent": "deepseek-cade",
@@ -51,7 +51,8 @@
       "last_update": "2026-08-31T03:55:00Z",
       "status": "completed",
       "blocked_by": "temporarily unavailable (operator instruction 2026-08-31)",
-      "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md"
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
+      "notes": "Historical implementation details remain in docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
     },
     {
       "agent": "claude-code",
@@ -63,8 +64,8 @@
       "last_update": "2026-09-02T10:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": null,
-      "notes": "Reviewed orchestrator/operator_cli.py, tests/test_operator_cli.py, agi.ps1, docs/OPERATOR_CLI.md, orchestrator/execution_pause.py, orchestrator/cohort_hive_quiesce.py, workspace/validation/byteplus_connectivity_canary.py. All safety claims substantiated. PASS."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
+      "notes": "Historical review details remain in docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
     },
     {
       "agent": "gemini-cli",
@@ -77,7 +78,8 @@
       "last_update": "2026-09-02T10:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md"
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
+      "notes": "Historical review details remain in docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
     }
   ],
   "coordination_rules": [
