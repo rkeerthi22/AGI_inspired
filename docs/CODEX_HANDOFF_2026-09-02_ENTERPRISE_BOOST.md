@@ -45,8 +45,14 @@ While waiting for that authorization, there is high-value work available that:
   and removes only a clean worktree. Its disposable-Git suite passed 10/10;
   the full model-free gate passed 48/48 suites. No provider, ESTOP, canary, or
   isolation paths are imported or invoked.
-- [ ] **Action 4 â€” Memory FTS:** pending under the operator-approved
-  Enterprise Boost scope.
+- [x] **Action 4 â€” Memory FTS:** completed on 2026-09-02 under the
+  operator-approved Enterprise Boost scope. `orchestrator/memory_fts.py`
+  keeps canonical Markdown in `memory/agents/<agent>/memory.md` and writes
+  only the derived `memory/fts_index.db`. It uses the specified external-content
+  FTS5 table and AI/AD/AU synchronization triggers, supports incremental sync,
+  deterministic rebuilds, snippets, and agent filtering. The focused suite
+  passed 14/14, including trigger integrity and digest checks proving that
+  `ledger/ledger.db` and `memory/ledgerbook.db` are untouched.
 
 ---
 

@@ -6,7 +6,7 @@
     "test_f61", "test_f62", "test_f63", "test_f64", "test_h7",
     "test_throughput", "test_prediction_paths", "test_prediction_daily_safety", "test_tier_live_guard",
     "test_timebase_health", "test_trajectory_event_stream", "test_mailbus",
-    "test_secrets", "test_task_worktree"
+    "test_secrets", "test_task_worktree", "test_memory_fts"
   ],
   "containment": [
     "test_db_mutation_guard_red", "test_f36", "test_f42", "test_f47", "test_f52", "test_h7_gate"
