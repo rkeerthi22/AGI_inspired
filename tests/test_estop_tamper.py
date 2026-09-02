@@ -62,9 +62,12 @@ with tempfile.TemporaryDirectory() as td:
 
     # 4. Stale clear marker does NOT authorize absence.
     marker = home / execution_pause.TRANSITION_MARKER_NAME
-    data = json.loads(marker.read_text(encoding="utf-8"))
-    data["issued_at"] = iso(datetime.now(timezone.utc) - timedelta(hours=5))
-    marker.write_text(json.dumps(data), encoding="utf-8")
+    # Produce a signed marker with a stale timestamp (5 hours ago, TTL 1 hour).
+    stale_payload = {
+        "issued_at": iso(datetime.now(timezone.utc) - timedelta(hours=5)),
+        "by": "operator", "ttl_hours": 1,
+    }
+    marker.write_text(execution_pause._signed_marker(stale_payload), encoding="utf-8")
     checks["stale clear marker triggers re-engagement"] = (
         execution_pause.verify_pause_integrity() == "tamper_reengaged")
     marker.unlink()
@@ -116,9 +119,11 @@ with tempfile.TemporaryDirectory() as td:
 
     # 9. Stale canary marker is refused and consumed.
     execution_pause.authorize_canary()
-    data = json.loads(canary_marker.read_text(encoding="utf-8"))
-    data["issued_at"] = iso(datetime.now(timezone.utc) - timedelta(hours=2))
-    canary_marker.write_text(json.dumps(data), encoding="utf-8")
+    stale_canary = {
+        "issued_at": iso(datetime.now(timezone.utc) - timedelta(hours=2)),
+        "by": "operator", "use": "single-connectivity-canary",
+    }
+    canary_marker.write_text(execution_pause._signed_marker(stale_canary), encoding="utf-8")
     try:
         execution_pause.consume_canary_authorization()
         stale_blocked = False

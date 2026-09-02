@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import os
+import warnings
 from pathlib import Path
 
 
@@ -82,16 +83,53 @@ def _cohort_journal_path() -> Path:
             "validation" / "cohort_isolation_state.json")
 
 
+def _parse_marker(marker: Path) -> dict | None:
+    """Parse a marker file, supporting both signed tokens and plain JSON.
+
+    Signed tokens are verified via ``operator_auth.verify_marker()``.
+    Plain JSON is accepted with a ``PendingDeprecationWarning`` (backward
+    compat).  Returns the payload dict, or ``None`` on failure.
+    """
+    try:
+        raw = marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return None
+    if not raw:
+        return None
+    # Signed token (starts with base64, not '{')
+    if not raw.startswith("{"):
+        try:
+            import operator_auth as _auth
+            payload = _auth.verify_marker(raw)
+            if payload is not None:
+                return payload
+        except Exception:
+            pass
+        return None  # invalid signature or corrupt token
+    # Plain JSON (backward compat)
+    warnings.warn(
+        "Unsigned operator marker (plain JSON) — consider upgrading to "
+        "signed markers via operator_auth.sign_marker()",
+        PendingDeprecationWarning, stacklevel=2,
+    )
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        return None
+
+
 def _marker_age_hours(marker: Path) -> float | None:
     """Hours since the marker's timestamp was issued; None when unreadable."""
     from datetime import datetime, timezone
+    data = _parse_marker(marker)
+    if data is None:
+        return None
     try:
-        data = json.loads(marker.read_text(encoding="utf-8"))
         issued = datetime.fromisoformat(str(data["issued_at"]))
         if issued.tzinfo is None:
             issued = issued.replace(tzinfo=timezone.utc)
         return (datetime.now(timezone.utc) - issued).total_seconds() / 3600
-    except (OSError, ValueError, KeyError, TypeError):
+    except (ValueError, KeyError, TypeError):
         return None
 
 
@@ -114,15 +152,17 @@ def clear_is_authorized() -> tuple[bool, str]:
 
     Returns (authorized, how). Never raises: unknown states are unauthorized.
     """
-    # Case 1: fresh operator clear marker.
+    # Case 1: fresh operator clear marker (signed or unsigned).
     marker = transition_marker_path()
     if marker.is_file():
         age = _marker_age_hours(marker)
         if age is not None and age >= 0:
             try:
-                ttl = float(json.loads(marker.read_text(encoding="utf-8"))
-                            .get("ttl_hours", CLEAR_TTL_HOURS_DEFAULT))
-            except (ValueError, OSError):
+                payload = _parse_marker(marker)
+                if payload is None:
+                    return False, "unreadable_marker"
+                ttl = float(payload.get("ttl_hours", CLEAR_TTL_HOURS_DEFAULT))
+            except (ValueError, OSError, TypeError):
                 ttl = CLEAR_TTL_HOURS_DEFAULT
             if age <= ttl:
                 return True, "operator_clear_marker"
@@ -190,15 +230,29 @@ def verify_pause_integrity() -> str:
     return "tamper_reengaged"
 
 
+def _signed_marker(payload: dict) -> str:
+    """Produce a signed marker token. Falls back to plain JSON if signing
+    is unavailable (e.g. cryptography package not installed)."""
+    try:
+        import operator_auth as _auth
+        return _auth.sign_marker(payload)
+    except Exception:
+        warnings.warn(
+            "operator_auth signing unavailable — falling back to unsigned JSON",
+            RuntimeWarning, stacklevel=2,
+        )
+        return json.dumps(payload, indent=2) + "\n"
+
+
 def authorize_clear(ttl_hours: float = CLEAR_TTL_HOURS_DEFAULT) -> Path:
     """Operator-only: record a TTL-bounded authorization for a manual clear."""
     from datetime import datetime, timezone
     marker = transition_marker_path()
     marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps({
+    marker.write_text(_signed_marker({
         "issued_at": datetime.now(timezone.utc).isoformat(),
         "by": "operator", "ttl_hours": float(ttl_hours),
-    }, indent=2) + "\n", encoding="utf-8")
+    }), encoding="utf-8")
     return marker
 
 
@@ -207,10 +261,10 @@ def authorize_canary() -> Path:
     from datetime import datetime, timezone
     marker = canary_authorization_path()
     marker.parent.mkdir(parents=True, exist_ok=True)
-    marker.write_text(json.dumps({
+    marker.write_text(_signed_marker({
         "issued_at": datetime.now(timezone.utc).isoformat(),
         "by": "operator", "use": "single-connectivity-canary",
-    }, indent=2) + "\n", encoding="utf-8")
+    }), encoding="utf-8")
     return marker
 
 
@@ -220,6 +274,8 @@ def consume_canary_authorization() -> dict:
     The marker is unlinked BEFORE validation, so a failed or replayed attempt
     can never resurrect it. Raises RuntimeError on absence, staleness, or
     malformed content — the caller must abort without a provider call.
+
+    Supports both signed tokens and unsigned JSON (backward compat).
     """
     from datetime import datetime, timezone
     marker = canary_authorization_path()
@@ -230,13 +286,28 @@ def consume_canary_authorization() -> dict:
             "no operator canary authorization marker; run: "
             "python orchestrator/execution_pause.py --authorize-canary") from None
     marker.unlink(missing_ok=True)  # consume first; never re-create on failure
+
+    # Parse (supports signed tokens and plain JSON)
+    data = None
+    if not raw.startswith("{"):
+        try:
+            import operator_auth as _auth
+            data = _auth.verify_marker(raw.strip())
+        except Exception:
+            pass
+    if data is None:
+        try:
+            data = json.loads(raw)
+        except json.JSONDecodeError as exc:
+            raise RuntimeError(f"malformed canary authorization marker: {exc}") from None
+
     try:
-        data = json.loads(raw)
         issued = datetime.fromisoformat(str(data["issued_at"]))
         if issued.tzinfo is None:
             issued = issued.replace(tzinfo=timezone.utc)
     except (ValueError, KeyError, TypeError) as exc:
         raise RuntimeError(f"malformed canary authorization marker: {exc}") from None
+
     age_minutes = (datetime.now(timezone.utc) - issued).total_seconds() / 60
     if age_minutes < 0 or age_minutes > CANARY_TTL_MINUTES:
         raise RuntimeError(
