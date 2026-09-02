@@ -1,19 +1,34 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-02T11:00:00Z",
+  "last_updated": "2026-09-02T15:00:00Z",
   "active_agents": [
     {
       "agent": "codex",
-      "role": "Enterprise Readiness Boost — 2.9 -> 3.5+ Implementer",
-      "task_id": "ENTERPRISE-BOOST-2026-09-02",
+      "role": "Enterprise Readiness Boost — 2.9 -> 3.5+ Implementer (completed) / Architecture Comparison + Provider Wiring — active",
+      "task_id": "ENTERPRISE-BOOST-2026-09-02 (completed) / now ARCHITECTURE-COMPARISON-2026-09-02",
       "mode": "implementation",
-      "owned_paths": [],
-      "started_at": "2026-09-02T11:00:00Z",
-      "last_update": "2026-09-02T14:00:00Z",
-      "status": "completed",
+      "owned_paths": [
+        "config/models.yaml",
+        "orchestrator/providers/anthropic_provider.py",
+        "orchestrator/providers/openai_provider.py",
+        "orchestrator/providers/__init__.py",
+        "orchestrator/secrets.py",
+        "orchestrator/pty_daemon.py",
+        "orchestrator/migrations.py",
+        "orchestrator/operator_auth.py",
+        "tests/test_provider_chat.py",
+        "tests/test_fallback_chain.py",
+        "tests/test_pty_daemon.py",
+        "tests/test_migrations.py",
+        "tests/tiers.json",
+        "docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md"
+      ],
+      "started_at": "2026-09-02T15:00:00Z",
+      "last_update": "2026-09-02T15:00:00Z",
+      "status": "in_progress",
       "blocked_by": null,
-      "handoff_path": "docs/CODEX_HANDOFF_2026-09-02_ENTERPRISE_BOOST.md",
-      "notes": "Enterprise Boost complete: (1) reproducible bootstrap/CI, (2) read-only Credential Manager vault lookup, (3) safe task worktree lifecycle, (4) separate Memory FTS5 index. No provider calls, ESTOP interaction, canary authorization, or isolation window. Final model-free gate: 49/49 green."
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md",
+      "notes": "Architecture comparison done. Next: (1) push 5 pending commits, (2) wire OpenAI+Anthropic providers, (3) Phase 4 Job Objects, (4) SQLite migrations, (5) operator identity. No provider calls, no ESTOP interaction. 49/49 green at all times."
     },
     {
       "agent": "hermes",
