@@ -1,23 +1,23 @@
 {
   "schema_version": 2,
-  "brief_revision": 53,
-  "created_at": "2026-09-02T20:24:37.741632+00:00",
+  "brief_revision": 54,
+  "created_at": "2026-09-02T20:38:14.647146+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "c54c04a14a49bf1020669f35015e1de14d405bfa"
+    "based_on_head": "93e0eb8c096db2d437e0fc82a7dbdd28dc7745f0"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
     "phase": "post-incident-repair-enterprise-gap-hardening-complete-cohort-resumable",
     "status": "in_progress",
-    "next_action": "Choose the first post-canary controlled window: rerun the recovered aborted seed or separately authorize the next frozen cohort window (M3 onward)."
+    "next_action": "Diagnose and repair the anthropic/claude-sonnet-5 unusable-output path exposed by the task 110 rerun before spending another controlled retry or opening M3."
   },
   "completed": [
-    "Task 110: lease expired 06:29:04Z, reconcile demoted to interrupted, attempt 1 - verified ('interrupted', 1)",
+    "Task 110: lease-expiry recovery verified, then rerun in a controlled window on 2026-09-02; current row is infra_failed after real quota/failover behavior, not the original launch defect",
     "Synthesis mission accounting regression-proven: run_synthesis writes mission.usage.json and reconciles exactly (8 checks)",
     "HARDENING.md F101 registered: 2026-09-02 launch-failure root cause, fix 2de64b5, supported-path repair",
     "M1 passed (task 106); M2 passed (task 109); full gate 54/54 green at b6fef62",
@@ -27,7 +27,8 @@
     "Repo-native Windows CI workflow added: .github/workflows/model_free_gate.yml",
     "Fresh full gate green: 55/55 suites passed after the new hardening",
     "Provider observability landed: connectivity canary results now persist to health_events and surface through agi status",
-    "Supervised BytePlus connectivity canary succeeded on 2026-09-02 and is now visible through agi status (byteplus_coding / ark-code-latest)"
+    "Supervised BytePlus connectivity canary succeeded on 2026-09-02 and is now visible through agi status (byteplus_coding / ark-code-latest)",
+    "Credential-vault compatibility fix landed: orchestrator/secrets.py now exposes stdlib-compatible token helpers so downstream imports of secrets.token_bytes no longer crash the worker path"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
@@ -38,7 +39,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "55/55 model-free suites green, continuity valid, and a supervised BytePlus connectivity canary succeeded on 2026-09-02 with persisted operator-visible evidence."
+    "detail": "55/55 model-free suites green, continuity valid, supervised BytePlus canary succeeded, and task 110 has now been live-rerun to the next real blocker."
   },
   "references": [
     {
@@ -54,7 +55,7 @@
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "0d4adaf924ab7e7b6a82c66994fd38453835ce7feddfb32abe38067ae7d54ecd"
+      "sha256": "b056a6e097f7cfe701eba7a3040f7f2569ad8400bcb87bab84b0a734d54a87ce"
     },
     {
       "path": "workspace/validation/cohort_missions.json",
