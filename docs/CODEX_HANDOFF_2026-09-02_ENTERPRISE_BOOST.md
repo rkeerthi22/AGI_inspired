@@ -19,6 +19,21 @@ While waiting for that authorization, there is high-value work available that:
 - Can be built and tested with ESTOP engaged and 46/46 tests green
 - Directly addresses the lowest-scoring areas in the assessment
 
+## Execution Progress
+
+- [x] **Action 1 â€” dependency lock, bootstrap, and CI:** completed on
+  2026-09-02. `scripts/requirements.txt` exactly matches the active Python
+  environment; `bootstrap.ps1` verifies Python 3.11+/Node 24+, creates an
+  idempotent `.venv`, and installs only the pinned requirements; `ci.ps1` runs
+  the model-free gate and preserves its exit code. The wrapper passed 46/46
+  suites under normal Windows execution. A restricted sandbox denies child
+  containment fixtures access to temp folders, so that environment is not used
+  as the CI acceptance authority.
+- [ ] **Action 2 â€” Credential Manager vault:** next.
+- [ ] **Action 3 â€” task worktree automation:** pending.
+- [ ] **Action 4 â€” Memory FTS:** pending under the operator-approved
+  Enterprise Boost scope.
+
 ---
 
 ## 2. What Codex Should Verify First
