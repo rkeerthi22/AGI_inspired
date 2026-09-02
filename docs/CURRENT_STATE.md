@@ -1,10 +1,10 @@
 # Canonical Project State — AGI_like Harness
 
-**Last Updated:** 2026-08-31T17:59:20Z
-**Phase:** Unified Operator CLI Checkpoint Complete — Awaiting Independent Review
+**Last Updated:** 2026-09-02T10:00:00Z
+**Phase:** Operator CLI & Boundary Hardening — Independent Review PASSED; Awaiting Operator Authorization
 **Safety Status:** ESTOP Engaged (`True`) | Dispatchers Protected | Zero Live Execution Active
 **Test Status:** 109/109 targeted Operator CLI assertions and 46/46 model-free suites green
-**Repository Status:** Operator CLI runtime, tests, launcher, docs, and narrow continuity-truthfulness recovery closed in one local checkpoint; not pushed
+**Repository Status:** Pushed to origin/master; working tree clean
 
 ---
 
@@ -21,7 +21,7 @@
 | **Dual-Orchestrator State Isolation** | **RESOLVED** | Munder's state home moved to `S:\MunderState\AGI_like`; hive, roster, backups, Palace state, and worktrees no longer pollute AGI continuity. |
 | **Phase 1 Mailbus** | **COMPLETE** | `orchestrator/mailbus.py` (786 lines) + `tests/test_mailbus.py` (21 tests), committed at `439cedd`. Dispatch-loop wiring (Phase 3) deliberately NOT started. |
 | **Munder/AGI Boundary Hardening (4 gaps)** | **COMPLETE** | Base commit `920f59d`; final repair `fde1585` adds separator-agnostic repo linkage, fail-closed fleet freshness/ambiguity handling, engine-independent process proof, and a pre-provider canary quiescence gate. Independently rerun: hive quiescence 63/63, ESTOP/canary 22/22, Munder authority 27/27, cohort isolation 27/27, full gate 45/45. No provider call or canary authorization occurred. |
-| **Unified Operator CLI (P1)** | **COMPLETE — REVIEW PENDING** | Hermes implemented the three read-only commands. Codex fixed the one confirmed continuity fallback defect: failed live recovery now returns UNKNOWN (`null`) and blocks canary preflight even when the cached brief parses. Verified by 109/109 targeted assertions and 46/46 model-free suites. |
+| **Unified Operator CLI (P1)** | **COMPLETE — REVIEW PASSED** | Hermes implemented the three read-only commands. Codex fixed the one confirmed continuity fallback defect: failed live recovery now returns UNKNOWN (`null`) and blocks canary preflight even when the cached brief parses. Verified by 109/109 targeted assertions and 46/46 model-free suites. **Independent review (Claude Code, 2026-09-02): PASS.** |
 
 ---
 
@@ -38,7 +38,8 @@ transition, or Phase 2/3 work.
 
 ## 2. Active Blockers & Review State
 
-* **Primary Blocker:** Independent DeepSeek/Gemini review of the frozen Operator CLI checkpoint and the previously pending `fde1585` boundary-hardening review. No canary or mission authorization has been issued.
+* **Primary Blocker:** ~~Independent DeepSeek/Gemini review of the frozen Operator CLI checkpoint and the previously pending `fde1585` boundary-hardening review.~~ **Independent review completed and passed (Claude Code, 2026-09-02).** The next gate is operator authorization for the single supervised canary.
+* **Current Gate:** Operator authorization → single BytePlus canary → M1-M7 under locked sequence. No canary or mission authorization has been issued.
 * **Provider State:** Not probed; historical BytePlus observation remains historical until a separately authorized canary.
 * **Gate Invariant:** No controlled isolation window or live mission (M1–M7) may open until (a) the boundary hardening passes independent review, (b) the single-probe canary returns HTTP 200, and (c) the operator authorizes.
 * **Munder State:** Externally isolated at `S:\MunderState\AGI_like` (not a git repo — file delivery). With ownership enforcement live, no hive agent is registered with AGI write scopes: all hive Edit/Write into `S:\AGI_like` is denied until the operator registers scopes for a tasked agent. The canary admission path additionally requires a clean engine-independent development-process inventory and fails closed on stale, missing-without-proof, or ambiguous fleet state.
@@ -72,7 +73,7 @@ transition, or Phase 2/3 work.
 
 ## 5. Next Exact Action
 
-1. **Static review:** DeepSeek/Gemini verify the frozen Operator CLI checkpoint (including the UNKNOWN/null continuity failure path) and the previously pending `fde1585` boundary hardening review.
+1. ~~Static review~~ ✅ **DONE — PASSED (Claude Code, 2026-09-02).** Operator CLI and Boundary Hardening independently reviewed; all safety claims substantiated.
 2. **Human protection:** the operator protects the reviewed checkpoint off-machine, then quiesces all development agents.
-3. **Model-free preflight:** run the read-only Operator CLI preflight; it authorizes nothing.
+3. **Model-free preflight:** run the read-only Operator CLI preflight (`agi preflight canary`); it authorizes nothing.
 4. **Only after separate operator authorization:** proceed with exactly one supervised BytePlus canary, followed by M1-M7 only under the already locked sequence.

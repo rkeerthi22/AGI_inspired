@@ -1,22 +1,17 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-01T02:55:00Z",
+  "last_updated": "2026-09-02T10:00:00Z",
   "active_agents": [
     {
       "agent": "hermes",
-      "role": "Pre-validation closeout owner (documentation/operational only)",
+      "role": "Pre-validation closeout owner (documentation/operational only) - COMPLETED; review passed",
       "task_id": "PRE-VALIDATION-CLOSEOUT",
-      "mode": "implementation",
-      "owned_paths": [
-        "docs/CODEX_HANDOFF_2026-09-01_HERMES_RESUME.md",
-        "docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md",
-        "docs/ACTIVE_WORK.json",
-        ".harness/continuity/current.json"
-      ],
+      "mode": "completed",
+      "owned_paths": [],
       "started_at": "2026-09-01T02:55:00Z",
-      "last_update": "2026-09-01T02:55:00Z",
-      "status": "in_progress",
-      "blocked_by": "Ollama/GLM HTTP 429 interrupted final commit and canonical bookkeeping",
+      "last_update": "2026-09-02T10:00:00Z",
+      "status": "completed",
+      "blocked_by": null,
       "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md",
       "notes": "Read-only/documented scope: clear revoked Munder github-token field via supported settings, support fleet regeneration, commit handoff + review + registry, then release for operator preflight. No providers, canary, M1-M7, ESTOP, or Phase 2/3."
     },
@@ -46,16 +41,29 @@
       "handoff_path": "docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md"
     },
     {
+      "agent": "claude-code",
+      "role": "Independent Reviewer — Operator CLI & Boundary Hardening",
+      "task_id": "INDEPENDENT-REVIEW-2026-09-02",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-02T10:00:00Z",
+      "last_update": "2026-09-02T10:00:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "Reviewed orchestrator/operator_cli.py, tests/test_operator_cli.py, agi.ps1, docs/OPERATOR_CLI.md, orchestrator/execution_pause.py, orchestrator/cohort_hive_quiesce.py, workspace/validation/byteplus_connectivity_canary.py. All safety claims substantiated. PASS."
+    },
+    {
       "agent": "gemini-cli",
-      "role": "Independent Principal Architect / Reviewer - REVIEWER ONLY",
+      "role": "Independent Principal Architect / Reviewer - REVIEWER ONLY (superseded by Claude Code review 2026-09-02)",
       "task_id": "MUNDER-BOUNDARY-HARDENING-REVIEW",
       "mode": "read-only-review",
       "owned_paths": [],
       "read_only": true,
       "started_at": "2026-08-31T01:21:00Z",
-      "last_update": "2026-08-31T05:20:00Z",
-      "status": "pending",
-      "blocked_by": "unavailable (operator instruction 2026-08-31); review pending until available",
+      "last_update": "2026-09-02T10:00:00Z",
+      "status": "completed",
+      "blocked_by": null,
       "handoff_path": "docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md"
     }
   ],
