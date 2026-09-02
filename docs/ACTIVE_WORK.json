@@ -3,15 +3,16 @@
   "last_updated": "2026-09-02T15:00:00Z",
   "active_agents": [
     {
-      "agent": "codex",
-      "role": "Enterprise Readiness Boost — 2.9 -> 3.5+ Implementer (completed) / Architecture Comparison + Provider Wiring — active",
-      "task_id": "ENTERPRISE-BOOST-2026-09-02 (completed) / now ARCHITECTURE-COMPARISON-2026-09-02",
+      "agent": "claude-code",
+      "role": "Multi-Provider Wiring + Phase 4 Job Objects + SQLite Migrations + Operator Identity — active",
+      "task_id": "MULTI-PROVIDER-BUILD-2026-09-02",
       "mode": "implementation",
       "owned_paths": [
         "config/models.yaml",
         "orchestrator/providers/anthropic_provider.py",
         "orchestrator/providers/openai_provider.py",
         "orchestrator/providers/__init__.py",
+        "orchestrator/provider_chat.py",
         "orchestrator/secrets.py",
         "orchestrator/pty_daemon.py",
         "orchestrator/migrations.py",
@@ -23,12 +24,12 @@
         "tests/tiers.json",
         "docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md"
       ],
-      "started_at": "2026-09-02T15:00:00Z",
-      "last_update": "2026-09-02T15:00:00Z",
+      "started_at": "2026-09-02T18:00:00Z",
+      "last_update": "2026-09-02T18:00:00Z",
       "status": "in_progress",
       "blocked_by": null,
       "handoff_path": "docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md",
-      "notes": "Architecture comparison done. Next: (1) push 5 pending commits, (2) wire OpenAI+Anthropic providers, (3) Phase 4 Job Objects, (4) SQLite migrations, (5) operator identity. No provider calls, no ESTOP interaction. 49/49 green at all times."
+      "notes": "Building 4 actions in order: (1) provider adapters, (2) Job Objects, (3) SQLite migrations, (4) operator identity. 49/49 green. ESTOP engaged. No live provider calls."
     },
     {
       "agent": "hermes",
