@@ -35,6 +35,8 @@ ORCH = ROOT / "orchestrator"
 if str(ORCH) not in sys.path:
     sys.path.insert(0, str(ORCH))
 
+import secrets as credential_vault
+
 RUNS = ROOT / "runs"
 HEALTH_EVENTS = RUNS / "health_events.jsonl"
 ACTIVE_WORK = ROOT / "docs" / "ACTIVE_WORK.json"
@@ -400,10 +402,10 @@ def _canary_prerequisites() -> list[dict]:
         detail = f"models.yaml unreadable: {type(exc).__name__}"
     add("provider_configured", provider_ok, detail, True)
 
-    # 5. Credential PRESENCE only (never read the value).
-    key_present = bool(os.environ.get("ARK_API_KEY", "").strip())
+    # 5. Credential presence only. The vault reader never reports the value.
+    key_present = credential_vault.get_api_key("byteplus_coding") is not None
     add("ark_api_key_present_in_env", key_present,
-        "presence only; value never read", True)
+        "Credential Manager or environment presence only; value never reported", True)
 
     # 6. Batch lock must be free.
     add("batch_lock_free", not BATCH_LOCK.is_file(),

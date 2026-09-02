@@ -29,7 +29,13 @@ While waiting for that authorization, there is high-value work available that:
   suites under normal Windows execution. A restricted sandbox denies child
   containment fixtures access to temp folders, so that environment is not used
   as the CI acceptance authority.
-- [ ] **Action 2 â€” Credential Manager vault:** next.
+- [x] **Action 2 â€” Credential Manager vault:** completed on 2026-09-02.
+  `orchestrator/secrets.py` reads the generic Windows Credential Manager target
+  `AGI_like/byteplus_coding` first, then preserves the environment/private-dotenv
+  fallback. It has no credential-write path and suppresses store errors. Provider
+  dispatch, the one-call canary, and read-only preflight now use the same source.
+  The new vault suite passed 11/11 assertions; focused provider/CLI/vault coverage
+  passed 3/3 suites with no provider contact.
 - [ ] **Action 3 â€” task worktree automation:** pending.
 - [ ] **Action 4 â€” Memory FTS:** pending under the operator-approved
   Enterprise Boost scope.

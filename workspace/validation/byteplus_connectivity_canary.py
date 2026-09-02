@@ -7,7 +7,6 @@ fails. There is no retry path.
 """
 import argparse
 import json
-import os
 import sys
 from pathlib import Path
 
@@ -18,6 +17,7 @@ sys.path.insert(0, str(ROOT / "orchestrator"))
 
 import execution_pause  # noqa: E402
 import provider_chat  # noqa: E402
+import secrets as credential_vault  # noqa: E402
 
 PROVIDER = "byteplus_coding"
 PURPOSE = "connectivity_canary"
@@ -40,8 +40,8 @@ def main(argv: list[str] | None = None) -> int:
         execution_pause.consume_canary_authorization()
     except RuntimeError as exc:
         raise SystemExit(f"ABORT: {exc}")
-    if not os.environ.get("ARK_API_KEY", ""):
-        raise SystemExit("ABORT: ARK_API_KEY is not present in this process environment")
+    if not credential_vault.get_api_key(PROVIDER):
+        raise SystemExit("ABORT: required BytePlus credential is unavailable")
 
     # Defense-in-depth (Codex review #2, 2026-08-31): the operator canary must
     # not execute when a mutation-capable Munder development process is live.

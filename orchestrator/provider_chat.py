@@ -16,6 +16,7 @@ import urllib.request
 
 from dotenv import dotenv_values
 from execution_pause import estop_path, pause_engaged
+import secrets as credential_vault
 
 PROVIDER_OPTION_KEYS = (
     "endpoint", "authentication_reference", "context_tokens",
@@ -34,7 +35,11 @@ def options_from_config(config: Mapping[str, Any], purpose: str) -> dict[str, An
 
 
 def _secure_env_value(name: str) -> str:
-    """Read a secret from the process or Hermes's canonical private .env."""
+    """Read a secret from the vault, process, or Hermes private .env."""
+    if name == "ARK_API_KEY":
+        vaulted = credential_vault.get_api_key("byteplus_coding")
+        if vaulted:
+            return vaulted
     value = os.environ.get(name, "").strip()
     if value:
         return value
