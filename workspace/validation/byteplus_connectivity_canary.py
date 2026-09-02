@@ -17,7 +17,6 @@ sys.path.insert(0, str(ROOT / "orchestrator"))
 
 import execution_pause  # noqa: E402
 import provider_chat  # noqa: E402
-import secrets as credential_vault  # noqa: E402
 
 PROVIDER = "byteplus_coding"
 PURPOSE = "connectivity_canary"
@@ -40,9 +39,6 @@ def main(argv: list[str] | None = None) -> int:
         execution_pause.consume_canary_authorization()
     except RuntimeError as exc:
         raise SystemExit(f"ABORT: {exc}")
-    if not credential_vault.get_api_key(PROVIDER):
-        raise SystemExit("ABORT: required BytePlus credential is unavailable")
-
     # Defense-in-depth (Codex review #2, 2026-08-31): the operator canary must
     # not execute when a mutation-capable Munder development process is live.
     # Current canary authorization is a scoped one-shot capability, not
@@ -59,6 +55,8 @@ def main(argv: list[str] | None = None) -> int:
     provider = (config.get("providers") or {}).get(PROVIDER)
     if not isinstance(provider, dict):
         raise SystemExit(f"ABORT: provider {PROVIDER!r} is not configured")
+    if not provider_chat.authentication_env_from_config(provider):
+        raise SystemExit("ABORT: required BytePlus credential is unavailable")
 
     request = provider_chat.ChatRequest(
         provider=PROVIDER,

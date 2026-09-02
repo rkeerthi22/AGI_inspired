@@ -155,13 +155,16 @@ with patch("operator_auth._load_keypair", return_value=(private_bytes, public_by
 
 print("\n=== Key status ===")
 
-with patch("operator_auth._load_keypair", return_value=(private_bytes, public_bytes)):
+with patch("operator_auth._load_keypair_with_storage",
+           return_value=((private_bytes, public_bytes), "credential_manager")):
     status = key_status()
     check("key present", status.get("present"), True)
     check("algorithm is Ed25519", status.get("algorithm"), "Ed25519")
     check("fingerprint present", len(status.get("fingerprint", "")), 16)
+    check("key storage reports known store",
+          status.get("storage") in {"credential_manager", "hermes_home_file", "legacy_repo_file"}, True)
 
-with patch("operator_auth._load_keypair", return_value=None):
+with patch("operator_auth._load_keypair_with_storage", return_value=(None, None)):
     status = key_status()
     check("key absent when no keypair", status.get("present"), False)
 
@@ -173,27 +176,30 @@ print("\n=== Keypair persistence ===")
 
 # Test fallback file storage
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
-    fake_op_path = Path(tmp) / "operator_auth.py"
-    # Simulate writing to a fallback file
-    _store_keypair(private_bytes, public_bytes)
-    # The real store writes to Credential Manager first. Let's verify
-    # the round-trip via _load_keypair (which checks CM first).
-    # For this test, we directly test the store/load cycle by mocking CM to fail.
-    with patch("operator_auth._credential_write", return_value=False):
-        with patch("operator_auth._credential_read", return_value=None):
-            # Force file-based storage
-            fallback = Path(__file__).resolve().parents[1] / "orchestrator" / ".operator_key"
-            if fallback.exists():
-                fallback.unlink()
-            _store_keypair(private_bytes, public_bytes)
-            loaded = _load_keypair()
-            check("fallback file stores keypair", loaded is not None)
-            if loaded:
-                check("loaded private key matches", loaded[0], private_bytes)
-                check("loaded public key matches", loaded[1], public_bytes)
-            # Clean up
-            if fallback.exists():
-                fallback.unlink()
+    hermes_home = Path(tmp) / "hermes"
+    hermes_home.mkdir(parents=True, exist_ok=True)
+    with patch.dict(os.environ, {"HERMES_HOME": str(hermes_home)}, clear=False):
+        # The real store writes to Credential Manager first. Let's verify
+        # the round-trip via _load_keypair (which checks CM first).
+        # For this test, we directly test the store/load cycle by mocking CM to fail.
+        with patch("operator_auth._credential_write", return_value=False):
+            with patch("operator_auth._credential_read", return_value=None):
+                fallback = hermes_home / ".operator_key"
+                legacy = Path(__file__).resolve().parents[1] / "orchestrator" / ".operator_key"
+                if fallback.exists():
+                    fallback.unlink()
+                if legacy.exists():
+                    legacy.unlink()
+                _store_keypair(private_bytes, public_bytes)
+                loaded = _load_keypair()
+                check("fallback file stores keypair", loaded is not None)
+                check("fallback file is outside repository module path", fallback.exists(), True)
+                check("legacy repo fallback is not recreated", legacy.exists(), False)
+                if loaded:
+                    check("loaded private key matches", loaded[0], private_bytes)
+                    check("loaded public key matches", loaded[1], public_bytes)
+                if fallback.exists():
+                    fallback.unlink()
 
 
 # ── 8. marker_is_signed ─────────────────────────────────────────────────────

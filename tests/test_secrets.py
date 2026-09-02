@@ -97,8 +97,8 @@ try:
 
     canary_source = (ROOT / "workspace" / "validation" /
                      "byteplus_connectivity_canary.py").read_text(encoding="utf-8")
-    check("canary checks the vault rather than process environment",
-          "credential_vault.get_api_key(PROVIDER)" in canary_source, True)
+    check("canary resolves credentials through the canonical provider helper",
+          "provider_chat.authentication_env_from_config(provider)" in canary_source, True)
 finally:
     credential_vault._win32cred = original_backend
     provider_chat.credential_vault.get_api_key = original_vault_getter

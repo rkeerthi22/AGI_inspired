@@ -50,6 +50,27 @@ class OperatorAuthError(RuntimeError):
     """Operator identity or signature operation failed."""
 
 
+def _hermes_home() -> Path:
+    configured = os.environ.get("HERMES_HOME", "").strip()
+    if configured:
+        home = Path(configured).expanduser()
+        if not home.is_absolute():
+            raise OperatorAuthError("HERMES_HOME must be an absolute path")
+        return home
+    if os.name == "nt":
+        base = os.environ.get("LOCALAPPDATA", "").strip()
+        return (Path(base) if base else Path.home() / "AppData" / "Local") / "hermes"
+    return Path.home() / ".hermes"
+
+
+def _fallback_key_path() -> Path:
+    return _hermes_home() / ".operator_key"
+
+
+def _legacy_fallback_key_path() -> Path:
+    return Path(__file__).resolve().parent / ".operator_key"
+
+
 def _credential_read(target: str) -> dict[str, Any] | None:
     """Read a generic Credential Manager record; returns None on failure."""
     if _win32cred is None:
@@ -111,41 +132,50 @@ def _store_keypair(private_bytes: bytes, public_bytes: bytes) -> None:
         "algorithm": "Ed25519",
     })
     if not _credential_write(_CREDENTIAL_TARGET, blob):
-        # Fallback: store in a local file as last resort.
-        fallback = Path(__file__).resolve().parent / ".operator_key"
+        # Fallback: store under Hermes home, never inside the repository.
+        fallback = _fallback_key_path()
+        fallback.parent.mkdir(parents=True, exist_ok=True)
         fallback.write_text(blob, encoding="utf-8")
         os.chmod(fallback, 0o600)
 
 
-def _load_keypair() -> tuple[bytes, bytes] | None:
-    """Load keypair from Credential Manager or fallback file.
+def _decode_keypair_blob(blob: str) -> tuple[bytes, bytes] | None:
+    try:
+        data = json.loads(blob)
+        private = base64.b64decode(data["private_key"])
+        public = base64.b64decode(data["public_key"])
+        return (private, public)
+    except (json.JSONDecodeError, KeyError, ValueError, TypeError):
+        return None
 
-    Returns (private_bytes, public_bytes) or None.
-    """
+
+def _load_keypair_with_storage() -> tuple[tuple[bytes, bytes] | None, str | None]:
+    """Load keypair from the supported stores and report which store won."""
     record = _credential_read(_CREDENTIAL_TARGET)
     if record:
         blob_raw = record.get("CredentialBlob")
         if isinstance(blob_raw, bytes):
-            try:
-                data = json.loads(blob_raw.decode("utf-8"))
-                private = base64.b64decode(data["private_key"])
-                public = base64.b64decode(data["public_key"])
-                return (private, public)
-            except (json.JSONDecodeError, KeyError, ValueError):
-                pass
-
-    # Check fallback file
-    fallback = Path(__file__).resolve().parent / ".operator_key"
-    if fallback.is_file():
+            loaded = _decode_keypair_blob(blob_raw.decode("utf-8", errors="strict"))
+            if loaded is not None:
+                return loaded, "credential_manager"
+    for path, storage in (
+            (_fallback_key_path(), "hermes_home_file"),
+            (_legacy_fallback_key_path(), "legacy_repo_file")):
+        if not path.is_file():
+            continue
         try:
-            data = json.loads(fallback.read_text(encoding="utf-8"))
-            private = base64.b64decode(data["private_key"])
-            public = base64.b64decode(data["public_key"])
-            return (private, public)
-        except (json.JSONDecodeError, KeyError, ValueError):
-            pass
+            loaded = _decode_keypair_blob(path.read_text(encoding="utf-8"))
+        except OSError:
+            loaded = None
+        if loaded is not None:
+            return loaded, storage
+    return None, None
 
-    return None
+
+def _load_keypair() -> tuple[bytes, bytes] | None:
+    """Load keypair from Credential Manager or supported fallback files."""
+    loaded, _storage = _load_keypair_with_storage()
+    return loaded
 
 
 def _get_or_create_keypair() -> tuple[bytes, bytes]:
@@ -279,14 +309,14 @@ def public_key_fingerprint() -> str | None:
 def key_status() -> dict:
     """Return a diagnostic dict about the operator key state."""
     try:
-        existing = _load_keypair()
+        existing, storage = _load_keypair_with_storage()
         if existing is not None:
             _, public_bytes = existing
             import hashlib
             fp = hashlib.sha256(public_bytes).hexdigest()[:16]
             return {"present": True, "algorithm": "Ed25519",
                     "fingerprint": fp,
-                    "storage": "credential_manager"}
+                    "storage": storage}
         return {"present": False, "algorithm": None,
                 "fingerprint": None, "storage": None}
     except Exception as exc:
