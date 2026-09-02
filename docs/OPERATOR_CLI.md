@@ -144,6 +144,31 @@ Direct invocation: `python -B orchestrator/operator_cli.py status --json`
 
 ---
 
+## Task worktrees (separate mutating interface)
+
+Task claims are intentionally separate from `agi`: the three `agi` commands
+above remain read-only.  The local-only lifecycle command is:
+
+```powershell
+python -B orchestrator/task_worktree.py claim <task-id> --agent <agent> --path <owned-path>
+python -B orchestrator/task_worktree.py release <task-id> --agent <agent>
+```
+
+`claim` verifies the task ID in the ledger, rejects every present batch lock
+(including corrupt locks), detects task/path ownership conflicts, prints the
+deterministic sibling worktree location before making the claim, and creates a
+`task-<task-id>` branch. Registry updates use a writer lock and preimage hash
+comparison; a concurrent change aborts the claim and removes only the clean
+worktree created by that invocation.
+
+`release` runs the model-free gate in that worktree, commits staged changes,
+fast-forward merges its task branch, atomically removes the matching claim, and
+then removes the worktree. A failed gate, merge, registry comparison, or dirty
+worktree leaves the worktree intact for operator inspection. These commands do
+not contact a provider or alter ESTOP, canary authorization, or isolation state.
+
+---
+
 ## Known limitations
 
 - Provider state is only as fresh as the last recorded health event; there is

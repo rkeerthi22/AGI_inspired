@@ -36,7 +36,15 @@ While waiting for that authorization, there is high-value work available that:
   dispatch, the one-call canary, and read-only preflight now use the same source.
   The new vault suite passed 11/11 assertions; focused provider/CLI/vault coverage
   passed 3/3 suites with no provider contact.
-- [ ] **Action 3 â€” task worktree automation:** pending.
+- [x] **Action 3 â€” task worktree automation:** completed on 2026-09-02.
+  `orchestrator/task_worktree.py` is deliberately separate from the reviewed
+  read-only `agi` surface. It validates ledger task IDs, fails closed on every
+  batch-lock state, creates deterministic sibling task worktrees and branches,
+  and protects `ACTIVE_WORK` with a writer lock plus content-hash CAS. Release
+  gates, commits, fast-forward merges, atomically releases matching ownership,
+  and removes only a clean worktree. Its disposable-Git suite passed 10/10;
+  the full model-free gate passed 48/48 suites. No provider, ESTOP, canary, or
+  isolation paths are imported or invoked.
 - [ ] **Action 4 â€” Memory FTS:** pending under the operator-approved
   Enterprise Boost scope.
 
