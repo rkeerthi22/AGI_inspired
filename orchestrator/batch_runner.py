@@ -146,6 +146,16 @@ def main() -> int:
         log("global ESTOP is engaged — batch execution refused")
         return 75
 
+    # Apply pending schema migrations before any database operations.
+    try:
+        import migrations
+        results = migrations.migrate_all()
+        for name, (from_ver, to_ver) in results.items():
+            if to_ver >= 0:
+                log(f"migration {name}: {from_ver} -> {to_ver}")
+    except Exception as exc:
+        log(f"migration check failed (non-fatal): {exc}")
+
     RUNS.mkdir(exist_ok=True)
     set_log_file(RUNS / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")
 
