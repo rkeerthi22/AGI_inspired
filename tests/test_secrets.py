@@ -51,6 +51,15 @@ original_vault_getter = provider_chat.credential_vault.get_api_key
 original_cli_getter = operator_cli.credential_vault.get_api_key
 try:
     check("vault import adds no network modules", network_after - network_before, set())
+    check("stdlib-compatible token_bytes exists",
+          isinstance(credential_vault.token_bytes(8), bytes), True)
+    check("token_bytes length respected", len(credential_vault.token_bytes(8)), 8)
+    check("stdlib-compatible token_hex exists",
+          len(credential_vault.token_hex(4)), 8)
+    check("stdlib-compatible token_urlsafe exists",
+          isinstance(credential_vault.token_urlsafe(8), str), True)
+    check("stdlib-compatible randbelow exists",
+          0 <= credential_vault.randbelow(5) < 5, True)
     check("stable BytePlus Credential Manager target",
           credential_vault.credential_target("byteplus_coding"),
           "AGI_like/byteplus_coding")
