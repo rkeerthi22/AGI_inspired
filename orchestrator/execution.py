@@ -106,7 +106,6 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     try:
         import pty_daemon as _pty
         proc, h_job, sout, serr = _pty.create_contained_process(cmd, cwd=str(ROOT), env=env)
-        _pty.close_job(h_job)  # KILL_ON_JOB_CLOSE reaps the tree when done
     except Exception as exc:
         raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
 
@@ -120,6 +119,13 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
         proc.kill()
         proc.wait()
         raise
+    finally:
+        # KILL_ON_JOB_CLOSE: the job handle must stay open until the process
+        # finishes; closing it early would terminate the worker prematurely.
+        try:
+            _pty.close_job(h_job)
+        except Exception:
+            pass
 
     # Collect output from pipe drains.
     stdout_text = sout.text
