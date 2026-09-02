@@ -1,7 +1,33 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-02T10:00:00Z",
+  "last_updated": "2026-09-02T11:00:00Z",
   "active_agents": [
+    {
+      "agent": "codex",
+      "role": "Enterprise Readiness Boost — 2.9 -> 3.5+ Implementer",
+      "task_id": "ENTERPRISE-BOOST-2026-09-02",
+      "mode": "implementation",
+      "owned_paths": [
+        "scripts/requirements.txt",
+        "scripts/bootstrap.ps1",
+        "scripts/ci.ps1",
+        "orchestrator/secrets.py",
+        "tests/test_secrets.py",
+        "orchestrator/task_worktree.py",
+        "tests/test_task_worktree.py",
+        "orchestrator/memory_fts.py",
+        "tests/test_memory_fts.py",
+        "tests/tiers.json",
+        "docs/OPERATOR_CLI.md",
+        "docs/CODEX_HANDOFF_2026-09-02_ENTERPRISE_BOOST.md"
+      ],
+      "started_at": "2026-09-02T11:00:00Z",
+      "last_update": "2026-09-02T11:00:00Z",
+      "status": "in_progress",
+      "blocked_by": null,
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-02_ENTERPRISE_BOOST.md",
+      "notes": "Four actions in order: (1) lock deps + bootstrap, (2) Credential Manager vault, (3) worktree/task automation, (4) Phase 2 Memory FTS. Zero provider calls, zero ESTOP interaction, 46/46 green at all times."
+    },
     {
       "agent": "hermes",
       "role": "Pre-validation closeout owner (documentation/operational only) - COMPLETED; review passed",
@@ -17,8 +43,8 @@
     },
     {
       "agent": "codex",
-      "role": "Hermes Resume Documentation Owner - handed off to Hermes; session closed",
-      "task_id": "HERMES-RESUME-HANDOFF",
+      "role": "Previous: Hermes Resume Documentation Owner (completed). Current: see ENTERPRISE-BOOST-2026-09-02 entry below.",
+      "task_id": "HERMES-RESUME-HANDOFF (completed) / now ENTERPRISE-BOOST-2026-09-02",
       "mode": "completed",
       "owned_paths": [],
       "started_at": "2026-08-31T09:20:37Z",
@@ -73,7 +99,7 @@
     "3. Multi-agent concurrent implementations require ephemeral git worktrees.",
     "4. All agents must inspect ACTIVE_WORK.json and AGENTS.md before modifying any file.",
     "5. An agent must update its handoff when stopping, being quota-blocked, or transferring ownership.",
-    "6. Completion requires evidence: files exist, full model-free gate green (46/46 suites as of 2026-08-31), continuity validates, handoff updated.",
+    "6. Completion requires evidence: files exist, full model-free gate green (46/46 suites), continuity validates, handoff updated.",
     "7. Edit/Write to S:/AGI_like from hive agents must pass the enforce.js ownership check; deny + audit on conflict."
   ]
 }
