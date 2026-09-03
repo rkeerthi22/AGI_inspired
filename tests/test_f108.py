@@ -19,8 +19,9 @@ status reads RUNS/health_events.jsonl directly (not via the env), so production
 reads are unaffected.
 
 This test pins: (1) _guarded_env redirects the path away from production for the
-three model-free tiers; (2) health_events.record/emit honor the env path; and
-(3) the production log is not touched while the env path is set.
+three model-free tiers; (2) the live tier does not inject a redirect; (3)
+health_events.record/emit honor the env path; and (4) the production log is not
+touched while the env path is set.
 """
 import json
 import os
@@ -57,6 +58,22 @@ for tier in ("unit", "containment", "integration"):
     check(f"{tier}: redirected path is NOT the production log", p != str(PROD), True)
     check(f"{tier}: redirected path is outside the repo",
           not Path(p).is_relative_to(ROOT), True)
+
+saved_for_live = os.environ.pop("AGI_HEALTH_EVENTS_PATH", None)
+try:
+    live_env = run_all._guarded_env("live")
+    check("live: runner does not inject AGI_HEALTH_EVENTS_PATH",
+          "AGI_HEALTH_EVENTS_PATH" in live_env, False)
+    os.environ["AGI_HEALTH_EVENTS_PATH"] = "C:/operator-configured-health.jsonl"
+    live_env = run_all._guarded_env("live")
+    check("live: explicit operator redirect is preserved",
+          live_env.get("AGI_HEALTH_EVENTS_PATH"),
+          "C:/operator-configured-health.jsonl")
+finally:
+    if saved_for_live is None:
+        os.environ.pop("AGI_HEALTH_EVENTS_PATH", None)
+    else:
+        os.environ["AGI_HEALTH_EVENTS_PATH"] = saved_for_live
 
 print("\n=== 2. record/emit honor the env path; production log untouched ===")
 tmp = Path(tempfile.mkdtemp()) / "f108_health.jsonl"

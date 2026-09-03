@@ -17,6 +17,7 @@ from provider_chat import (
     ChatResult,
     ErrorCategory,
     ProviderChatError,
+    _secure_env_value,
 )
 
 
@@ -51,7 +52,7 @@ class OpenAIAdapter(ChatAdapter):
             )
 
         try:
-            client = _build_client(api_key=os.environ.get("OPENAI_API_KEY"))
+            client = _build_client(api_key=_secure_env_value("OPENAI_API_KEY"))
         except ImportError:
             raise ProviderChatError(
                 "openai SDK is not installed",

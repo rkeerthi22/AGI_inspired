@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import json
 import os
-import warnings
 from pathlib import Path
 
 
@@ -84,37 +83,17 @@ def _cohort_journal_path() -> Path:
 
 
 def _parse_marker(marker: Path) -> dict | None:
-    """Parse a marker file, supporting both signed tokens and plain JSON.
-
-    Signed tokens are verified via ``operator_auth.verify_marker()``.
-    Plain JSON is accepted with a ``PendingDeprecationWarning`` (backward
-    compat).  Returns the payload dict, or ``None`` on failure.
-    """
+    """Verify and parse a trusted signed marker, or return ``None``."""
     try:
         raw = marker.read_text(encoding="utf-8").strip()
     except OSError:
         return None
     if not raw:
         return None
-    # Signed token (starts with base64, not '{')
-    if not raw.startswith("{"):
-        try:
-            import operator_auth as _auth
-            payload = _auth.verify_marker(raw)
-            if payload is not None:
-                return payload
-        except Exception:
-            pass
-        return None  # invalid signature or corrupt token
-    # Plain JSON (backward compat)
-    warnings.warn(
-        "Unsigned operator marker (plain JSON) — consider upgrading to "
-        "signed markers via operator_auth.sign_marker()",
-        PendingDeprecationWarning, stacklevel=2,
-    )
     try:
-        return json.loads(raw)
-    except json.JSONDecodeError:
+        import operator_auth as _auth
+        return _auth.verify_marker(raw)
+    except Exception:
         return None
 
 
@@ -152,15 +131,17 @@ def clear_is_authorized() -> tuple[bool, str]:
 
     Returns (authorized, how). Never raises: unknown states are unauthorized.
     """
-    # Case 1: fresh operator clear marker (signed or unsigned).
+    # Case 1: fresh, trusted, purpose-bound operator clear marker.
     marker = transition_marker_path()
     if marker.is_file():
+        payload = _parse_marker(marker)
+        if payload is None:
+            return False, "unreadable_marker"
+        if payload.get("action") != "authorize-clear":
+            return False, "wrong_marker_action"
         age = _marker_age_hours(marker)
         if age is not None and age >= 0:
             try:
-                payload = _parse_marker(marker)
-                if payload is None:
-                    return False, "unreadable_marker"
                 ttl = float(payload.get("ttl_hours", CLEAR_TTL_HOURS_DEFAULT))
             except (ValueError, OSError, TypeError):
                 ttl = CLEAR_TTL_HOURS_DEFAULT
@@ -231,17 +212,9 @@ def verify_pause_integrity() -> str:
 
 
 def _signed_marker(payload: dict) -> str:
-    """Produce a signed marker token. Falls back to plain JSON if signing
-    is unavailable (e.g. cryptography package not installed)."""
-    try:
-        import operator_auth as _auth
-        return _auth.sign_marker(payload)
-    except Exception:
-        warnings.warn(
-            "operator_auth signing unavailable — falling back to unsigned JSON",
-            RuntimeWarning, stacklevel=2,
-        )
-        return json.dumps(payload, indent=2) + "\n"
+    """Produce a signed marker token or raise; authorization fails closed."""
+    import operator_auth as _auth
+    return _auth.sign_marker(payload)
 
 
 def authorize_clear(ttl_hours: float = CLEAR_TTL_HOURS_DEFAULT) -> Path:
@@ -251,7 +224,8 @@ def authorize_clear(ttl_hours: float = CLEAR_TTL_HOURS_DEFAULT) -> Path:
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(_signed_marker({
         "issued_at": datetime.now(timezone.utc).isoformat(),
-        "by": "operator", "ttl_hours": float(ttl_hours),
+        "by": "operator", "action": "authorize-clear",
+        "ttl_hours": float(ttl_hours),
     }), encoding="utf-8")
     return marker
 
@@ -263,7 +237,8 @@ def authorize_canary() -> Path:
     marker.parent.mkdir(parents=True, exist_ok=True)
     marker.write_text(_signed_marker({
         "issued_at": datetime.now(timezone.utc).isoformat(),
-        "by": "operator", "use": "single-connectivity-canary",
+        "by": "operator", "action": "authorize-canary",
+        "use": "single-connectivity-canary",
     }), encoding="utf-8")
     return marker
 
@@ -275,7 +250,7 @@ def consume_canary_authorization() -> dict:
     can never resurrect it. Raises RuntimeError on absence, staleness, or
     malformed content — the caller must abort without a provider call.
 
-    Supports both signed tokens and unsigned JSON (backward compat).
+    Only a marker signed by the locally trusted operator key is accepted.
     """
     from datetime import datetime, timezone
     marker = canary_authorization_path()
@@ -287,19 +262,16 @@ def consume_canary_authorization() -> dict:
             "python orchestrator/execution_pause.py --authorize-canary") from None
     marker.unlink(missing_ok=True)  # consume first; never re-create on failure
 
-    # Parse (supports signed tokens and plain JSON)
-    data = None
-    if not raw.startswith("{"):
-        try:
-            import operator_auth as _auth
-            data = _auth.verify_marker(raw.strip())
-        except Exception:
-            pass
+    try:
+        import operator_auth as _auth
+        data = _auth.verify_marker(raw.strip())
+    except Exception:
+        data = None
     if data is None:
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError as exc:
-            raise RuntimeError(f"malformed canary authorization marker: {exc}") from None
+        raise RuntimeError("invalid or untrusted canary authorization marker")
+    if (data.get("action") != "authorize-canary" or
+            data.get("use") != "single-connectivity-canary"):
+        raise RuntimeError("canary authorization marker has the wrong purpose")
 
     try:
         issued = datetime.fromisoformat(str(data["issued_at"]))

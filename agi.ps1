@@ -10,6 +10,7 @@
 #   .\agi.ps1 status -Json
 #   .\agi.ps1 health --model-free
 #   .\agi.ps1 preflight canary
+#   .\agi.ps1 preflight release
 
 param(
     [Parameter(Mandatory = $true, Position = 0)]
@@ -48,7 +49,7 @@ if ($Command -eq "health") {
 }
 elseif ($Command -eq "preflight") {
     if ([string]::IsNullOrWhiteSpace($Subcommand)) {
-        Write-Error "preflight requires a target (canary)"
+        Write-Error "preflight requires a target (canary or release)"
         exit 2
     }
     $args += $Subcommand

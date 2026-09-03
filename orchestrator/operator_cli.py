@@ -1,7 +1,7 @@
 """Unified read-only operator CLI for the AGI_like harness.
 
-`agi status`, `agi health --model-free`, and `agi preflight canary` compose
-existing authoritative readers into one operator-facing view. This module is
+`agi status`, `agi health --model-free`, and the canary/release preflights
+compose existing authoritative readers into one operator-facing view. This module is
 OBSERVATIONAL AND DIAGNOSTIC ONLY:
 
   * It never becomes a second safety authority. ESTOP, runlock, isolation,
@@ -45,6 +45,8 @@ ACTIVE_WORK = ROOT / "docs" / "ACTIVE_WORK.json"
 TIERS_MANIFEST = ROOT / "tests" / "tiers.json"
 BATCH_LOCK = RUNS / ".batch.lock"
 CANARY_SCRIPT = ROOT / "workspace" / "validation" / "byteplus_connectivity_canary.py"
+REQUIREMENTS_LOCK = ROOT / "scripts" / "requirements.txt"
+RELEASE_BACKUP_MAX_AGE_HOURS = 26.0
 
 # ---------------------------------------------------------------- helpers ---
 
@@ -402,6 +404,165 @@ def _run_model_free_gate() -> dict:
     }
 
 
+def _release_database_state() -> dict:
+    """Read-only integrity and migration checks for release-relevant databases."""
+    import migrations
+
+    reports: dict[str, dict] = {}
+    required = {"ledger", "ledgerbook"}
+    for name, (path_fn, sequence) in migrations._MIGRATION_REGISTRY.items():
+        path = path_fn()
+        expected = max((migration.version for migration in sequence), default=0)
+        if not path.is_file():
+            optional = name not in required
+            reports[name] = {
+                "present": False,
+                "required": not optional,
+                "expected_version": expected,
+                "ok": optional,
+                "detail": "absent derived database" if optional else "required database absent",
+            }
+            continue
+        integrity = _db_readonly_check(path)
+        try:
+            uri = f"file:{path.as_posix()}?mode=ro"
+            con = sqlite3.connect(uri, uri=True, timeout=10)
+            try:
+                actual = int(con.execute("PRAGMA user_version").fetchone()[0])
+                checks_ok = all(
+                    con.execute(migration.check).fetchone() is not None
+                    for migration in sequence if migration.check
+                )
+            finally:
+                con.close()
+        except sqlite3.Error as exc:
+            actual = None
+            checks_ok = False
+            integrity = {**integrity, "error": str(exc)[:120]}
+        ok = (integrity.get("quick_check_ok") is True and
+              actual == expected and checks_ok)
+        reports[name] = {
+            **integrity,
+            "required": name in required,
+            "expected_version": expected,
+            "actual_version": actual,
+            "migration_checks_ok": checks_ok,
+            "ok": ok,
+        }
+
+    predictions = _db_readonly_check(
+        ROOT / "prediction_machine" / "data" / "predictions.db")
+    predictions["required"] = True
+    predictions["ok"] = (predictions.get("present") is True and
+                          predictions.get("quick_check_ok") is True)
+    reports["predictions"] = predictions
+    return {"ok": all(report.get("ok") is True for report in reports.values()),
+            "databases": reports}
+
+
+def _dependency_state() -> dict:
+    """Run pip's installed-distribution consistency check without network access."""
+    try:
+        proc = subprocess.run(
+            [sys.executable, "-m", "pip", "check"], cwd=str(ROOT),
+            capture_output=True, text=True, encoding="utf-8", errors="replace",
+            timeout=180,
+        )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        return {"ran": False, "ok": False, "error": str(exc)[:200]}
+    output = "\n".join(part.strip() for part in (proc.stdout, proc.stderr)
+                       if part and part.strip())
+    return {"ran": True, "ok": proc.returncode == 0,
+            "exit_code": proc.returncode, "summary": output[:500]}
+
+
+def _requirements_lock_state() -> dict:
+    """Verify the bootstrap requirements file uses exact pins throughout."""
+    try:
+        lines = REQUIREMENTS_LOCK.read_text(encoding="utf-8").splitlines()
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+    entries = [line.strip() for line in lines
+               if line.strip() and not line.lstrip().startswith("#")]
+    unpinned = [entry for entry in entries if "==" not in entry]
+    return {"ok": bool(entries) and not unpinned, "entries": len(entries),
+            "unpinned": unpinned[:10]}
+
+
+def _ci_supply_chain_state() -> dict:
+    workflow = ROOT / ".github" / "workflows" / "model_free_gate.yml"
+    script = ROOT / "scripts" / "ci.ps1"
+    try:
+        workflow_text = workflow.read_text(encoding="utf-8")
+        script_text = script.read_text(encoding="utf-8")
+    except OSError as exc:
+        return {"ok": False, "error": type(exc).__name__}
+    refs = [line.split("uses:", 1)[1].split("#", 1)[0].strip()
+            for line in workflow_text.splitlines() if "uses:" in line]
+    refs_pinned = bool(refs) and all(
+        ref.count("@") == 1 and len(ref.rsplit("@", 1)[-1]) == 40 and
+        all(char in "0123456789abcdef" for char in ref.rsplit("@", 1)[-1])
+        for ref in refs)
+    venv_wired = ('.venv\\Scripts\\python.exe' in script_text and
+                  '& $pythonExe -B tests/run_all.py' in script_text and
+                  'elseif ($env:CI)' in script_text)
+    return {"ok": refs_pinned and venv_wired,
+            "action_refs": len(refs), "action_refs_pinned": refs_pinned,
+            "venv_wired": venv_wired}
+
+
+def _protected_path_state() -> dict:
+    """Read-only consistency check for protected paths and Git masking."""
+    try:
+        import integrity
+        import policy
+        masked = sorted(integrity._masked_under_protected())
+        conflicts = policy.validate_paths(integrity.PROTECTED_PATHS)
+        return {"ok": not masked and not conflicts,
+                "masked": masked, "policy_conflicts": conflicts}
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def _operator_key_state() -> dict:
+    try:
+        import operator_auth
+        return operator_auth.key_status()
+    except Exception as exc:
+        return {"present": False, "error": type(exc).__name__}
+
+
+def _provider_credential_state() -> dict:
+    """Report provider credential locations without exposing their values."""
+    providers = {
+        "byteplus_coding": "ARK_API_KEY",
+        "anthropic": "ANTHROPIC_API_KEY",
+        "openai": "OPENAI_API_KEY",
+    }
+    private_env_readable = True
+    private_env_error = None
+    try:
+        import execution_pause
+        private_env_path = execution_pause.estop_path().parent / ".env"
+        private_env = dotenv_values(private_env_path) if private_env_path.is_file() else {}
+    except Exception as exc:
+        private_env = {}
+        private_env_readable = False
+        private_env_error = type(exc).__name__
+    state = {}
+    for provider, env_name in providers.items():
+        state[provider] = {
+            "credential_manager": credential_vault.credential_manager_has_api_key(provider),
+            "process_environment": bool(os.environ.get(env_name, "").strip()),
+            "private_env_file": bool(str(private_env.get(env_name) or "").strip()),
+        }
+    plaintext = [provider for provider, item in state.items()
+                 if item["process_environment"] or item["private_env_file"]]
+    return {"providers": state, "plaintext_providers": plaintext,
+            "private_env_readable": private_env_readable,
+            "private_env_error": private_env_error}
+
+
 # --------------------------------------------------------------- preflight --
 
 def _canary_prerequisites() -> list[dict]:
@@ -493,6 +654,159 @@ def collect_preflight_canary() -> dict:
     }
 
 
+def _release_prerequisites() -> list[dict]:
+    """Evaluate the model-free release gate without granting authority."""
+    checks: list[dict] = []
+
+    def add(name: str, ok: bool | None, detail: str, blocker: bool = True) -> None:
+        checks.append({"check": name, "ok": ok, "detail": detail,
+                       "blocker": blocker})
+
+    estop = _estop_state()
+    add("estop_engaged", estop.get("engaged") is True and
+        estop.get("integrity") == "engaged",
+        f"engaged={estop.get('engaged')} integrity={estop.get('integrity')}")
+    add("no_pending_canary_marker",
+        estop.get("canary_authorization_marker_present") is False,
+        f"marker_present={estop.get('canary_authorization_marker_present')}")
+
+    isolation = _isolation_state()
+    add("isolation_restored",
+        isolation.get("phase") == "restored" or
+        isolation.get("journal_present") is False,
+        f"phase={isolation.get('phase')} journal={isolation.get('journal_present')}")
+
+    runlock = _runlock_state()
+    add("batch_lock_free", runlock.get("engaged") is False,
+        f"engaged={runlock.get('engaged')} state={runlock.get('state')}")
+
+    quiescence = _munder_quiescence()
+    add("munder_process_quiescence", quiescence.get("quiesced") is True,
+        f"source={quiescence.get('source')} offenders={quiescence.get('offenders')}")
+
+    active = _active_work_state()
+    owners = active.get("owners")
+    add("no_active_write_owners",
+        active.get("parseable") is True and isinstance(owners, list) and not owners,
+        f"parseable={active.get('parseable')} owners="
+        f"{len(owners) if isinstance(owners, list) else 'unknown'}")
+
+    git_state = _git_state()
+    divergence = git_state.get("upstream_divergence") or {}
+    add("release_branch_master", git_state.get("branch") == "master",
+        f"branch={git_state.get('branch')}")
+    add("git_tree_clean", git_state.get("tree_clean") is True,
+        f"clean={git_state.get('tree_clean')} changed="
+        f"{len(git_state.get('changed_paths') or [])}")
+    add("git_upstream_synchronized",
+        divergence.get("ahead") == 0 and divergence.get("behind") == 0,
+        f"ahead={divergence.get('ahead')} behind={divergence.get('behind')}")
+
+    continuity = _continuity_state()
+    valid = continuity.get("valid")
+    add("continuity_valid", True if valid is True else
+        (False if valid is False else None),
+        f"revision={continuity.get('revision')} recovery={continuity.get('recovery')} "
+        f"discrepancies={len(continuity.get('discrepancies') or [])}")
+
+    databases = _release_database_state()
+    failed_databases = [name for name, report in databases["databases"].items()
+                        if report.get("ok") is not True]
+    add("database_integrity_and_schema", databases.get("ok") is True,
+        "failed=" + (",".join(failed_databases) if failed_databases else "none"))
+
+    dependencies = _dependency_state()
+    add("dependency_consistency", dependencies.get("ok") is True,
+        dependencies.get("summary") or dependencies.get("error") or
+        f"ran={dependencies.get('ran')}")
+
+    lock = _requirements_lock_state()
+    add("dependency_versions_exactly_pinned", lock.get("ok") is True,
+        f"entries={lock.get('entries')} unpinned={lock.get('unpinned') or []}")
+
+    ci = _ci_supply_chain_state()
+    add("ci_supply_chain_pinned", ci.get("ok") is True,
+        f"action_refs={ci.get('action_refs')} "
+        f"pinned={ci.get('action_refs_pinned')} venv_wired={ci.get('venv_wired')} "
+        f"error={ci.get('error')}")
+
+    paths = _protected_path_state()
+    add("protected_paths_consistent", paths.get("ok") is True,
+        f"masked={len(paths.get('masked') or [])} "
+        f"policy_conflicts={len(paths.get('policy_conflicts') or [])} "
+        f"error={paths.get('error')}")
+
+    key = _operator_key_state()
+    add("trusted_operator_key_present", key.get("present") is True,
+        f"present={key.get('present')} algorithm={key.get('algorithm')} "
+        f"fingerprint={key.get('fingerprint')}")
+    add("operator_key_vault_storage", key.get("storage") == "credential_manager",
+        f"storage={key.get('storage')}")
+
+    credentials = _provider_credential_state()
+    byteplus = (credentials.get("providers") or {}).get("byteplus_coding") or {}
+    add("byteplus_credential_vault_storage",
+        byteplus.get("credential_manager") is True,
+        f"credential_manager={byteplus.get('credential_manager')}")
+    add("provider_credential_sources_readable",
+        credentials.get("private_env_readable") is True,
+        f"private_env_readable={credentials.get('private_env_readable')} "
+        f"error={credentials.get('private_env_error')}")
+    plaintext = credentials.get("plaintext_providers")
+    add("provider_secrets_not_plaintext",
+        isinstance(plaintext, list) and not plaintext,
+        f"plaintext_providers={plaintext if isinstance(plaintext, list) else 'unknown'}")
+
+    backup = _backup_state()
+    backup_reports = backup.get("databases") or {}
+    fresh = bool(backup_reports) and all(
+        report.get("present") is True and
+        isinstance(report.get("age_hours"), (int, float)) and
+        report["age_hours"] <= RELEASE_BACKUP_MAX_AGE_HOURS
+        for report in backup_reports.values()
+    )
+    backup_ages = ", ".join(
+        f"{name}:{report.get('age_hours')}"
+        for name, report in backup_reports.items())
+    add("backups_fresh", fresh,
+        f"max_age_hours={RELEASE_BACKUP_MAX_AGE_HOURS} "
+        f"ages={{{backup_ages}}}")
+    add("offsite_backup_configured", backup.get("offsite_configured") is True,
+        f"configured={backup.get('offsite_configured')}")
+
+    gate = _run_model_free_gate()
+    add("model_free_test_gate", gate.get("ok") is True,
+        gate.get("summary") or gate.get("reason") or gate.get("error") or
+        f"ran={gate.get('ran')}")
+
+    provider = _provider_state()
+    latest = provider.get("latest_probe") or {}
+    add("recorded_provider_canary_informational",
+        True if latest.get("ok") is True else
+        (False if latest.get("ok") is False else None),
+        f"recorded_at={latest.get('recorded_at')} ok={latest.get('ok')} "
+        "(not a release blocker; no live probe performed)", False)
+    return checks
+
+
+def collect_preflight_release() -> dict:
+    checks = _release_prerequisites()
+    blockers = [check for check in checks
+                if check["blocker"] and check["ok"] is not True]
+    unknowns = [check for check in checks if check["ok"] is None]
+    return {
+        "command": "preflight",
+        "target": "release",
+        "generated_at": _utc_now(),
+        "diagnostic_only": True,
+        "authorized": False,
+        "checks": checks,
+        "blockers": blockers,
+        "unknowns": unknowns,
+        "safe_to_proceed": not blockers,
+    }
+
+
 # ------------------------------------------------------------------ output --
 
 def _render_status(data: dict) -> str:
@@ -566,22 +880,30 @@ def _render_health(data: dict) -> str:
 
 
 def _render_preflight(data: dict) -> str:
-    lines = ["=== AGI PREFLIGHT: CANARY (DIAGNOSTIC ONLY) ==="]
+    target = str(data.get("target") or "unknown").upper()
+    lines = [f"=== AGI PREFLIGHT: {target} (DIAGNOSTIC ONLY) ==="]
     lines.append("This preflight authorizes nothing. It never creates or consumes")
-    lines.append("canary authorization and never contacts a provider.")
+    lines.append("authorization and never contacts a provider.")
     for c in data.get("checks") or []:
         mark = "PASS" if c["ok"] is True else ("FAIL" if c["ok"] is False else "UNKNOWN")
         flag = " [blocker]" if c["blocker"] else ""
         lines.append(f"[{mark}]{flag} {c['check']}: {c['detail']}")
     if data.get("blockers"):
-        lines.append(f"")
+        lines.append("")
         lines.append(f"RESULT: BLOCKED ({len(data['blockers'])} blocker(s))")
-        lines.append("Resolve blockers, then have the OPERATOR authorize the canary")
-        lines.append("with the existing single-use marker procedure.")
+        if data.get("target") == "canary":
+            lines.append("Resolve blockers, then have the OPERATOR authorize the canary")
+            lines.append("with the existing single-use marker procedure.")
+        else:
+            lines.append("Resolve every release blocker and rerun this model-free gate.")
     else:
         lines.append("")
-        lines.append("RESULT: no blockers observed. Canary execution still requires")
-        lines.append("operator-issued single-use authorization; this output is not it.")
+        if data.get("target") == "canary":
+            lines.append("RESULT: no blockers observed. Canary execution still requires")
+            lines.append("operator-issued single-use authorization; this output is not it.")
+        else:
+            lines.append("RESULT: model-free release controls passed. Provider readiness,")
+            lines.append("business approval, and deployment authorization remain separate.")
     return "\n".join(lines)
 
 
@@ -620,7 +942,8 @@ def main(argv: list[str] | None = None) -> int:
     p_health.add_argument("--json", action="store_true", help="stable JSON output")
 
     p_pre = sub.add_parser("preflight", help="diagnostic preflight")
-    p_pre.add_argument("target", choices=["canary"], help="preflight target")
+    p_pre.add_argument("target", choices=["canary", "release"],
+                       help="preflight target")
     p_pre.add_argument("--json", action="store_true", help="stable JSON output")
 
     args = parser.parse_args(argv)
@@ -628,8 +951,10 @@ def main(argv: list[str] | None = None) -> int:
         data = collect_status()
     elif args.command == "health":
         data = collect_health_model_free()
-    else:
+    elif args.target == "canary":
         data = collect_preflight_canary()
+    else:
+        data = collect_preflight_release()
     return _output(data, args.json)
 
 

@@ -85,6 +85,13 @@ check("case-insensitive missing: header",
       tr._extract_missing_list("missing:\n- a gap\n- b gap"), ["a gap", "b gap"])
 check("empty string -> []", tr._extract_missing_list(""), [])
 check("None -> []", tr._extract_missing_list(None), [])
+oversized = "MISSING:\n" + "\n".join(
+    f"- gap {index} " + ("x" * 400) for index in range(30))
+bounded = tr._extract_missing_list(oversized)
+check("structured retry list has a hard item cap",
+      len(bounded), tr.MAX_RETRY_GAPS)
+check("structured retry items have a hard character cap",
+      max(map(len, bounded)), tr.MAX_RETRY_GAP_CHARS)
 
 
 # S2. run_critic prompt asks for the structured MISSING format ──────────────

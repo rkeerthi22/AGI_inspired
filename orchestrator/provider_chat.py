@@ -36,8 +36,13 @@ def options_from_config(config: Mapping[str, Any], purpose: str) -> dict[str, An
 
 def _secure_env_value(name: str) -> str:
     """Read a secret from the vault, process, or Hermes private .env."""
-    if name == "ARK_API_KEY":
-        vaulted = credential_vault.get_api_key("byteplus_coding")
+    provider = {
+        "ARK_API_KEY": "byteplus_coding",
+        "ANTHROPIC_API_KEY": "anthropic",
+        "OPENAI_API_KEY": "openai",
+    }.get(name)
+    if provider:
+        vaulted = credential_vault.get_api_key(provider)
         if vaulted:
             return vaulted
     value = os.environ.get(name, "").strip()

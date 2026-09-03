@@ -17,6 +17,7 @@ from provider_chat import (
     ChatResult,
     ErrorCategory,
     ProviderChatError,
+    _secure_env_value,
 )
 
 
@@ -51,7 +52,7 @@ class AnthropicAdapter(ChatAdapter):
             )
 
         try:
-            client = _build_client(api_key=os.environ.get("ANTHROPIC_API_KEY"))
+            client = _build_client(api_key=_secure_env_value("ANTHROPIC_API_KEY"))
         except ImportError:
             raise ProviderChatError(
                 "anthropic SDK is not installed",

@@ -41,6 +41,10 @@ class _TaskResult:
     status: str
 
 
+MAX_RETRY_GAPS = 12
+MAX_RETRY_GAP_CHARS = 240
+
+
 def _extract_missing_list(text: str) -> list:
     """Parse the critic's structured 'MISSING:' block (weak-AI efficiency, F104)
     into a clean list of concrete gaps. Returns [] when no parseable block is
@@ -67,7 +71,9 @@ def _extract_missing_list(text: str) -> list:
         stripped = line.strip()
         bm = re.match(r"(?:[-*•]|\d+[\.\)])\s+(.*)", stripped)
         if bm and bm.group(1).strip():
-            items.append(bm.group(1).strip())
+            items.append(bm.group(1).strip()[:MAX_RETRY_GAP_CHARS])
+            if len(items) >= MAX_RETRY_GAPS:
+                break
     return items
 
 

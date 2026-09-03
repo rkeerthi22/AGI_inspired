@@ -17,6 +17,10 @@ import ledger  # noqa: E402
 import provider_chat  # noqa: E402
 import runlock  # noqa: E402
 
+# This suite must never inherit or use a host Credential Manager secret. Tests
+# inject explicit environment/.env values where credential behavior is needed.
+provider_chat.credential_vault.get_api_key = lambda _provider: None
+
 fails = []
 
 
@@ -395,6 +399,22 @@ check("connectivity probe requires explicit acknowledgement",
 check("connectivity probe keeps a fixed trivial prompt", 'PROMPT = "ping"' in canary_source)
 check("connectivity probe has no retry loop",
       "for attempt" not in canary_source and "while " not in canary_source)
+
+ci_source = (ROOT / "scripts" / "ci.ps1").read_text(encoding="utf-8")
+check("CI gate prefers the bootstrapped virtual environment",
+      '.venv\\Scripts\\python.exe' in ci_source and '& $pythonExe -B tests/run_all.py' in ci_source)
+check("CI fails closed when its virtual environment is missing",
+      'elseif ($env:CI)' in ci_source and 'CI virtual environment is missing' in ci_source)
+
+workflow_source = (ROOT / ".github" / "workflows" /
+                   "model_free_gate.yml").read_text(encoding="utf-8")
+action_refs = [line.split("uses:", 1)[1].split("#", 1)[0].strip()
+               for line in workflow_source.splitlines() if "uses:" in line]
+check("CI third-party actions use immutable commit SHAs",
+      bool(action_refs) and all(
+          ref.count("@") == 1 and len(ref.rsplit("@", 1)[-1]) == 40 and
+          all(char in "0123456789abcdef" for char in ref.rsplit("@", 1)[-1])
+          for ref in action_refs))
 
 if fails:
     raise SystemExit(f"FAIL: {', '.join(fails)}")

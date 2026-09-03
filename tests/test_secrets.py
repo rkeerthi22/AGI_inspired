@@ -73,8 +73,19 @@ try:
           credential_vault.get_api_key("byteplus_coding"), "vault-wins")
     check("vault target is generic and exact", backend.calls,
           [("AGI_like/byteplus_coding", backend.CRED_TYPE_GENERIC, 0)])
+    check("vault presence probe reports stored key",
+          credential_vault.credential_manager_has_api_key("byteplus_coding"), True)
+
+    backend = FakeCredentialManager({
+        "CredentialBlob": "vault-unicode-wins".encode("utf-16-le")})
+    credential_vault._win32cred = backend
+    check("UTF-16LE Credential Manager value takes precedence",
+          credential_vault.get_api_key("byteplus_coding"),
+          "vault-unicode-wins")
 
     credential_vault._win32cred = FakeCredentialManager(error=RuntimeError("unreadable"))
+    check("vault presence probe fails closed on read error",
+          credential_vault.credential_manager_has_api_key("byteplus_coding"), False)
     check("unreadable vault falls back without surfacing errors",
           credential_vault.get_api_key("byteplus_coding"), "environment-fallback")
     os.environ.pop("ARK_API_KEY", None)
@@ -84,6 +95,10 @@ try:
     provider_chat.credential_vault.get_api_key = lambda provider: "vault-dispatch"
     check("provider transport checks vault before dotenv",
           provider_chat._secure_env_value("ARK_API_KEY"), "vault-dispatch")
+    check("Anthropic transport checks vault before environment",
+          provider_chat._secure_env_value("ANTHROPIC_API_KEY"), "vault-dispatch")
+    check("OpenAI transport checks vault before environment",
+          provider_chat._secure_env_value("OPENAI_API_KEY"), "vault-dispatch")
     operator_cli.credential_vault.get_api_key = lambda provider: "vault-presence-only"
     credential_check = next(item for item in operator_cli._canary_prerequisites()
                             if item["check"] == "ark_api_key_present_in_env")

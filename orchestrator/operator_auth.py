@@ -7,19 +7,19 @@ verified identity rather than being plain file-based tokens.
 Key design decisions:
 - Ed25519 (``cryptography`` package, already installed).
 - Private key stored in Windows Credential Manager as ``AGI_like/operator_key``.
-- Public key embedded in signed tokens for offline verification.
-- Backward compatible: unsigned JSON markers are still accepted with a
-  ``PendingDeprecationWarning``, so existing workflows are not broken.
+- Verification is anchored to the locally stored public key. The public key
+  embedded in a token is metadata and must match that trusted key.
+- Unsigned markers fail closed; authorization is never inferred from JSON.
 - No dependency on the ``jose`` or ``PyJWT`` packages — we use a compact
   custom format: ``base64(payload) || '.' || base64(signature)``.
 """
 from __future__ import annotations
 
 import base64
+import hmac
 import json
 import os
 import sys
-import warnings
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -86,11 +86,11 @@ def _credential_write(target: str, value: str) -> bool:
     if _win32cred is None:
         return False
     try:
-        blob = value.encode("utf-8")
         _win32cred.CredWrite(
             {"Type": _win32cred.CRED_TYPE_GENERIC,
              "TargetName": target,
-             "CredentialBlob": blob,
+             # pywin32's Unicode API rejects bytes here with TypeError.
+             "CredentialBlob": value,
              "Persist": _win32cred.CRED_PERSIST_LOCAL_MACHINE,
              "UserName": "operator"}, 0)
         return True
@@ -154,8 +154,19 @@ def _load_keypair_with_storage() -> tuple[tuple[bytes, bytes] | None, str | None
     record = _credential_read(_CREDENTIAL_TARGET)
     if record:
         blob_raw = record.get("CredentialBlob")
-        if isinstance(blob_raw, bytes):
-            loaded = _decode_keypair_blob(blob_raw.decode("utf-8", errors="strict"))
+        candidates: list[str] = []
+        if isinstance(blob_raw, str):
+            candidates.append(blob_raw)
+        elif isinstance(blob_raw, bytes):
+            # CredRead returns strings written by pywin32 as UTF-16LE bytes.
+            # Keep UTF-8 support for credentials written by older tooling.
+            for encoding in ("utf-16-le", "utf-8"):
+                try:
+                    candidates.append(blob_raw.decode(encoding, errors="strict"))
+                except UnicodeDecodeError:
+                    pass
+        for candidate in candidates:
+            loaded = _decode_keypair_blob(candidate)
             if loaded is not None:
                 return loaded, "credential_manager"
     for path, storage in (
@@ -229,22 +240,13 @@ def sign_marker(payload: dict) -> str:
 
 
 def verify_marker(token: str) -> dict | None:
-    """Verify a signed marker token and return the payload, or None.
+    """Verify a marker against the locally trusted key, or return ``None``.
 
-    For backward compatibility, plain JSON strings (unsigned markers) are
-    returned with a ``PendingDeprecationWarning``.
+    Verification never creates a key. A token carrying an attacker-generated
+    public key is self-signed, not operator-authorized, and is rejected.
     """
-    # Backward compatibility: plain JSON
     if token.startswith("{"):
-        warnings.warn(
-            "Unsigned operator marker (plain JSON) — consider upgrading to "
-            "signed markers via operator_auth.sign_marker()",
-            PendingDeprecationWarning, stacklevel=2,
-        )
-        try:
-            return json.loads(token)
-        except json.JSONDecodeError:
-            return None
+        return None
 
     parts = token.split(".")
     if len(parts) != 3:
@@ -255,14 +257,16 @@ def verify_marker(token: str) -> dict | None:
         return None
 
     try:
-        payload_bytes = base64.b64decode(payload_b64)
-        signature = base64.b64decode(sig_b64)
-    except Exception:
+        payload_bytes = base64.b64decode(payload_b64, validate=True)
+        signature = base64.b64decode(sig_b64, validate=True)
+    except (ValueError, TypeError):
         return None
 
     try:
         payload = json.loads(payload_bytes.decode("utf-8"))
     except (json.JSONDecodeError, UnicodeDecodeError):
+        return None
+    if not isinstance(payload, dict):
         return None
 
     public_b64 = payload.get("_public_key")
@@ -270,14 +274,21 @@ def verify_marker(token: str) -> dict | None:
         return None
 
     try:
-        public_bytes = base64.b64decode(public_b64)
-    except Exception:
+        embedded_public = base64.b64decode(public_b64, validate=True)
+    except (ValueError, TypeError):
+        return None
+
+    trusted = _load_keypair()
+    if trusted is None:
+        return None
+    _, trusted_public = trusted
+    if not hmac.compare_digest(embedded_public, trusted_public):
         return None
 
     try:
-        verifier = _reconstruct_verifier(public_bytes)
+        verifier = _reconstruct_verifier(trusted_public)
         verifier.verify(signature, payload_bytes)
-    except InvalidSignature:
+    except (InvalidSignature, ValueError):
         return None
     except OperatorAuthError:
         return None
@@ -288,12 +299,12 @@ def verify_marker(token: str) -> dict | None:
 
 
 def marker_is_signed(marker_path: Path) -> bool:
-    """Check if a marker file contains a signed token (vs. plain JSON)."""
+    """Return whether a marker is validly signed by the trusted operator key."""
     try:
         raw = marker_path.read_text(encoding="utf-8").strip()
     except OSError:
         return False
-    return not raw.startswith("{") and "." in raw
+    return verify_marker(raw) is not None
 
 
 def public_key_fingerprint() -> str | None:

@@ -1,6 +1,6 @@
 """Operator CLI contract tests: read-only, model-free, no second authority.
 
-Proves for `agi status`, `agi health --model-free`, and `agi preflight canary`:
+Proves for `agi status`, `agi health --model-free`, and both preflight targets:
 
   * ZERO mutation of: ESTOP, canary marker, isolation journal, batch lock,
     ACTIVE_WORK, ledger DBs, prediction DB, runs/ contents, Git state.
@@ -14,7 +14,9 @@ live repository is only ever READ.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
+import io
 import json
 import os
 import subprocess
@@ -232,12 +234,10 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     world = build_world(Path(raw), estop=False)
     env = world["env"]
-    from datetime import datetime, timezone
-    marker = Path(env["HERMES_HOME"]) / ".estop-transition.json"
-    marker.write_text(json.dumps({"issued_at": datetime.now(timezone.utc).isoformat(),
-                                  "by": "operator", "ttl_hours": 24}), encoding="utf-8")
     with mock.patch.dict(os.environ, {"HERMES_HOME": env["HERMES_HOME"],
                                        "AGI_COHORT_JOURNAL": env["AGI_COHORT_JOURNAL"]}):
+        import execution_pause
+        execution_pause.authorize_clear(ttl_hours=24)
         data = operator_cli.collect_status()
     check("status reports authorized clear marker",
           data["estop"]["integrity"], "authorized:operator_clear_marker")
@@ -409,6 +409,8 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
                                        "AGI_COHORT_JOURNAL": env["AGI_COHORT_JOURNAL"],
                                        "AGI_PROCESS_INVENTORY_FILE": str(inv),
                                        "ARK_API_KEY": ""}), \
+         mock.patch.object(operator_cli.credential_vault, "get_api_key",
+                           return_value=None), \
          mock.patch.object(operator_cli, "BATCH_LOCK",
                            world["td"] / "runs" / ".batch.lock"):
         data = operator_cli.collect_preflight_canary()
@@ -450,6 +452,118 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     after = snapshot_live_repo()
     check("preflight leaves live repo untouched", before == after)
 
+# 3d: release preflight composes the strict model-free release controls.
+safe_release = {
+    "_estop_state": {"engaged": True, "integrity": "engaged",
+                     "canary_authorization_marker_present": False},
+    "_isolation_state": {"phase": "restored", "journal_present": True},
+    "_runlock_state": {"engaged": False, "present": False},
+    "_munder_quiescence": {"quiesced": True, "source": "test", "offenders": 0},
+    "_active_work_state": {"parseable": True, "owners": []},
+    "_git_state": {"branch": "master", "tree_clean": True, "changed_paths": [],
+                   "upstream_divergence": {"ahead": 0, "behind": 0}},
+    "_continuity_state": {"revision": 100, "valid": True, "recovery": "complete",
+                          "discrepancies": []},
+    "_release_database_state": {"ok": True, "databases": {
+        "ledger": {"ok": True}, "ledgerbook": {"ok": True},
+        "fts_index": {"ok": True}, "predictions": {"ok": True}}},
+    "_dependency_state": {"ran": True, "ok": True,
+                          "summary": "No broken requirements found."},
+    "_requirements_lock_state": {"ok": True, "entries": 10, "unpinned": []},
+    "_ci_supply_chain_state": {"ok": True, "action_refs": 3,
+                               "action_refs_pinned": True, "venv_wired": True},
+    "_protected_path_state": {"ok": True, "masked": [], "policy_conflicts": []},
+    "_operator_key_state": {"present": True, "algorithm": "Ed25519",
+                            "fingerprint": "0123456789abcdef",
+                            "storage": "credential_manager"},
+    "_provider_credential_state": {"providers": {
+        "byteplus_coding": {"credential_manager": True,
+                            "process_environment": False,
+                            "private_env_file": False}},
+        "plaintext_providers": [], "private_env_readable": True,
+        "private_env_error": None},
+    "_backup_state": {"databases": {
+        "ledger": {"present": True, "age_hours": 1.0},
+        "ledgerbook": {"present": True, "age_hours": 1.5}},
+        "offsite_configured": True},
+    "_run_model_free_gate": {"ran": True, "ok": True,
+                             "summary": "61/61 suites green"},
+    "_provider_state": {"latest_probe": None},
+}
+
+
+def collect_release(states: dict) -> dict:
+    with contextlib.ExitStack() as stack:
+        for name, value in states.items():
+            stack.enter_context(mock.patch.object(operator_cli, name,
+                                                   return_value=value))
+        return operator_cli.collect_preflight_release()
+
+
+release = collect_release(safe_release)
+check("release preflight is diagnostic only", release["diagnostic_only"], True)
+check("release preflight never authorizes", release["authorized"], False)
+check("release preflight safe world has no blockers", release["blockers"], [])
+check("release preflight safe world passes", release["safe_to_proceed"], True)
+release_names = {item["check"] for item in release["checks"]}
+for expected in ("estop_engaged", "no_active_write_owners", "release_branch_master",
+                 "git_tree_clean", "git_upstream_synchronized", "continuity_valid",
+                 "database_integrity_and_schema", "dependency_consistency",
+                 "dependency_versions_exactly_pinned", "ci_supply_chain_pinned",
+                 "protected_paths_consistent",
+                 "trusted_operator_key_present", "operator_key_vault_storage",
+                 "byteplus_credential_vault_storage",
+                 "provider_credential_sources_readable",
+                 "provider_secrets_not_plaintext",
+                 "backups_fresh", "offsite_backup_configured",
+                 "model_free_test_gate"):
+    check(f"release preflight covers {expected}", expected in release_names, True)
+
+blocked_release = dict(safe_release)
+blocked_release.update({
+    "_active_work_state": {"parseable": True, "owners": [{"agent": "test"}]},
+    "_git_state": {"branch": "feature", "tree_clean": False,
+                   "changed_paths": ["x"],
+                   "upstream_divergence": {"ahead": 1, "behind": 2}},
+    "_dependency_state": {"ran": True, "ok": False,
+                          "summary": "broken dependency"},
+    "_operator_key_state": {"present": True, "algorithm": "Ed25519",
+                            "fingerprint": "0123456789abcdef",
+                            "storage": "hermes_home_file"},
+    "_provider_credential_state": {"providers": {
+        "byteplus_coding": {"credential_manager": False,
+                            "process_environment": False,
+                            "private_env_file": True}},
+        "plaintext_providers": ["byteplus_coding"],
+        "private_env_readable": False, "private_env_error": "OSError"},
+    "_backup_state": {"databases": {
+        "ledger": {"present": True, "age_hours": 30.0}},
+        "offsite_configured": False},
+})
+blocked = collect_release(blocked_release)
+blocked_names = {item["check"] for item in blocked["blockers"]}
+for expected in ("no_active_write_owners", "release_branch_master",
+                 "git_tree_clean", "git_upstream_synchronized",
+                 "dependency_consistency", "operator_key_vault_storage",
+                 "byteplus_credential_vault_storage",
+                 "provider_credential_sources_readable",
+                 "provider_secrets_not_plaintext",
+                 "backups_fresh", "offsite_backup_configured"):
+    check(f"release preflight blocks on {expected}", expected in blocked_names, True)
+check("release preflight unsafe world blocks", blocked["safe_to_proceed"], False)
+check("release renderer identifies release target",
+      "PREFLIGHT: RELEASE" in operator_cli._render_preflight(blocked), True)
+
+# The parser must dispatch release without invoking the canary collector.
+with mock.patch.object(operator_cli, "collect_preflight_release",
+                       return_value=release) as release_collector, \
+     mock.patch.object(operator_cli, "collect_preflight_canary",
+                       side_effect=AssertionError("wrong preflight target")):
+    check("preflight release parser exits zero", operator_cli.main(
+        ["preflight", "release", "--json"]), 0)
+    check("preflight release parser dispatches release collector",
+          release_collector.call_count, 1)
+
 # --------------------------------------------------------------------------
 # Section 4: health --model-free
 # --------------------------------------------------------------------------
@@ -463,6 +577,13 @@ report = operator_cli._db_readonly_check(ROOT / "memory" / "ledgerbook.db")
 check("ledgerbook quick_check ok", report.get("quick_check_ok"), True)
 report = operator_cli._db_readonly_check(ROOT / "does-not-exist.db")
 check("missing db reported absent", report.get("present"), False)
+release_dbs = operator_cli._release_database_state()
+check("release database/schema checks pass on live databases",
+      release_dbs.get("ok"), True)
+check("absent derived FTS index is explicitly optional",
+      release_dbs["databases"]["fts_index"].get("ok"), True)
+check("requirements snapshot uses exact pins",
+      operator_cli._requirements_lock_state().get("ok"), True)
 
 # 4b: health never mutates DBs
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
@@ -490,8 +611,6 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     check("gate refusal reason mentions lock", "batch lock" in gate.get("reason", ""), True)
 
 # 4d/4e: exit codes (renderers print to stdout; capture it)
-import contextlib
-import io
 
 def _exit_of(data, as_json=False):
     buf = io.StringIO()
@@ -670,9 +789,13 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     with mock.patch.dict(os.environ, {"HERMES_HOME": env["HERMES_HOME"],
                                        "AGI_COHORT_JOURNAL": env["AGI_COHORT_JOURNAL"]}), \
          mock.patch.object(operator_cli, "_run_model_free_gate",
-                           return_value={"ran": False, "ok": True, "reason": "test"}):
+                           return_value={"ran": False, "ok": True, "reason": "test"}), \
+         mock.patch.object(operator_cli, "_dependency_state",
+                           return_value={"ran": True, "ok": True,
+                                         "summary": "test"}):
         operator_cli.collect_status()
         operator_cli.collect_preflight_canary()
+        operator_cli.collect_preflight_release()
     newly = set(sys.modules) - fresh_modules_before
     net_loaded = [m for m in newly for b in net_banned if m == b or m.startswith(b + ".")]
     check("no network modules loaded by status/preflight", net_loaded, [])

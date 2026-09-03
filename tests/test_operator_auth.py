@@ -4,8 +4,8 @@ Verifies:
 1. Key generation creates a valid Ed25519 keypair
 2. sign_marker produces a verifiable token
 3. verify_marker returns the original payload for valid tokens
-4. Tampered tokens (bad signature, bad format) return None
-5. Unsigned (plain JSON) markers are accepted with a warning
+4. Tampered and foreign-self-signed tokens return None
+5. Unsigned markers and missing local trust fail closed
 6. Public key fingerprint is deterministic
 7. key_status() returns diagnostic info
 8. keypair persistence (Credential Manager / fallback file)
@@ -17,7 +17,6 @@ import json
 import os
 import sys
 import tempfile
-import warnings
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -45,6 +44,7 @@ print("=== Key generation ===")
 
 from operator_auth import (
     _generate_keypair,
+    _credential_write,
     _load_keypair,
     _store_keypair,
     _reconstruct_signer,
@@ -122,20 +122,26 @@ with patch("operator_auth._load_keypair", return_value=(private_bytes, public_by
     check("garbage returns None", decoded is None)
 
 
-# ── 4. Unsigned (backward-compatible) JSON ──────────────────────────────────
+# ── 4. Local trust boundary ─────────────────────────────────────────────────
 
 
-print("\n=== Unsigned JSON (backward compat) ===")
+print("\n=== Local trust boundary ===")
 
-with warnings.catch_warnings(record=True) as w:
-    warnings.simplefilter("always")
-    unsigned = json.dumps({"action": "authorize-clear", "ttl_hours": 24})
-    decoded = verify_marker(unsigned)
-    check("unsigned JSON is accepted", decoded is not None)
-    if decoded:
-        check("unsigned JSON action", decoded.get("action"), "authorize-clear")
-    check("PendingDeprecationWarning issued",
-          any(issubclass(x.category, PendingDeprecationWarning) for x in w))
+unsigned = json.dumps({"action": "authorize-clear", "ttl_hours": 24})
+check("unsigned JSON is rejected", verify_marker(unsigned) is None)
+
+foreign_private, foreign_public = _generate_keypair()
+with patch("operator_auth._load_keypair",
+           return_value=(foreign_private, foreign_public)):
+    foreign_token = sign_marker({"action": "authorize-clear"})
+with patch("operator_auth._load_keypair",
+           return_value=(private_bytes, public_bytes)):
+    check("foreign self-signed marker is rejected",
+          verify_marker(foreign_token) is None)
+
+with patch("operator_auth._load_keypair", return_value=None):
+    check("signed marker is rejected without local trusted key",
+          verify_marker(token) is None)
 
 
 # ── 5. Public key fingerprint ───────────────────────────────────────────────
@@ -167,6 +173,38 @@ with patch("operator_auth._load_keypair_with_storage",
 with patch("operator_auth._load_keypair_with_storage", return_value=(None, None)):
     status = key_status()
     check("key absent when no keypair", status.get("present"), False)
+
+# pywin32's CredWrite Unicode API requires a string CredentialBlob, and its
+# CredRead counterpart returns a string on current Windows builds.
+fake_cred = MagicMock()
+fake_cred.CRED_TYPE_GENERIC = 1
+fake_cred.CRED_PERSIST_LOCAL_MACHINE = 2
+with patch("operator_auth._win32cred", fake_cred):
+    check("Credential Manager accepts Unicode blob wrapper",
+          _credential_write("test-target", "test-value"), True)
+    written = fake_cred.CredWrite.call_args.args[0]
+    check("Credential Manager blob remains Unicode",
+          isinstance(written["CredentialBlob"], str), True)
+
+credential_blob = json.dumps({
+    "private_key": base64.b64encode(private_bytes).decode("ascii"),
+    "public_key": base64.b64encode(public_bytes).decode("ascii"),
+})
+with patch("operator_auth._credential_read",
+           return_value={"CredentialBlob": credential_blob}):
+    from operator_auth import _load_keypair_with_storage
+    loaded, storage = _load_keypair_with_storage()
+    check("Unicode credential blob loads", loaded, (private_bytes, public_bytes))
+    check("Unicode credential blob wins primary storage", storage,
+          "credential_manager")
+
+with patch("operator_auth._credential_read",
+           return_value={"CredentialBlob": credential_blob.encode("utf-16-le")}):
+    loaded, storage = _load_keypair_with_storage()
+    check("UTF-16LE credential bytes load", loaded,
+          (private_bytes, public_bytes))
+    check("UTF-16LE credential bytes win primary storage", storage,
+          "credential_manager")
 
 
 # ── 7. Keypair persistence ──────────────────────────────────────────────────
@@ -213,7 +251,13 @@ with patch("operator_auth._load_keypair", return_value=(private_bytes, public_by
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as tmp:
     signed_file = Path(tmp) / "signed.marker"
     signed_file.write_text(token, encoding="utf-8")
-    check("signed marker detected", marker_is_signed(signed_file))
+    with patch("operator_auth._load_keypair",
+               return_value=(private_bytes, public_bytes)):
+        check("trusted signed marker detected", marker_is_signed(signed_file))
+
+    with patch("operator_auth._load_keypair",
+               return_value=(foreign_private, foreign_public)):
+        check("foreign signed marker is not trusted", not marker_is_signed(signed_file))
 
     unsigned_file = Path(tmp) / "unsigned.marker"
     unsigned_file.write_text('{"action": "test"}', encoding="utf-8")

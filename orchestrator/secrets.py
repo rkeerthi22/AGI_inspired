@@ -77,9 +77,18 @@ def credential_target(provider: str) -> str | None:
 def _credential_blob(record: dict[str, Any]) -> str | None:
     blob = record.get("CredentialBlob")
     if isinstance(blob, bytes):
-        try:
-            blob = blob.decode("utf-8")
-        except UnicodeDecodeError:
+        # pywin32 returns Unicode CredWrite payloads as UTF-16LE bytes. Older
+        # tooling may have stored raw UTF-8 bytes, so retain that compatibility.
+        encodings = ("utf-16-le", "utf-8") if b"\x00" in blob else ("utf-8", "utf-16-le")
+        for encoding in encodings:
+            try:
+                decoded = blob.decode(encoding)
+            except UnicodeDecodeError:
+                continue
+            if decoded.strip() and "\x00" not in decoded:
+                blob = decoded
+                break
+        else:
             return None
     return blob.strip() if isinstance(blob, str) and blob.strip() else None
 
@@ -105,3 +114,15 @@ def get_api_key(provider: str) -> str | None:
             pass
     value = os.environ.get(_ENVIRONMENT_KEYS[normalized], "").strip()
     return value or None
+
+
+def credential_manager_has_api_key(provider: str) -> bool:
+    """Report vault presence without returning or logging credential material."""
+    target = credential_target(provider)
+    if target is None or _win32cred is None:
+        return False
+    try:
+        record = _win32cred.CredRead(target, _win32cred.CRED_TYPE_GENERIC, 0)
+        return _credential_blob(record) is not None
+    except Exception:
+        return False

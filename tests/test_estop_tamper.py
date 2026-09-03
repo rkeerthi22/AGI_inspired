@@ -10,6 +10,7 @@ import sys
 import tempfile
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from unittest import mock
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "orchestrator"))
@@ -65,10 +66,20 @@ with tempfile.TemporaryDirectory() as td:
     # Produce a signed marker with a stale timestamp (5 hours ago, TTL 1 hour).
     stale_payload = {
         "issued_at": iso(datetime.now(timezone.utc) - timedelta(hours=5)),
-        "by": "operator", "ttl_hours": 1,
+        "by": "operator", "action": "authorize-clear", "ttl_hours": 1,
     }
     marker.write_text(execution_pause._signed_marker(stale_payload), encoding="utf-8")
     checks["stale clear marker triggers re-engagement"] = (
+        execution_pause.verify_pause_integrity() == "tamper_reengaged")
+    marker.unlink()
+
+    # Unsigned JSON can never authorize an absent ESTOP.
+    sentinel.unlink(missing_ok=True)
+    marker.write_text(json.dumps({
+        "issued_at": iso(datetime.now(timezone.utc)),
+        "by": "operator", "action": "authorize-clear", "ttl_hours": 1,
+    }), encoding="utf-8")
+    checks["unsigned clear marker triggers re-engagement"] = (
         execution_pause.verify_pause_integrity() == "tamper_reengaged")
     marker.unlink()
 
@@ -121,7 +132,8 @@ with tempfile.TemporaryDirectory() as td:
     execution_pause.authorize_canary()
     stale_canary = {
         "issued_at": iso(datetime.now(timezone.utc) - timedelta(hours=2)),
-        "by": "operator", "use": "single-connectivity-canary",
+        "by": "operator", "action": "authorize-canary",
+        "use": "single-connectivity-canary",
     }
     canary_marker.write_text(execution_pause._signed_marker(stale_canary), encoding="utf-8")
     try:
@@ -142,6 +154,46 @@ with tempfile.TemporaryDirectory() as td:
         malformed_blocked = True
     checks["malformed canary marker refused and consumed"] = (
         malformed_blocked and not canary_marker.exists())
+
+    # 10b. Well-formed but unsigned JSON is also refused and consumed.
+    canary_marker.write_text(json.dumps({
+        "issued_at": iso(datetime.now(timezone.utc)),
+        "by": "operator", "action": "authorize-canary",
+        "use": "single-connectivity-canary",
+    }), encoding="utf-8")
+    try:
+        execution_pause.consume_canary_authorization()
+        unsigned_blocked = False
+    except RuntimeError:
+        unsigned_blocked = True
+    checks["unsigned canary marker refused and consumed"] = (
+        unsigned_blocked and not canary_marker.exists())
+
+    # 10c. A valid signature for another purpose cannot be replayed as canary auth.
+    wrong_purpose = {
+        "issued_at": iso(datetime.now(timezone.utc)),
+        "by": "operator", "action": "authorize-clear", "ttl_hours": 1,
+    }
+    canary_marker.write_text(execution_pause._signed_marker(wrong_purpose),
+                             encoding="utf-8")
+    try:
+        execution_pause.consume_canary_authorization()
+        purpose_blocked = False
+    except RuntimeError:
+        purpose_blocked = True
+    checks["wrong-purpose signed marker refused and consumed"] = (
+        purpose_blocked and not canary_marker.exists())
+
+    # 10d. Signing failure cannot degrade into an unsigned authorization.
+    with mock.patch("operator_auth.sign_marker",
+                    side_effect=RuntimeError("signer unavailable")):
+        try:
+            execution_pause.authorize_canary()
+            signing_failed_closed = False
+        except RuntimeError:
+            signing_failed_closed = True
+    checks["signing failure creates no canary authorization"] = (
+        signing_failed_closed and not canary_marker.exists())
 
     # 11. No marker at all: refused.
     try:

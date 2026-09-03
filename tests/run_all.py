@@ -52,8 +52,9 @@ def _guarded_env(tier: str) -> dict[str, str]:
     # var and continues to use runs/health_events.jsonl. operator_cli status reads
     # RUNS/health_events.jsonl directly, so production reads are unaffected. The
     # live tier is intentionally un-redirected (it runs real provider calls).
-    env["AGI_HEALTH_EVENTS_PATH"] = str(
-        Path(tempfile.gettempdir()) / f"agi_test_health_events_{os.getpid()}.jsonl")
+    if tier in {"unit", "containment", "integration"}:
+        env["AGI_HEALTH_EVENTS_PATH"] = str(
+            Path(tempfile.gettempdir()) / f"agi_test_health_events_{os.getpid()}.jsonl")
     return env
 
 

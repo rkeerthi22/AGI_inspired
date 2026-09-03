@@ -98,7 +98,8 @@ microsoft-teams-api==2.0.14
 microsoft-teams-apps==2.0.13.4
 microsoft-teams-cards==2.0.14
 microsoft-teams-common==2.0.14
-moviepy==2.2.1
+# MoviePy 2.2.1 is intentionally excluded: it is unused by this repository and
+# requires Pillow<12, conflicting with hermes-agent and pdfplumber.
 msal==1.37.0
 multidict==6.7.1
 narwhals==2.24.0
