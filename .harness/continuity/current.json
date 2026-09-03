@@ -1,20 +1,20 @@
 {
   "schema_version": 2,
-  "brief_revision": 55,
-  "created_at": "2026-09-03T02:17:24.363505+00:00",
+  "brief_revision": 56,
+  "created_at": "2026-09-03T22:58:57.300539+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "5522926560ac6d7338340a794d06950b5c7928ce"
+    "based_on_head": "f9a07fe1728a240b210f530a02bd311fc2a13af6"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "immediate-cohort-actions-complete-post-cohort-backlog-open",
+    "phase": "post-cohort-backlog-1-4-done-security-batch-integrated",
     "status": "in_progress",
-    "next_action": "Choose the next separately authorized step: retry task 110, revisit failed windows M3/M5/M6/M7, or start the post-cohort backlog in order."
+    "next_action": "Security stack partially landed (operator-trust boundary, vaulted ARK_API_KEY, release preflight, CI pinning). Remaining open (each needs operator architectural decisions): host identity / engine-independent egress isolation (Job Object + outbound policy), tamper-evident off-machine audit retention, reproducible dependency hashes, independent critic evidence routing, sustained operational proof. Live verification of F104/F106 and the Anthropic->OpenAI failover transition still gated on an operator-authorized --controlled-window. Model-free only; nothing cleared for live execution (Munder boundary verdict + credential-rotation item still pending)."
   },
   "completed": [
     "Task 110 supported recovery and 2026-09-02 rerun remain verified live; the original launch defect is closed",
@@ -26,8 +26,11 @@
     "M5 executed as task 116 and failed mechanically on citecheck reachability",
     "M6 first attempt task 117 exposed the early-stop failover bug; rerun task 118 completed after the fix and failed normally",
     "M7 executed as task 119 and failed the frozen spec",
-    "Current deterministic gate remains 55/55 green after the September 3 failover repairs",
-    "Operator-facing docs and agent handoff were re-synced to the 2026-09-03 live cohort state"
+    "Deterministic gate is 61/61 green after the September 3 failover repairs, the F107-F109 hermeticity batch, and the operator-trust/preflight security batch",
+    "Operator-facing docs and agent handoff were re-synced to the 2026-09-03 live cohort state",
+    "F107-F109 hermeticity batch landed (4f773e6): protected-path masking silenced, test health events routed to a pid-scoped temp, test_f57 no longer pollutes production runs/",
+    "Operator-trust + release-preflight security batch landed (351104e, d8037f3) and independently re-verified by claude-code: unsigned/foreign/purpose-bound markers, fail-closed signing, UTF-16LE Credential Manager read/write; ARK_API_KEY vaulted in Windows Credential Manager and removed from the Hermes .env",
+    "Feature branch fast-forward merged to master (f9a07fe); model-free only, nothing cleared for live execution"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
@@ -38,7 +41,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "55/55 model-free suites green, continuity valid, a fresh supervised BytePlus canary succeeded on 2026-09-03, and the M3-M7 controlled windows were executed with the failover blockers repaired."
+    "detail": "61/61 model-free suites green (own run, exit 0); continuity valid; ARK_API_KEY vaulted in Windows Credential Manager and removed from the Hermes .env; ESTOP engaged. Model-free only -- no live execution cleared."
   },
   "references": [
     {
@@ -54,7 +57,7 @@
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "a8caaf4bd691f64e8d340024b158a4ef1c7d10042236f87ca1d7add7bd6ae8bf"
+      "sha256": "6b56302fce2ac2d7bcb785a91f1b736a857c331922d869bb36b6dba6c14a88ef"
     },
     {
       "path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
@@ -65,6 +68,11 @@
       "path": "workspace/validation/cohort_missions.json",
       "purpose": "Frozen cohort specs",
       "sha256": "cd139598cd4a7f08b678e97bab9b4677dc7fa5cd11fa14258ad7c5ed9d641f3f"
+    },
+    {
+      "path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
+      "purpose": "Security/preflight findings + carried-forward open-items tracker (failover raw-output gap A5)",
+      "sha256": "5a5796bb72f4212d67a64f8d242936c57f826865f9ca765003cd101be0c15772"
     }
   ]
 }
