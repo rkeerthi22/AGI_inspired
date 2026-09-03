@@ -41,6 +41,36 @@ class _TaskResult:
     status: str
 
 
+def _extract_missing_list(text: str) -> list:
+    """Parse the critic's structured 'MISSING:' block (weak-AI efficiency, F104)
+    into a clean list of concrete gaps. Returns [] when no parseable block is
+    present, so the caller falls back to injecting the raw prose objections (the
+    pre-F104 path) -- the change is strictly an improvement or a no-op.
+
+    The critic is a cheap model (same as manager, per F5) that we PROMPT to emit::
+
+        VERDICT: FAIL
+        MISSING:
+        - source URL for the Notion claim
+        - competitor pricing for Shopify
+
+    but it may not comply. Only explicitly bulleted ('- ' / '* ') or numbered
+    ('1.' / '1)') lines after a 'MISSING:' header are collected, so a trailing
+    context sentence or the 'VERDICT:' line itself is never misread as a gap.
+    This is the spec-compliance counterpart to F103's citation-evidence wiring: a
+    dumb model can act on 'fix items 1-3' but not on 'the brief felt incomplete'."""
+    m = re.search(r"MISSING:\s*(.*)", text or "", re.S | re.I)
+    if not m:
+        return []
+    items = []
+    for line in m.group(1).splitlines():
+        stripped = line.strip()
+        bm = re.match(r"(?:[-*•]|\d+[\.\)])\s+(.*)", stripped)
+        if bm and bm.group(1).strip():
+            items.append(bm.group(1).strip())
+    return items
+
+
 def _load_task(tid: int) -> dict:
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as c:
         c.row_factory = sqlite3.Row
@@ -96,10 +126,24 @@ def _run_research_task(context: _TaskContext) -> str:
     # (Evaluate â†’ next attempt, Â§2.1). Without this the feedback evaporates.
     prior_feedback = ""
     if row.get("critic_verdict") == "fail" and (row.get("critic_notes") or "").strip():
-        prior_feedback = (
-            "\n\nPREVIOUS ATTEMPT FAILED REVIEW. The reviewer's exact objections:\n"
-            f"{row['critic_notes'][:600]}\n"
-            "Address each objection specifically in this attempt.")
+        notes = row["critic_notes"]
+        missing = _extract_missing_list(notes)
+        if missing:
+            # F104: structured spec gaps (weak-AI efficiency). The critic was
+            # prompted to emit a 'MISSING:' bullet list; present it as a numbered
+            # checklist so a cheap model's retry targets concrete fixes instead of
+            # paraphrasing prose objections. Falls through to prose otherwise.
+            checklist = "\n".join(f"  [{i + 1}] {item}" for i, item in enumerate(missing))
+            prior_feedback = (
+                "\n\nPREVIOUS ATTEMPT FAILED REVIEW. The reviewer found these "
+                "specific gaps — your new attempt MUST close EVERY one:\n"
+                f"{checklist}\n"
+                "Do not resubmit until each numbered item above is addressed.")
+        else:
+            prior_feedback = (
+                "\n\nPREVIOUS ATTEMPT FAILED REVIEW. The reviewer's exact objections:\n"
+                f"{notes[:600]}\n"
+                "Address each objection specifically in this attempt.")
         # Mechanical citation evidence (weak-AI efficiency): the prior attempt's
         # citecheck produced an UNREACHABLE/OK list per URL — that is FACT, not the
         # critic's opinion of it. Feed it to the worker directly so a cheap model
@@ -203,6 +247,10 @@ def _run_research_task(context: _TaskContext) -> str:
             "as the blocking browser evidence."
         )
         fallback_block = ""
+        # web_extract/web_search are FORBIDDEN in this profile, so the generic
+        # web_extract-based citation self-check (defined in the else branch) does
+        # not apply -- citations here come from the rendered canonical page.
+        citation_selfcheck_block = ""
         tool_scope_block = (
             "IMPORTANT: this is a browser-only research task. Use ONLY browser tools to "
             "render and inspect the canonical page. Do NOT use file, terminal, requests, "
@@ -225,6 +273,29 @@ def _run_research_task(context: _TaskContext) -> str:
             "any file, and do not run any command except the requests/yt-dlp fallbacks above. "
             "A separate system persists your output; your job is only to research and reply "
             "with the deliverable markdown as your final message text, nothing else."
+        )
+        # F106 (weak-AI efficiency): the post-hoc citecheck already re-fetches every
+        # URL after submission and hard-fails on dead ones (F103 feeds that evidence
+        # back on retry). The one in-loop lever that needs no new tool and no ESTOP
+        # window is to tell the agentic worker -- which already has web_search /
+        # web_extract -- to self-confirm each cited URL was opened to a live page THIS
+        # run before finalizing. Attacks M5/task-116 (4/8 unreachable URLs cited from
+        # search snippets the worker never opened). Strictly additive: a model that
+        # ignores it is caught by the post-hoc gate exactly as before; one that
+        # complies fixes dead URLs before the gate, saving a failed retry.
+        citation_selfcheck_block = (
+            "\n\nCITATION SELF-CHECK BEFORE YOU FINALIZE: after you submit, a separate "
+            "mechanical check re-fetches every URL in your deliverable, and any "
+            "unreachable URL fails the review and triggers a full redo. The most common "
+            "review failure is a source URL pasted from a search snippet that was never "
+            "actually opened. So before you write the final deliverable, confirm that "
+            "EVERY URL you intend to cite is one you fetched to a live, working page THIS "
+            "run (via a web_search result you followed, or web_extract). If a URL you want "
+            "to cite returned 404, 403, a timeout, a block page, or any error, do NOT cite "
+            "it: replace it with a URL you did successfully load, or drop the fact and mark "
+            "it confidence 1 with a note that the source could not be reached. Every URL in "
+            "your final deliverable must be one you personally opened to a working page this "
+            "run."
         )
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
@@ -260,6 +331,7 @@ def _run_research_task(context: _TaskContext) -> str:
         f"error text is a FAIL.\n\n"
         f"{fallback_block}\n\n"
         f"{tool_scope_block}"
+        + (f"\n\n{citation_selfcheck_block}" if citation_selfcheck_block else "")
         + (f"\n\n{compliance_block}" if compliance_block else "")
     )
     # F8/F13 (docs/HARDENING.md): Ollama reports no $, so token count is the real

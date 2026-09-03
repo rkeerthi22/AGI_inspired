@@ -41,6 +41,19 @@ def _guarded_env(tier: str) -> dict[str, str]:
     env["PYTHONPATH"] = str(TESTS / "live_guard") + os.pathsep + env.get("PYTHONPATH", "")
     env["AGI_TEST_TIER"] = tier
     env["AGI_LIVE_EXECUTION_ALLOWED"] = "0"
+    # F108 (2026-09-03): route test health events away from the production
+    # runs/health_events.jsonl. Without this, unit-tier tests that exercise the
+    # estop/mailbus/hive_quiesce/prediction subsystems write their events to the
+    # DEFAULT production path, and `agi status` (newest-event-per-subsystem) then
+    # replays test artifacts as live "recorded subsystem warnings" -- crying wolf.
+    # Measured: one run of test_estop_tamper added 4 estop/tamper_recovery events
+    # to the production log. pid-scoped under the system temp so one gate run
+    # shares one file that lives outside the repo; production never sets this env
+    # var and continues to use runs/health_events.jsonl. operator_cli status reads
+    # RUNS/health_events.jsonl directly, so production reads are unaffected. The
+    # live tier is intentionally un-redirected (it runs real provider calls).
+    env["AGI_HEALTH_EVENTS_PATH"] = str(
+        Path(tempfile.gettempdir()) / f"agi_test_health_events_{os.getpid()}.jsonl")
     return env
 
 

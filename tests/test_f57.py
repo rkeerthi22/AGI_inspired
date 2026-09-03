@@ -395,6 +395,19 @@ def stub_row(task_id=1, pass_criteria="Must cover X"):
     return {"task_id": task_id, "pass_criteria": pass_criteria}
 
 
+# F109 (2026-09-03): temp_root_with_ledgerbook()'s scope ended at §2k's cleanup
+# (line 387), so EVERY §3 sub-section (3a-3h) called run_critic against the REAL
+# ev.RUNS/rc.RUNS and wrote every task{N}_critic.usage.json / _citation_evidence.json
+# into the production runs/ dir on each gate run (measured: task1 + task11..15/99
+# artifacts gained fresh mtimes across one test_f57 run). run_critic writes via
+# evaluation's module-global RUNS (= ev.RUNS). Redirect ev.RUNS/rc.RUNS to a temp
+# for all of §3; §3g manages its OWN temp internally and restores to this one on undo.
+_f57_runs_tmp = tempfile.mkdtemp(prefix="f57_runs_")
+_prev_ev_runs_3 = ev.RUNS
+_prev_rc_runs_3 = rc.RUNS
+ev.RUNS = Path(_f57_runs_tmp)
+rc.RUNS = Path(_f57_runs_tmp)
+
 # 3a: Mechanical hard-fail skips the LLM.
 mp = _Patch()
 
@@ -584,6 +597,11 @@ check("patching execution.ollama_chat routes the critic call",
 check("patched call was made against the critic model",
       calls_stub.calls[0][0], "m")
 mp.undo()
+
+# F109: restore the §3 temp RUNS redirection set before §3a.
+ev.RUNS = _prev_ev_runs_3
+rc.RUNS = _prev_rc_runs_3
+shutil.rmtree(_f57_runs_tmp, ignore_errors=True)
 
 # §4. Cross-module dependency shape ────────────────────────────────────────
 

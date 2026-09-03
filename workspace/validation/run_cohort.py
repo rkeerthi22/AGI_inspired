@@ -59,6 +59,37 @@ def validation_roles() -> dict:
     return roles
 
 
+def _warn_byteplus_health() -> None:
+    """Surface the most recent BytePlus canary result before a cohort window
+    opens, so a quota-blocked primary worker is known upfront rather than
+    discovered mid-run (Q2#5; M6 / task 117 died this way).
+
+    Non-blocking by design: the cohort worker is BytePlus, but failover to
+    ollama-cloud (a separate quota pool) may still complete a mission, and the
+    operator already authorized the --controlled-window. A hard refusal on a
+    no-live-call (necessarily stale) signal would block authorized work that
+    failover could have saved. The warning gives the operator the fact and the
+    decision; it does not take it from them. Reads runs/health_events.jsonl via
+    health_events.last_provider_canary (no live provider call)."""
+    import health_events
+    ev = health_events.last_provider_canary("byteplus_coding")
+    if not ev:
+        print("WARNING: no BytePlus connectivity canary on record -- cohort worker "
+              "health unverified. Consider running "
+              "byteplus_connectivity_canary.py --authorize-single-estop-bypass first.")
+        return
+    ts = ev.get("timestamp", "?")
+    if ev.get("ok") is True:
+        print(f"info: last BytePlus canary OK at {ts}.")
+    else:
+        cat = ev.get("error_category", "unknown")
+        retryable = ev.get("retryable")
+        print(f"WARNING: last BytePlus canary FAILED at {ts} "
+              f"(error_category={cat}, retryable={retryable}). The cohort worker is "
+              "BytePlus; it will fail over to ollama-cloud -- expect degraded output "
+              "or failures. Run a fresh canary to re-establish health.")
+
+
 def task_row(tid: int):
     with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as con:
         con.row_factory = sqlite3.Row
@@ -173,6 +204,8 @@ def main():
         raise SystemExit("ABORT: pass --controlled-window to enforce dispatcher isolation")
     if not pause_engaged():
         raise SystemExit("ABORT: ESTOP must be engaged before opening a controlled window")
+
+    _warn_byteplus_health()
 
     ARTIFACTS_DIR.mkdir(parents=True, exist_ok=True)
     summary = {"started_at": datetime.now().isoformat(),

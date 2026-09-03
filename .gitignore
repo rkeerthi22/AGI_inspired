@@ -16,6 +16,16 @@ prediction_machine/data/*.db-shm
 prediction_machine/data/*.db-wal
 backups/
 
+# Claude Code per-machine local settings (F107, 2026-09-03): never committed -- holds
+# machine-local paths/permissions. `.claude/` is a PROTECTED_PATH (F52) to guard the tracked
+# .claude/HANDOFF.md; settings.local.json is intentionally local. Listing it in the VERSIONED
+# ignore moves it out of the "hidden by an UNVERSIONED rule" bucket (the operator's global
+# core.excludesFile masks it in every repo) into the auditable "hidden by a versioned rule"
+# bucket, so the fs-guard's _masked_under_protected() (F47) stops flagging it as a masking
+# attack on every snapshot. The guard's real job -- catching masks on TRACKED protected files,
+# which `git ls-files` sees regardless of ignores -- is untouched.
+.claude/settings.local.json
+
 # Agent scratch + ingested raw data (audit lives in the ledger, not here).
 # Track the folder READMEs so the layout survives a clone; ignore everything else.
 workspace/*
