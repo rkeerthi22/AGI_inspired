@@ -1,103 +1,119 @@
 # Canonical Project State - AGI_like Harness
 
-**Last Updated:** 2026-09-02T20:38:00Z
-**Phase:** Post-incident repair and enterprise-gap hardening complete; cohort resumable under operator authorization
+**Last Updated:** 2026-09-03T02:17:24Z
+**Phase:** Immediate cohort actions complete through M7; post-cohort backlog open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Live Verification:** `python -B tests/run_all.py` -> `55/55` green | continuity and operator preflight re-verified | supervised BytePlus canary succeeded and is now persisted through `agi status`
+**Live Verification:** `python -B tests/run_all.py` -> `55/55` green | `python orchestrator/continuity.py recover` valid | `python -B orchestrator/operator_cli.py status --json` clean | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
 
 ---
 
 ## 1. Executive Summary
 
-The 2026-09-02 launch-failure incident is repaired, regression-covered, and
-documented. The highest-value remaining enterprise gaps that were still code-
-addressable in this session are now also closed: immediate dead-owner recovery,
-redirect-safe citecheck egress, repo-native Windows CI wiring, persisted
-provider canary observability, and a stdlib-compatibility fix for the
-credential-vault `secrets.py` shadowing defect. The harness is freshly
-live-proven, but the first resumed aborted seed is still blocked by runtime
-provider behavior rather than by the original launcher fault.
+Thursday, September 3, 2026 closed the immediate live action chain that was
+still open on September 2.
 
-Live state verified on 2026-09-02:
+What is now true in live state:
 
-| Item | Status | Evidence |
+| Scope | Status | Evidence |
 | :--- | :---: | :--- |
-| Task 110 recovery | VERIFIED, THEN RETRIED LIVE | Recovered through lease expiry plus `reconcile_interrupted_tasks()`, then rerun in a controlled window on 2026-09-02; current row is `infra_failed`, `attempt_count=1` |
-| Tasks 111-113 | VERIFIED | Remain legitimate queued seeds; no hand-editing |
-| F101 fix | VERIFIED | `task_runner.py` now closes worker-launch exceptions as `infra_failed` instead of leaving rows `running` |
-| Immediate dead-owner recovery | VERIFIED | Task rows now carry owner PID + process-start identity; reconcile no longer waits for lease expiry when the recorded owner is provably gone |
-| Redirect-safe citecheck | VERIFIED | Every redirect target is revalidated before fetch; public -> private hops are blocked fail-closed |
-| Synthesis mission accounting | VERIFIED | `workflow.run_synthesis()` writes `task<TID>_mission.usage.json` through `evaluation.build_mission_usage()` |
-| Windows CI workflow | VERIFIED | `.github/workflows/model_free_gate.yml` runs `scripts/bootstrap.ps1` and `scripts/ci.ps1` on `windows-latest` |
-| Full model-free gate | VERIFIED | `55/55` suites green |
-| Continuity brief | VERIFIED | Current continuity revision re-recovers cleanly with no live discrepancies |
-| BytePlus connectivity canary | VERIFIED LIVE | `2026-09-02T20:20:41Z`: `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, `5` input tokens, `1245` output tokens, `12.904s`, persisted to `runs/health_events.jsonl` and surfaced by `agi status` |
-| Task 110 rerun blocker | VERIFIED LIVE | `2026-09-02T20:36:19Z` controlled rerun cleared the old `secrets.token_bytes` crash, then hit real runtime behavior: quota on `ollama/kimi-k2.7-code:cloud`, skip of same quota group, unusable output on `anthropic/claude-sonnet-5`, final status `infra_failed` |
+| Task 110 recovery | VERIFIED LIVE | Supported recovery already completed on 2026-09-02; row is no longer stranded in `running` |
+| Hermes provider-id repair | VERIFIED | `14dbafe` changed Anthropic to native `anthropic`, OpenAI to `openai-api`, and aligned finalizer mapping |
+| Unavailable-rung failover hardening | VERIFIED | `5522926` teaches both research and synthesis failover loops to continue past missing optional provider credentials or unsupported provider rungs |
+| Full model-free gate | VERIFIED | `55/55` suites green after both repairs |
+| Supervised BytePlus canary | VERIFIED LIVE | `2026-09-03T01:53:09Z`, `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, request id `02178840037366712014becacfaf8a37949eaec3c813975305d82` |
+| M3 / task 114 | FAILED | Real frozen-spec fail; deliverable did not explicitly account for all required blocked review platforms and attempts |
+| M4 / task 115 | PASSED | Clean synthesis pass |
+| M5 / task 116 | FAILED | Mechanical citecheck fail: `4/8` cited URLs unreachable |
+| M6 / task 117 | INFRA_FAILED | First attempt exposed the early-stop failover bug after BytePlus quota exhaustion and missing Anthropic credentials |
+| M6 rerun / task 118 | FAILED | After the failover fix, the same mission completed to a normal graded failure instead of dying in execution |
+| M7 / task 119 | FAILED | Real frozen-spec fail; missing explicit `not publicly disclosed` cells, weak source coverage, and a false FlowGPT availability claim |
+
+The immediate backlog was completed honestly: the canary ran, the windows ran,
+and the first newly exposed blocker was fixed before the sequence continued.
 
 ---
 
-## 2. What Changed Since The Prior Summary
+## 2. What Was Corrected
 
-The prior `CURRENT_STATE.md` snapshot was stale in three important ways:
+Two live-path assumptions from the September 2 state were wrong or incomplete:
 
-1. It still described the project as awaiting pre-canary operator authorization
-   after the operator-CLI review checkpoint.
-2. It still reported `46/46` model-free suites instead of the current
-   `55/55`.
-3. It did not include the 2026-09-02 launch-failure repair, task-110 recovery,
-   the post-recovery live rerun result, synthesis-accounting proof, immediate
-   dead-owner recovery, or redirect-safe citecheck hardening.
+1. Task 110 was not first blocked by an Anthropic output-shape defect. The
+   immediate cause was stale Hermes-facing provider selectors
+   (`custom:anthropic`, `custom:openai`), now repaired in `14dbafe`.
+2. Once the real Anthropic rung was reached, the next failure was not malformed
+   model output. It was missing Anthropic credentials, and the failover loop
+   aborted too early instead of continuing to later rungs. That is now repaired
+   in `5522926`.
 
-Those are now part of the canonical state and are also recorded in
-`.harness/continuity/current.json` after this sync.
+Both fixes are regression-covered and were re-verified by the full `55/55`
+green gate before more live cohort work was spent.
 
 ---
 
-## 3. Current Gate And Safety Invariants
+## 3. Current Safety And Runtime Invariants
 
 * ESTOP remains engaged between controlled windows.
-* Each further mission window requires separate operator authorization.
-* No F63 controller or prompt changes are allowed during the cohort.
-* Rows 111-113 are legitimate queued seeds and must remain untouched except by
-  supported runtime paths.
-* Live repository, runtime, and process state outrank historical documents.
+* No live runlock is present after the cohort windows.
+* Isolation restored cleanly after each controlled window.
+* Rows 111-113 remain untouched legitimate queued seeds.
+* Live repository, process, and operator status outrank historical documents.
 
-Provider status is no longer historical only. A supervised BytePlus canary on
-2026-09-02 succeeded from a clean checkpoint and is now persisted as a provider
-health event that `agi status` surfaces without probing the network itself.
+Current operator status on `2026-09-03T02:15:44Z`:
+
+* git clean, `ahead=2`, `behind=0`
+* continuity revision `54`, valid, no discrepancies
+* ESTOP engaged, no canary marker present
+* runlock absent
+* Munder quiesced
+
+Recorded subsystem warnings still visible through `agi status` are not active
+live probes. They are historical health events that still need triage:
+
+* `prediction`: `No module named 'prediction_machine'`
+* `mailbus`: `[WinError 32] Sharing violation`
+* `hive_quiesce`: `AGI tree dirtied during window`
+
+The repeated runtime warning about `.claude/settings.local.json` being masked by
+an unversioned exclude source also remains unresolved.
 
 ---
 
 ## 4. Remaining Gaps
 
-The control-plane hardening is materially stronger than the 2026-08-31
-enterprise review reflects, but several enterprise-grade requirements still
-cannot be truthfully claimed complete in one coding pass:
+Control-plane gaps:
 
-* no centralized tamper-evident audit retention layer yet;
-* no measured SLO / alert pipeline yet;
-* no restricted worker service identity or engine-independent egress sandbox;
-* no 30-60 day production-like evidence window, external penetration test, or
-  long-mission soak evidence.
-* only a single supervised live provider proof exists so far; this is current
-  evidence, not yet a reliability history.
+* protected-path masking warning still fires during cohort windows
+* recorded subsystem health events need post-cohort triage and either repair or
+  suppression if they are expected
+* provider capacity is still externally constrained; BytePlus and Ollama cloud
+  quota exhaustion remain real operating conditions
+* Anthropic and OpenAI credentials are not currently usable in this environment
 
-This means the correct project label is "strong enterprise-candidate
-groundwork," not "enterprise-grade finished."
+Enterprise gaps:
+
+* no centralized tamper-evident audit retention layer yet
+* no measured SLO / alert pipeline yet
+* no stronger service-identity or engine-independent egress sandbox yet
+* no long-run reliability window, restore-drill evidence, or external review yet
+
+Product-quality gap:
+
+* of the remaining frozen windows opened on September 3, only `M4` passed
+
+This remains a strong enterprise-candidate control prototype, not an
+enterprise-finished product.
 
 ---
 
 ## 5. Next Exact Action
 
-1. Protect the reviewed checkpoint off-machine and quiesce all development
-   agents before the next live window.
-2. Diagnose and repair the `anthropic/claude-sonnet-5` unusable-output path
-   exposed by the task `110` rerun before spending another controlled retry on
-   that seed.
-3. After that fix, choose the next separately authorized live action:
-   retry task `110` again, or open the next frozen cohort window (`M3` onward).
-4. Keep ESTOP engaged between windows and verify the post-window state with
-   `agi status`.
-5. After the cohort closes, focus the next enterprise pass on audit retention,
-   metrics/SLOs, restore-drill evidence, and the stronger worker isolation
-   boundary.
+1. Push the September 3 code and documentation sync.
+2. If another live validation step is authorized, choose explicitly between:
+   task `110` retry, or targeted revisits of failed windows `M3`, `M5`, `M6`,
+   and `M7`.
+3. Do not spend another live attempt without acknowledging provider reality:
+   BytePlus quota can exhaust, Anthropic/OpenAI credentials are currently
+   absent, and the local gemma rung may be the only remaining completion path.
+4. Start the post-cohort backlog in order: protected-path warning, preflight /
+   health-warning triage, spec-lint / crying-wolf cleanup, hermeticity audit,
+   then the P1 security stack.

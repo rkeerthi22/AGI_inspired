@@ -1,34 +1,33 @@
 {
   "schema_version": 2,
-  "brief_revision": 54,
-  "created_at": "2026-09-02T20:38:14.647146+00:00",
+  "brief_revision": 55,
+  "created_at": "2026-09-03T02:17:24.363505+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "93e0eb8c096db2d437e0fc82a7dbdd28dc7745f0"
+    "based_on_head": "5522926560ac6d7338340a794d06950b5c7928ce"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "post-incident-repair-enterprise-gap-hardening-complete-cohort-resumable",
+    "phase": "immediate-cohort-actions-complete-post-cohort-backlog-open",
     "status": "in_progress",
-    "next_action": "Diagnose and repair the anthropic/claude-sonnet-5 unusable-output path exposed by the task 110 rerun before spending another controlled retry or opening M3."
+    "next_action": "Push the 2026-09-03 code and doc sync, then either spend a separately authorized retry on task 110 / targeted failed windows or start the post-cohort backlog in order."
   },
   "completed": [
-    "Task 110: lease-expiry recovery verified, then rerun in a controlled window on 2026-09-02; current row is infra_failed after real quota/failover behavior, not the original launch defect",
-    "Synthesis mission accounting regression-proven: run_synthesis writes mission.usage.json and reconciles exactly (8 checks)",
-    "HARDENING.md F101 registered: 2026-09-02 launch-failure root cause, fix 2de64b5, supported-path repair",
-    "M1 passed (task 106); M2 passed (task 109); full gate 54/54 green at b6fef62",
-    "Operator-facing documentation synced: CURRENT_STATE updated, stale live-run handoff superseded, ACTIVE_WORK completion rule corrected to 55/55",
-    "Immediate dead-owner recovery landed: task rows now carry owner process identity and reconcile no longer waits for lease expiry when the owner is provably gone",
-    "Citecheck redirect hardening landed: every redirect target is revalidated and public-to-private hops are blocked fail-closed",
-    "Repo-native Windows CI workflow added: .github/workflows/model_free_gate.yml",
-    "Fresh full gate green: 55/55 suites passed after the new hardening",
-    "Provider observability landed: connectivity canary results now persist to health_events and surface through agi status",
-    "Supervised BytePlus connectivity canary succeeded on 2026-09-02 and is now visible through agi status (byteplus_coding / ark-code-latest)",
-    "Credential-vault compatibility fix landed: orchestrator/secrets.py now exposes stdlib-compatible token helpers so downstream imports of secrets.token_bytes no longer crash the worker path"
+    "Task 110 supported recovery and 2026-09-02 rerun remain verified live; the original launch defect is closed",
+    "Hermes provider-id repair landed in 14dbafe: Anthropic uses native 'anthropic', OpenAI uses 'openai-api', and retrieval finalization maps those selectors back to harness provider names",
+    "Failover hardening landed in 5522926: worker and synthesis paths now continue past missing optional provider credentials or unsupported provider rungs",
+    "Fresh supervised BytePlus canary succeeded on 2026-09-03 at 01:53:09Z (byteplus_coding / ark-code-latest)",
+    "M3 executed as task 114 and failed the frozen spec",
+    "M4 executed as task 115 and passed",
+    "M5 executed as task 116 and failed mechanically on citecheck reachability",
+    "M6 first attempt task 117 exposed the early-stop failover bug; rerun task 118 completed after the fix and failed normally",
+    "M7 executed as task 119 and failed the frozen spec",
+    "Current deterministic gate remains 55/55 green after the September 3 failover repairs",
+    "Operator-facing docs and agent handoff were re-synced to the 2026-09-03 live cohort state"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
@@ -39,23 +38,28 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "55/55 model-free suites green, continuity valid, supervised BytePlus canary succeeded, and task 110 has now been live-rerun to the next real blocker."
+    "detail": "55/55 model-free suites green, continuity valid, a fresh supervised BytePlus canary succeeded on 2026-09-03, and the M3-M7 controlled windows were executed with the failover blockers repaired."
   },
   "references": [
     {
       "path": "docs/HARDENING.md",
-      "purpose": "F101 incident registry entry",
-      "sha256": "344a293e8eb81e200ab40c0f7b7b3b76a6d917c2be42b7449794fcda1ca55579"
+      "purpose": "F101 and F102 incident registry entries",
+      "sha256": "3b51017aa0b563131eba4e7a63407f3c085d3bd22001e7d21bac4d2b20f1bc89"
     },
     {
-      "path": "tests/test_critical_path_regressions.py",
-      "purpose": "Launch-failure + synthesis-accounting regressions",
-      "sha256": "c1bd9c81fa169639f7d6013e9042a8595551c9d0bd6ca946438c8a242456a7be"
+      "path": "tests/test_fallback_chain.py",
+      "purpose": "Provider-id and unavailable-rung failover regressions",
+      "sha256": "78c33a474188220138ba3eab32c726ebc47ecf63d88c9e664651d8e15420f87c"
     },
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "b056a6e097f7cfe701eba7a3040f7f2569ad8400bcb87bab84b0a734d54a87ce"
+      "sha256": "1806fc3601ec78f9612e758791d4acd89b865fca8033b7c4d421da6fb32a9f6c"
+    },
+    {
+      "path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "purpose": "Cross-agent September 3 handoff",
+      "sha256": "cd1145c6119d950768ddad3cd14d31b5f5613ea11fdc48a0cf7f59305a920d00"
     },
     {
       "path": "workspace/validation/cohort_missions.json",

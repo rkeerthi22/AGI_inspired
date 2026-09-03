@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-02T21:02:41Z",
+  "last_updated": "2026-09-03T02:17:24Z",
   "active_agents": [
     {
       "agent": "claude-code",
@@ -12,8 +12,8 @@
       "last_update": "2026-09-02T20:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
-      "notes": "Historical implementation details remain in docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff: 55/55 green, BytePlus canary succeeded, task 110 rerun now blocked by Anthropic unusable output."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "notes": "Historical implementation details remain in docs/CODEX_HANDOFF_2026-09-02_ARCHITECTURE_COMPARISON.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff: 55/55 green, fresh BytePlus canary succeeded, M3-M7 executed, Hermes provider IDs repaired, and unavailable-rung failover hardening landed."
     },
     {
       "agent": "hermes",
@@ -25,8 +25,8 @@
       "last_update": "2026-09-02T10:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
-      "notes": "Historical implementation details remain in docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "notes": "Historical implementation details remain in docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
     },
     {
       "agent": "codex",
@@ -38,8 +38,8 @@
       "last_update": "2026-09-01T02:55:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
-      "notes": "Historical implementation details remain in docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md and later Codex handoffs. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "notes": "Historical implementation details remain in docs/CODEX_HANDOFF_2026-09-01_MUNDER_REMEDIATION.md and later Codex handoffs. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
     },
     {
       "agent": "deepseek-cade",
@@ -51,8 +51,8 @@
       "last_update": "2026-08-31T03:55:00Z",
       "status": "completed",
       "blocked_by": "temporarily unavailable (operator instruction 2026-08-31)",
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
-      "notes": "Historical implementation details remain in docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "notes": "Historical implementation details remain in docs/DEEPSEEK_HANDOFF_2026-08-31_MAILBUS.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
     },
     {
       "agent": "claude-code",
@@ -64,8 +64,8 @@
       "last_update": "2026-09-02T10:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
-      "notes": "Historical review details remain in docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "notes": "Historical review details remain in docs/reviews/CLAUDE_OPERATOR_CLI_REVIEW_2026-09-01.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
     },
     {
       "agent": "gemini-cli",
@@ -78,8 +78,8 @@
       "last_update": "2026-09-02T10:00:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-02_POST_CANARY_AND_TASK110.md",
-      "notes": "Historical review details remain in docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md. Current shared runtime truth is the 2026-09-02 post-canary/task110 handoff."
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
+      "notes": "Historical review details remain in docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
     }
   ],
   "coordination_rules": [

@@ -2441,3 +2441,48 @@ owner-process identity in `start_task` so reconcile can recover immediately
 when the recorded owner is provably dead, instead of waiting out the lease.
 
 · `orchestrator/task_runner.py:300` · commit `2de64b5`
+## F102 - optional provider unavailability aborted failover before later rungs - **P1 - PROVEN, found + fixed 2026-09-03**
+
+Live incident: task 117 (the first `M6` attempt on 2026-09-03) exhausted the
+BytePlus rung, exhausted the shared Ollama-cloud quota group, then reached
+`anthropic/claude-sonnet-5` after the Hermes provider-id repair. That rung did
+not return malformed model text. It failed because no Anthropic credential was
+available in the environment. `worker_with_failover()` advanced only on quota
+text, so the chain stopped at rung 4 and never tried the later OpenAI or local
+gemma rungs. The same latent rule existed in `synthesis_with_failover()` for
+typed `AUTHENTICATION`, `AUTHORIZATION`, and `UNSUPPORTED_PROVIDER` errors.
+
+Root cause: F9's original implementation encoded "only quota continues" into
+both failover loops. That matched the first observed 429 problem, but it became
+too narrow once the chain deliberately included optional providers and a local
+last resort. A missing key or unsupported optional rung is a provider-
+availability failure, not mission content, and treating it as terminal turned
+later configured rungs into dead code.
+
+Fix:
+
+* `worker_with_failover()` now classifies clear provider-unavailable Hermes
+  failures from the usage/process evidence (`No Anthropic credentials found`,
+  `No OpenAI credentials found`, missing auth config, unknown provider, missing
+  SDK, unregistered provider) and continues to the next rung when one exists.
+* `synthesis_with_failover()` now does the same for typed
+  `AUTHENTICATION`, `AUTHORIZATION`, and `UNSUPPORTED_PROVIDER` errors.
+* Genuine unusable output remains terminal; this change is not a blind
+  retry-on-anything broadening.
+
+Live proof: before the fix, task 117 ended `infra_failed` in execution after
+BytePlus quota exhaustion and missing Anthropic credentials. After the fix, the
+rerun task 118 completed the same `M6` window to a normal graded `failed`
+outcome instead of dying in the failover path.
+
+Regression: `tests/test_fallback_chain.py` now proves both the worker and
+synthesis paths continue from BytePlus quota through missing Anthropic/OpenAI
+credentials to the local gemma rung. The full deterministic gate remains
+`55/55 suites green`.
+
+Related September 3 correction: task 110's first post-recovery blocker was not
+an Anthropic output-shape bug. Its immediate cause was stale Hermes-facing
+provider selectors (`custom:anthropic`, `custom:openai`), repaired separately
+in commit `14dbafe`.
+
+`orchestrator/execution.py` | `tests/test_fallback_chain.py` | commit `5522926`
