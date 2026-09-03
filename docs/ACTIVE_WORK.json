@@ -89,6 +89,6 @@
     "4. All agents must inspect ACTIVE_WORK.json and AGENTS.md before modifying any file.",
     "5. An agent must update its handoff when stopping, being quota-blocked, or transferring ownership.",
     "6. Completion requires evidence: files exist, full model-free gate green (55/55 suites), continuity validates, handoff updated.",
-    "7. Edit/Write to S:/AGI_like from hive agents must pass the enforce.js ownership check; deny + audit on conflict."
+    "7. Hive agent edits to S:/AGI_like are gated at window-open time by cohort_hive_quiesce.py's process/fleet inventory; per-edit ownership is convention-based per rules 1-4 (no enforce.js file exists — verified absent 2026-09-03)."
   ]
 }

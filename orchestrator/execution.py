@@ -354,6 +354,7 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
     out, usage, cfg_used = "", {}, candidates[0]
     dead_groups: set[str] = set()          # F39: quota pools already known exhausted
     tw = trajectory.active()                # P0: may be None if called outside a task
+    last_failure_reason: str | None = None  # carried forward so failover_attempted records the real reason
     for i, cfg in enumerate(candidates):
         grp = _quota_group(cfg)
         if grp and grp in dead_groups:
@@ -378,7 +379,7 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
         elif i > 0 and tw:
             tw.failover_attempted(candidates[i - 1]["provider"],
                 candidates[i - 1]["model"], cfg["provider"], cfg["model"],
-                reason="quota_exhausted", rung=i + 1)
+                reason=last_failure_reason or "quota_exhausted", rung=i + 1)
         attempt_path = usage_path if i == 0 else usage_path.with_name(
             f"{usage_path.stem}_fallback{i}{usage_path.suffix}")
         timeout = LOCAL_FALLBACK_TIMEOUT_S if _is_local_model(cfg) else WORKER_TIMEOUT_S
@@ -396,6 +397,7 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
                    f"(rung {i+1}/{len(candidates)})")
             return out, usage, cfg_used, False
         failure_reason = _worker_failover_reason(out, usage)
+        last_failure_reason = failure_reason  # for the next rung's failover_attempted event
         more = i + 1 < len(candidates)
         if failure_reason == "quota_exhausted":
             if tw:

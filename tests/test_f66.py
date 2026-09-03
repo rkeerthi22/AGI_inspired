@@ -95,7 +95,10 @@ test_tmp_root = ROOT / ".tmp"
 test_tmp_root.mkdir(parents=True, exist_ok=True)
 original_tempdir = tempfile.tempdir
 try:
-    with tempfile.TemporaryDirectory(dir=test_tmp_root) as browser_tmp:
+    # ignore_cleanup_errors: the browser subprocess's stderr handle can lag
+    # process termination on Windows (WinError 32); the .tmp root is disposable.
+    with tempfile.TemporaryDirectory(dir=test_tmp_root,
+                                     ignore_cleanup_errors=True) as browser_tmp:
         tempfile.tempdir = browser_tmp
         try:
             fixture_url = f"http://127.0.0.1:{fixture_server.server_port}/pricing"

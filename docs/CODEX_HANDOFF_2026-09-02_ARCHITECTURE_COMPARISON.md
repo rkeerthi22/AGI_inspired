@@ -7,6 +7,19 @@
 **Working Tree:** Clean
 **Safety:** ESTOP engaged | Zero live execution | **54/54** model-free suites green
 
+> **⚠ Correction (2026-09-03, Claude Code):** This doc's "Safety / fail-closed"
+> (4.2) and "Multi-agent coordination" (3.2) scores cite **`enforce.js`** as a
+> live control. `enforce.js` does not exist on disk (verified absent,
+> not git-tracked). It survives only as a legacy command-line detection needle
+> in `cohort_hive_quiesce.py` and a (now-corrected) coordination rule in
+> `ACTIVE_WORK.json`. The real quiescence gate is `cohort_hive_quiesce.py`'s
+> psutil process inventory + fleet-status check at window-open time. There is
+> no per-edit ownership enforcement; ownership is convention-based. Treat the
+> 4.2 / 3.2 scores as inflated by this phantom. Additionally, Action 2's
+> recommended `hermes_provider: custom:anthropic` was the stale selector that
+> caused task110's "Unknown provider" failure (repaired in `14dbafe`); the
+> correct value is the native `anthropic` id.
+
 ---
 
 ## 1. Context: What Happened Today (Enterprise Boost)

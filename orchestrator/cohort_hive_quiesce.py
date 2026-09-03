@@ -66,6 +66,9 @@ DEV_CLI_BINARIES = frozenset({
     "gemini", "gemini.exe",
     "cursor", "cursor.exe",
 })
+# Command-line needles used to identify Munder Difflin hive processes in the
+# psutil inventory. "enforce.js" is a legacy detection signature, not a file
+# the harness loads (verified absent 2026-09-03).
 HIVE_MARKER_NEEDLES = (
     "cth-hook", "hive-proxy", "hive-node", "enforce.js",
     "munderstate", "munder-difflin",

@@ -18,5 +18,5 @@
 * **ESTOP Discipline:** Never disengage ESTOP without an authorized `--controlled-window` execution path.
 * **Single Write Scope:** Never edit files outside your assigned write scope in `docs/ACTIVE_WORK.json`.
 * **Zero Live Runs During Quota Blocks:** Respect upstream provider quota limits (BytePlus HTTP 429).
-* **Deterministic Testing:** Ensure all 41 test suites (`python tests/run_all.py`) pass before handoff.
+* **Deterministic Testing:** Ensure `python tests/run_all.py` reports all suites green with zero `[FAIL]` lines before handoff (count is dynamic, currently 55 — never match a hardcoded number).
 * **Handoff Compliance:** Update your handoff document following [`docs/HANDOFF_PROTOCOL.md`](docs/HANDOFF_PROTOCOL.md) upon session end or context compaction.
