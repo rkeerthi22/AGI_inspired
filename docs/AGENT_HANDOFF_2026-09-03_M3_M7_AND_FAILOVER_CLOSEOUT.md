@@ -168,14 +168,13 @@ Those are not reasons to rewrite history. They are the real remaining work.
 
 ## 7. What The Next Agent Should Do
 
-1. Push the September 3 code and doc sync.
-2. If another live action is authorized, choose deliberately between:
+1. If another live action is authorized, choose deliberately between:
    * retrying task `110`
    * targeted work on failed windows `M3`, `M5`, `M6`, `M7`
-3. Do not spend another live attempt without acknowledging provider capacity:
+2. Do not spend another live attempt without acknowledging provider capacity:
    BytePlus can exhaust, Anthropic/OpenAI are currently unavailable, and local
    gemma may be the last remaining rung.
-4. Start the post-cohort backlog in order:
+3. Start the post-cohort backlog in order:
    * protected-path warning cleanup
    * preflight / health-warning triage
    * spec lint

@@ -107,13 +107,12 @@ enterprise-finished product.
 
 ## 5. Next Exact Action
 
-1. Push the September 3 code and documentation sync.
-2. If another live validation step is authorized, choose explicitly between:
+1. If another live validation step is authorized, choose explicitly between:
    task `110` retry, or targeted revisits of failed windows `M3`, `M5`, `M6`,
    and `M7`.
-3. Do not spend another live attempt without acknowledging provider reality:
+2. Do not spend another live attempt without acknowledging provider reality:
    BytePlus quota can exhaust, Anthropic/OpenAI credentials are currently
    absent, and the local gemma rung may be the only remaining completion path.
-4. Start the post-cohort backlog in order: protected-path warning, preflight /
+3. Start the post-cohort backlog in order: protected-path warning, preflight /
    health-warning triage, spec-lint / crying-wolf cleanup, hermeticity audit,
    then the P1 security stack.

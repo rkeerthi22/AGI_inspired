@@ -14,7 +14,7 @@
     "id": "M1-M7-VALIDATION",
     "phase": "immediate-cohort-actions-complete-post-cohort-backlog-open",
     "status": "in_progress",
-    "next_action": "Push the 2026-09-03 code and doc sync, then either spend a separately authorized retry on task 110 / targeted failed windows or start the post-cohort backlog in order."
+    "next_action": "Choose the next separately authorized step: retry task 110, revisit failed windows M3/M5/M6/M7, or start the post-cohort backlog in order."
   },
   "completed": [
     "Task 110 supported recovery and 2026-09-02 rerun remain verified live; the original launch defect is closed",
@@ -54,12 +54,12 @@
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "1806fc3601ec78f9612e758791d4acd89b865fca8033b7c4d421da6fb32a9f6c"
+      "sha256": "a8caaf4bd691f64e8d340024b158a4ef1c7d10042236f87ca1d7add7bd6ae8bf"
     },
     {
       "path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
       "purpose": "Cross-agent September 3 handoff",
-      "sha256": "cd1145c6119d950768ddad3cd14d31b5f5613ea11fdc48a0cf7f59305a920d00"
+      "sha256": "7106ba42d329991a2e05256b469b1afbaac6a0c6f445ce47f2afe10306d7987c"
     },
     {
       "path": "workspace/validation/cohort_missions.json",
