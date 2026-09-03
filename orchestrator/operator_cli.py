@@ -69,7 +69,9 @@ def _git(args: list[str]) -> tuple[int, str, str]:
     try:
         proc = subprocess.run(["git", "-C", str(ROOT), *args], capture_output=True,
                               text=True, encoding="utf-8", errors="replace", timeout=60)
-        return proc.returncode, proc.stdout.strip(), proc.stderr.strip()
+        # Preserve the leading status column emitted by ``git status
+        # --porcelain``. Stripping it corrupts the first changed path.
+        return proc.returncode, proc.stdout.rstrip(), proc.stderr.rstrip()
     except (OSError, subprocess.TimeoutExpired) as exc:
         return 1, "", str(exc)
 

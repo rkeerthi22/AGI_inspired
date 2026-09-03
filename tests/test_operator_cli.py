@@ -202,6 +202,25 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     check("status reports active_work parseable", data["active_work"]["parseable"], True)
     check("status git head is a sha", len(data["git"]["head"]) >= 12, True)
 
+# Git's porcelain format uses a meaningful leading status column. The generic
+# runner must preserve it, and the status collector must not truncate path 1.
+proc = subprocess.CompletedProcess(
+    args=[], returncode=0, stdout=" M docs/ACTIVE_WORK.json\r\n", stderr="")
+with mock.patch.object(operator_cli.subprocess, "run", return_value=proc):
+    _, porcelain, _ = operator_cli._git(["status", "--porcelain=v1"])
+check("git runner preserves leading porcelain column",
+      porcelain, " M docs/ACTIVE_WORK.json")
+with mock.patch.object(operator_cli, "_git", side_effect=[
+        (0, "deadbeef", ""),
+        (0, " M docs/ACTIVE_WORK.json\n?? docs/review.md", ""),
+        (0, "0 0", ""),
+        (0, "master", ""),
+]):
+    parsed_git = operator_cli._git_state()
+check("git status preserves the first dirty path",
+      parsed_git["changed_paths"],
+      ["docs/ACTIVE_WORK.json", "docs/review.md"])
+
 # Status with dirty tree, live lock, pending marker
 with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
     world = build_world(Path(raw), estop=True, marker=True, batch_lock=True,
