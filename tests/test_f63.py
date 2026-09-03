@@ -219,10 +219,23 @@ check("final usage merged", merged,
       {"input_tokens": 130, "output_tokens": 30, "total_tokens": 160,
        "api_calls": 11, "retrieval_finalization_calls": 1})
 check("Hermes BytePlus selector maps to provider-neutral finalizer",
+      finalizer_provider("byteplus-coding"), "byteplus_coding")
+check("Hermes BytePlus selector maps to provider-neutral finalizer",
       finalizer_provider("custom:byteplus-coding"), "byteplus_coding")
+check("Hermes OpenAI API selector maps to provider-neutral finalizer",
+      finalizer_provider("openai-api"), "openai")
+check("controlled Hermes passes BytePlus provider into finalization",
+      finalizer_call_options(["-z", "ping", "--provider", "byteplus-coding"]),
+      {"provider": "byteplus_coding", "purpose": "retrieval_finalization"})
 check("controlled Hermes passes BytePlus provider into finalization",
       finalizer_call_options(["-z", "ping", "--provider", "custom:byteplus-coding"]),
       {"provider": "byteplus_coding", "purpose": "retrieval_finalization"})
+check("controlled Hermes passes Anthropic provider into finalization",
+      finalizer_call_options(["-z", "ping", "--provider", "anthropic"]),
+      {"provider": "anthropic", "purpose": "retrieval_finalization"})
+check("controlled Hermes passes OpenAI API provider into finalization",
+      finalizer_call_options(["-z", "ping", "--provider", "openai-api"]),
+      {"provider": "openai", "purpose": "retrieval_finalization"})
 
 # A successful compliant call resets the consecutive-feedback streak, while a
 # separate global ceiling still bounds repeated redirections.

@@ -28,7 +28,11 @@ def merge_finalization_usage(usage: dict, final_usage: dict) -> dict:
 
 def finalizer_provider(hermes_provider: str | None) -> str:
     """Translate Hermes transport selectors to harness provider identities."""
-    mapping = {"custom:byteplus-coding": "byteplus_coding"}
+    mapping = {
+        "byteplus-coding": "byteplus_coding",
+        "custom:byteplus-coding": "byteplus_coding",
+        "openai-api": "openai",
+    }
     value = (hermes_provider or "ollama").strip().lower()
     return mapping.get(value, value)
 

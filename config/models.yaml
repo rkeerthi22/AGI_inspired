@@ -63,13 +63,13 @@ providers:
     endpoint: https://api.anthropic.com/v1
     authentication_reference: env:ANTHROPIC_API_KEY
     routing_model: claude-sonnet-5
-    hermes_provider: custom:anthropic
+    hermes_provider: anthropic
 
   openai:
     endpoint: https://api.openai.com/v1
     authentication_reference: env:OPENAI_API_KEY
     routing_model: gpt-4o
-    hermes_provider: custom:openai
+    hermes_provider: openai-api
 
 # Cross-PROVIDER fallback chain (429 is account-level, not per-model — §1.6).
 # A second Ollama model does NOT survive quota exhaustion; a second provider does.
