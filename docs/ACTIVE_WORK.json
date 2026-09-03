@@ -1,46 +1,45 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-03T22:49:11Z",
+  "last_updated": "2026-09-04T00:15:00Z",
   "active_agents": [
     {
       "agent": "claude-code",
-      "role": "Branch integration + canonical doc sync (model-free) — owns docs/ and continuity for the integration",
+      "role": "Branch integration + canonical doc sync (model-free) — COMPLETED; master pushed",
       "task_id": "BRANCH-INTEGRATION-2026-09-04",
-      "mode": "implementation",
-      "owned_paths": [
-        "docs/",
-        ".harness/continuity/current.json"
-      ],
+      "mode": "completed",
+      "owned_paths": [],
       "started_at": "2026-09-03T22:49:11Z",
-      "last_update": "2026-09-03T22:49:11Z",
-      "status": "in_progress",
+      "last_update": "2026-09-04T00:15:00Z",
+      "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
-      "notes": "Operator directive 2026-09-04: independently verify Codex's uncommitted security batch, then finish the integration. Part 1 verification DONE and clean (commits 351104e + d8037f3 confirmed; 5 trust-boundary properties verified by diff; own gate run 61/61 exit 0; no tracked secrets; ESTOP engaged; ARK_API_KEY gone from Hermes .env and present in Credential Manager). Now integrating: syncing canonical docs, writing the findings handoff, carrying forward the failover review's raw-output gap, pushing the feature branch, FF-merging to master, bumping continuity via write_current(), pushing master. MODEL-FREE ONLY — no BytePlus/Ollama, no ESTOP change, no canary, no M1-M7. Does not clear anything for live execution."
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
+      "notes": "DONE. Independently verified Codex's uncommitted batch (351104e + d8037f3) from repo state — 5 operator-auth trust properties, 61/61 gate, no tracked secrets, ESTOP engaged, ARK vaulted. FF-merged to master (f9a07fe), bumped continuity to rev 56 (recover-clean at 170161b), pushed master. Findings + open-items tracker in docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md. Forward work (red-team blueprint for Codex) in docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md. MODEL-FREE — nothing cleared for live execution."
     },
     {
       "agent": "codex",
-      "role": "Security repair, release preflight, branch integration, and independent review — BLOCKED (usage limit); code work committed, docs/continuity handed to claude-code",
+      "role": "Security repair, release preflight, branch integration — COMPLETED (code landed 351104e/d8037f3, independently verified + merged to master by claude-code)",
       "task_id": "SECURITY-PREFLIGHT-INTEGRATION-2026-09-03",
-      "mode": "implementation",
-      "owned_paths": [
-        "orchestrator/operator_auth.py",
-        "orchestrator/execution_pause.py",
-        "orchestrator/operator_cli.py",
-        "tests/run_all.py",
-        "tests/test_operator_auth.py",
-        "tests/test_estop_tamper.py",
-        "tests/test_operator_cli.py",
-        "tests/test_f108.py",
-        "scripts/requirements.txt",
-        "agi.ps1"
-      ],
+      "mode": "completed",
+      "owned_paths": [],
       "started_at": "2026-09-03T21:40:11Z",
-      "last_update": "2026-09-03T22:49:11Z",
-      "status": "blocked",
-      "blocked_by": "usage-limit reached mid-session; offline until ~2026-09-04T03:35 local per operator report. docs/ and .harness/continuity/current.json handed to claude-code (BRANCH-INTEGRATION-2026-09-04) for integration. The listed owned_paths are committed-and-verified code (351104e, d8037f3); no further edits expected from codex on this task.",
+      "last_update": "2026-09-04T00:15:00Z",
+      "status": "completed",
+      "blocked_by": null,
       "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
-      "notes": "Authorized by the operator to repair marker trust, add an authoritative model-free release preflight, reconcile dependencies, independently review release/security posture, integrate the feature branch, and synchronize canonical documentation. Code work landed in 351104e (security) and d8037f3 (preflight path fix); docs/continuity integration was interrupted by the usage limit and is being completed by claude-code, which independently re-verified the committed work before proceeding."
+      "notes": "DONE. Marker-trust repair + release preflight + dependency reconciliation landed in 351104e + d8037f3; claude-code independently re-verified (5 trust properties, UTF-16LE Credential Manager, 61/61 gate) and FF-merged to master (170161b). The usage-limit interruption only cut the docs/continuity integration, which claude-code finished. No further work on THIS task. Next-phase work for codex is the red-team blueprint, task REDTEAM-BLUEPRINT-2026-09-04."
+    },
+    {
+      "agent": "codex",
+      "role": "Forward implementer — red-team blueprint (RC-1 citecheck, A5 raw stdout, A3 failover reason, P1 security gaps). BLOCKED (usage limit); resumes ~2026-09-04T03:35 local",
+      "task_id": "REDTEAM-BLUEPRINT-2026-09-04",
+      "mode": "implementation",
+      "owned_paths": [],
+      "started_at": "2026-09-04T00:15:00Z",
+      "last_update": "2026-09-04T00:15:00Z",
+      "status": "blocked",
+      "blocked_by": "usage limit (carried over from SECURITY-PREFLIGHT task); offline until ~2026-09-04T03:35 local. On resume, claim owned_paths per the blueprint's priority order (P0 RC-1 first: orchestrator/citecheck.py + evaluation.py).",
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
+      "notes": "Operator role split (2026-09-04): codex = implementer going forward; claude-code = red-team/reviewer invoked on demand. Blueprint + red-team findings + acceptance criteria + red-test pointer all in handoff_path. P0 = RC-1 citecheck 403/429 false-negative (red test at tests/red/test_citecheck_waf_false_negative.py, currently RED); fixing it likely flips M5 + M6-rerun cohort failures and dissolves M7's 'factual error'. MODEL-FREE only until an operator authorizes a live cohort re-run."
     },
     {
       "agent": "claude-code",
