@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -125,6 +126,115 @@ check("anthropic is the only remaining", len(remaining), 1)
 
 
 execution.load_fallback_chain = real_chain
+
+
+# -- 5. Missing optional provider credentials must not abort the chain -------
+
+print("\n=== Missing credentials do not abort worker failover ===")
+
+with tempfile.TemporaryDirectory() as td:
+    real_worker = execution.hermes_worker
+    real_chain = execution.load_fallback_chain
+    attempts: list[tuple[str, str]] = []
+    try:
+        execution.load_fallback_chain = lambda: [
+            {"provider": "anthropic", "model": "claude-sonnet-5"},
+            {"provider": "openai", "model": "gpt-4o"},
+            {"provider": "ollama", "model": "gemma4:12b-ctx4k", "context_tokens": 4096},
+        ]
+
+        def mock_worker(prompt, cfg, attempt_path, timeout=900, retrieval_profile=None):
+            attempts.append((cfg["provider"], cfg["model"]))
+            if cfg["provider"] == "byteplus_coding":
+                return "HTTP 429: weekly usage exhausted", {"process_error": "429"}
+            if cfg["provider"] == "anthropic":
+                return "", {"failed": True, "failure": "No Anthropic credentials found."}
+            if cfg["provider"] == "openai":
+                return "", {"failed": True, "failure": "No OpenAI credentials found."}
+            return "local fallback answer " * 6, {}
+
+        execution.hermes_worker = mock_worker
+
+        out, usage, cfg_used, exhausted = execution.worker_with_failover(
+            "short prompt",
+            {"provider": "byteplus_coding", "model": "ark-code-latest", "quota_group": "byteplus"},
+            Path(td) / "usage.json",
+            log_prefix="task 777",
+        )
+
+        check("worker path keeps walking after auth-missing rungs", attempts, [
+            ("byteplus_coding", "ark-code-latest"),
+            ("anthropic", "claude-sonnet-5"),
+            ("openai", "gpt-4o"),
+            ("ollama", "gemma4:12b-ctx4k"),
+        ])
+        check("worker path reaches local rung", cfg_used["model"], "gemma4:12b-ctx4k")
+        check("worker path returns local output",
+              exhausted is False and out.startswith("local fallback answer"))
+    finally:
+        execution.hermes_worker = real_worker
+        execution.load_fallback_chain = real_chain
+
+
+print("\n=== Missing credentials do not abort synthesis failover ===")
+
+real_chat = execution.ollama_chat
+real_chain = execution.load_fallback_chain
+calls: list[tuple[str, str]] = []
+try:
+    execution.load_fallback_chain = lambda: [
+        {"provider": "anthropic", "model": "claude-sonnet-5"},
+        {"provider": "openai", "model": "gpt-4o"},
+        {"provider": "ollama", "model": "gemma4:12b-ctx4k", "context_tokens": 4096},
+    ]
+
+    def mock_chat(model, prompt, timeout=300, trace_path=None, usage_out=None,
+                  provider="ollama", **request_options):
+        active_provider = request_options.get("provider", provider)
+        calls.append((active_provider, model))
+        if active_provider == "byteplus_coding":
+            raise execution.provider_transport.ProviderChatError(
+                "BytePlus HTTP 429",
+                execution.provider_transport.ErrorCategory.QUOTA,
+                retryable=True,
+            )
+        if active_provider == "anthropic":
+            raise execution.provider_transport.ProviderChatError(
+                "Anthropic API key is not configured",
+                execution.provider_transport.ErrorCategory.AUTHENTICATION,
+            )
+        if active_provider == "openai":
+            raise execution.provider_transport.ProviderChatError(
+                "OpenAI API key is not configured",
+                execution.provider_transport.ErrorCategory.AUTHENTICATION,
+            )
+        return "local synthesis answer"
+
+    execution.ollama_chat = mock_chat
+
+    outcome = execution.synthesis_with_failover(
+        "short prompt",
+        {
+            "provider": "byteplus_coding",
+            "model": "ark-code-latest",
+            "endpoint": "https://ark.ap-southeast.bytepluses.com/api/coding/v3",
+            "authentication_reference": "env:ARK_API_KEY",
+        },
+        log_prefix="task 778",
+    )
+
+    check("synthesis path keeps walking after auth-missing rungs", calls, [
+        ("byteplus_coding", "ark-code-latest"),
+        ("anthropic", "claude-sonnet-5"),
+        ("openai", "gpt-4o"),
+        ("ollama", "gemma4:12b-ctx4k"),
+    ])
+    check("synthesis path reaches local rung", outcome.model_cfg["model"], "gemma4:12b-ctx4k")
+    check("synthesis path returns local output",
+          outcome.exhausted is False and outcome.output == "local synthesis answer")
+finally:
+    execution.ollama_chat = real_chat
+    execution.load_fallback_chain = real_chain
 
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:

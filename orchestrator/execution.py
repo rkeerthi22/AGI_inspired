@@ -389,29 +389,41 @@ def worker_with_failover(prompt: str, worker_cfg: dict, usage_path: Path,
         else:
             out, usage = hermes_worker(prompt, cfg, attempt_path, timeout=timeout)
         cfg_used = cfg
-        combined_error = f"{out} {usage.get('process_error', '')}".strip()
-        if not is_quota_error(combined_error):
-            if i > 0 and not worker_failed(out, usage):
+        failed = worker_failed(out, usage)
+        if not failed:
+            if i > 0:
                 log(f"{log_prefix}: failover succeeded on {cfg['provider']}/{cfg['model']} "
                    f"(rung {i+1}/{len(candidates)})")
-            elif i > 0:
-                log(f"{log_prefix}: failover returned unusable output on "
-                    f"{cfg['provider']}/{cfg['model']} (rung {i+1}/{len(candidates)})")
-                if tw:
-                    tw.provider_failed(cfg["provider"], cfg["model"],
-                        reason="unusable_output", rung=i + 1,
-                        total_rungs=len(candidates))
             return out, usage, cfg_used, False
-        if tw:
-            tw.provider_failed(cfg["provider"], cfg["model"],
-                reason="quota_exhausted", rung=i + 1,
-                total_rungs=len(candidates))
-        if grp:
-            dead_groups.add(grp)
+        failure_reason = _worker_failover_reason(out, usage)
         more = i + 1 < len(candidates)
-        log(f"{log_prefix}: quota error on {cfg['provider']}/{cfg['model']} "
-           f"({i+1}/{len(candidates)})" +
-           (" -- trying next" if more else " -- chain exhausted"))
+        if failure_reason == "quota_exhausted":
+            if tw:
+                tw.provider_failed(cfg["provider"], cfg["model"],
+                    reason=failure_reason, rung=i + 1,
+                    total_rungs=len(candidates))
+            if grp:
+                dead_groups.add(grp)
+            log(f"{log_prefix}: quota error on {cfg['provider']}/{cfg['model']} "
+               f"({i+1}/{len(candidates)})" +
+               (" -- trying next" if more else " -- chain exhausted"))
+            continue
+        if failure_reason in {"authentication", "provider_unavailable"} and more:
+            if tw:
+                tw.provider_failed(cfg["provider"], cfg["model"],
+                    reason=failure_reason, rung=i + 1,
+                    total_rungs=len(candidates))
+            log(f"{log_prefix}: failover rung unavailable ({failure_reason}) on "
+               f"{cfg['provider']}/{cfg['model']} ({i+1}/{len(candidates)}) -- trying next")
+            continue
+        if i > 0:
+            log(f"{log_prefix}: failover returned unusable output on "
+                f"{cfg['provider']}/{cfg['model']} (rung {i+1}/{len(candidates)})")
+            if tw:
+                tw.provider_failed(cfg["provider"], cfg["model"],
+                    reason=failure_reason or "unusable_output", rung=i + 1,
+                    total_rungs=len(candidates))
+        return out, usage, cfg_used, False
     return out, usage, cfg_used, True
 
 
@@ -470,6 +482,14 @@ def synthesis_with_failover(prompt: str, worker_cfg: dict, log_prefix: str,
         except provider_transport.ProviderChatError as e:
             if e.category not in {provider_transport.ErrorCategory.QUOTA,
                                   provider_transport.ErrorCategory.RATE_LIMIT}:
+                if (e.category in {provider_transport.ErrorCategory.AUTHENTICATION,
+                                   provider_transport.ErrorCategory.AUTHORIZATION,
+                                   provider_transport.ErrorCategory.UNSUPPORTED_PROVIDER}
+                        and i + 1 < len(candidates)):
+                    log(f"{log_prefix}: failover rung unavailable ({e.category.value}) on "
+                       f"{cfg['provider']}/{cfg['model']} ({i+1}/{len(candidates)}) -- "
+                       f"trying next")
+                    continue
                 raise
             quota_seen = True
             if grp:
@@ -504,6 +524,43 @@ def is_quota_error(text: str) -> bool:
     t = text.lower()
     return any(s in t for s in ("429", "too many requests", "rate limit",
                                 "usage limit", "weekly usage"))
+
+
+def _worker_failover_reason(out: str, usage: dict) -> str | None:
+    """Classify retryable provider-unavailable worker failures from Hermes artifacts."""
+    if not worker_failed(out, usage):
+        return None
+    text = " ".join(str(v) for v in (
+        usage.get("failure"),
+        usage.get("process_error"),
+        out,
+    ) if v).lower()
+    if not text:
+        return None
+    if is_quota_error(text):
+        return "quota_exhausted"
+    if any(s in text for s in (
+        "no anthropic credentials",
+        "no openai credentials",
+        "api key is not configured",
+        "api key is unavailable",
+        "authentication",
+        "unauthorized",
+        "permission denied",
+        "forbidden",
+        "401",
+        "403",
+    )):
+        return "authentication"
+    if any(s in text for s in (
+        "unknown provider",
+        "no chat adapter registered",
+        "sdk is not installed",
+        "requires an env:",
+        "unregistered",
+    )):
+        return "provider_unavailable"
+    return None
 
 
 def worker_failed(out: str, usage: dict) -> bool:
