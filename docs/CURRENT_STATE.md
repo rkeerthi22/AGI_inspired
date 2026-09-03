@@ -1,9 +1,9 @@
 # Canonical Project State - AGI_like Harness
 
-**Last Updated:** 2026-09-03T02:17:24Z
-**Phase:** Immediate cohort actions complete through M7; post-cohort backlog open
+**Last Updated:** 2026-09-03T22:49:11Z
+**Phase:** Immediate cohort actions complete through M7; post-cohort backlog items 1–4 done; operator-trust + release-preflight security batch integrated
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Live Verification:** `python -B tests/run_all.py` -> `55/55` green | `python orchestrator/continuity.py recover` valid | `python -B orchestrator/operator_cli.py status --json` clean | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
+**Live Verification:** `python -B tests/run_all.py` -> `61/61` green (own run, exit 0) | `python orchestrator/continuity.py recover` valid | `python -B orchestrator/operator_cli.py status --json` clean | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
 
 ---
 
@@ -19,7 +19,7 @@ What is now true in live state:
 | Task 110 recovery | VERIFIED LIVE | Supported recovery already completed on 2026-09-02; row is no longer stranded in `running` |
 | Hermes provider-id repair | VERIFIED | `14dbafe` changed Anthropic to native `anthropic`, OpenAI to `openai-api`, and aligned finalizer mapping |
 | Unavailable-rung failover hardening | VERIFIED | `5522926` teaches both research and synthesis failover loops to continue past missing optional provider credentials or unsupported provider rungs |
-| Full model-free gate | VERIFIED | `55/55` suites green after both repairs |
+| Full model-free gate | VERIFIED | `61/61` suites green after both repairs, the F107–F109 hermeticity batch, and the operator-trust/preflight security batch |
 | Supervised BytePlus canary | VERIFIED LIVE | `2026-09-03T01:53:09Z`, `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, request id `02178840037366712014becacfaf8a37949eaec3c813975305d82` |
 | M3 / task 114 | FAILED | Real frozen-spec fail; deliverable did not explicitly account for all required blocked review platforms and attempts |
 | M4 / task 115 | PASSED | Clean synthesis pass |
@@ -45,7 +45,7 @@ Two live-path assumptions from the September 2 state were wrong or incomplete:
    aborted too early instead of continuing to later rungs. That is now repaired
    in `5522926`.
 
-Both fixes are regression-covered and were re-verified by the full `55/55`
+Both fixes are regression-covered and were re-verified by the full `61/61`
 green gate before more live cohort work was spent.
 
 ---
@@ -58,13 +58,14 @@ green gate before more live cohort work was spent.
 * Rows 111-113 remain untouched legitimate queued seeds.
 * Live repository, process, and operator status outrank historical documents.
 
-Current operator status on `2026-09-03T02:15:44Z`:
+Current operator status on `2026-09-03T22:49:11Z`:
 
-* git clean, `ahead=2`, `behind=0`
-* continuity revision `54`, valid, no discrepancies
+* on branch `claude-code/telemetry-truth-fixes-2026-09-03`, 6 commits ahead of `master`, working tree carrying only the doc-sync edits
+* continuity revision `55` (pending bump to `56` after the master FF-merge + integration commit)
 * ESTOP engaged, no canary marker present
 * runlock absent
 * Munder quiesced
+* ARK_API_KEY removed from the Hermes private `.env` and vaulted in Windows Credential Manager (`credential_manager_has_api_key("byteplus_coding")=True`, presence-only — value never read)
 
 Recorded subsystem warnings visible through `agi status` were diagnosed 2026-09-03
 as pre-F108 *test artifacts*, not active live probes: unit-tier tests wrote health
@@ -102,10 +103,23 @@ Control-plane gaps:
 
 Enterprise gaps:
 
-* no centralized tamper-evident audit retention layer yet
-* no measured SLO / alert pipeline yet
-* no stronger service-identity or engine-independent egress sandbox yet
-* no long-run reliability window, restore-drill evidence, or external review yet
+* operator-marker trust boundary is now anchored (commits `351104e`, `d8037f3`): unsigned
+  markers fail closed, foreign self-signed markers are rejected via
+  `hmac.compare_digest(embedded, trusted_public)`, markers are purpose-bound
+  (`action` field checked in both `authorize-clear` and `authorize-canary`), and signing
+  failure raises instead of falling back to unsigned JSON. Independently re-verified by
+  diff + 61/61 gate.
+* ARK_API_KEY is vaulted in Windows Credential Manager and gone from the Hermes `.env`;
+  the UTF-16LE read/write path matches what pywin32 actually returns (verified by a live
+  `credential_manager_has_api_key` read). Anthropic/OpenAI remain unconfigured by design
+  (weak-AI strategy), so those rungs will still report missing credentials — intentional.
+* an authoritative model-free release preflight (`agi preflight`) and CI pinning / venv
+  fix landed (`scripts/ci.ps1`, `.github/workflows/model_free_gate.yml`).
+* **still open:** host identity / engine-independent egress sandbox (no Job Object
+  containment or outbound egress policy yet); tamper-evident off-machine audit retention;
+  reproducible dependency hashes (deps are pinned but not hash-verified); independent
+  critic evidence routing; sustained operational proof / restore-drill evidence. This is a
+  control prototype, not enterprise-finished.
 
 Product-quality gap:
 
@@ -124,16 +138,20 @@ enterprise-finished product.
 2. Do not spend another live attempt without acknowledging provider reality:
    BytePlus quota can exhaust, Anthropic/OpenAI credentials are currently
    absent, and the local gemma rung may be the only remaining completion path.
-3. Post-cohort backlog status (2026-09-03): items 1–4 DONE + committed (`4f773e6`) —
+3. Post-cohort backlog status (2026-09-04): items 1–4 DONE + committed (`4f773e6`) —
    (1) protected-path warning (F107), (2) preflight/health-warning triage (F105 cohort
    entry + F108 test pollution), (3) spec-lint/crying-wolf cleanup (F108 health events
    + F109 runs/ artifacts; "spec-lint" proper has no existing code, remains an open
    proposal), (4) hermeticity audit (F108 + F109 — test runs no longer pollute
-   production `runs/`). Item 5, the P1 security stack, remains: it is a multi-session
-   enterprise-readiness roadmap (`ENTERPRISE_READINESS_2026-08-31.md` section P1)
-   whose build items — vault-backed secrets, Job Object containment + egress policy,
-   versioned Munder, locked deps/CI, audit retention, independent critic routing —
-   each require operator architectural decisions before execution. The most
-   decision-free piece is elevating the existing `agi preflight canary` diagnostic into
-   the "one authoritative model-free preflight" (ESTOP/schema/deps/path checks); even
-   that is a design choice.
+   production `runs/`). Item 5, the P1 security stack, is now PARTIALLY landed: the
+   operator-marker trust boundary, vault-backed ARK_API_KEY (Credential Manager),
+   authoritative model-free release preflight, CI pinning / venv fix, and a dependency
+   conflict resolution all landed in `351104e` + `d8037f3` and were independently
+   re-verified by claude-code (61/61 gate, diff review, presence-only credential check)
+   before the branch was merged to master. **Still open** (each needs operator
+   architectural decisions): host identity / engine-independent egress sandbox (Job Object
+   containment + outbound egress policy), tamper-evident off-machine audit retention,
+   reproducible dependency hashes, independent critic evidence routing, sustained
+   operational proof. See `docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md`
+   for the fixed-vs-open breakdown. This is model-free repo work only and does NOT clear
+   anything for live execution.

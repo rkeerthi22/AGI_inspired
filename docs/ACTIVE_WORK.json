@@ -1,7 +1,47 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-03T02:17:24Z",
+  "last_updated": "2026-09-03T22:49:11Z",
   "active_agents": [
+    {
+      "agent": "claude-code",
+      "role": "Branch integration + canonical doc sync (model-free) — owns docs/ and continuity for the integration",
+      "task_id": "BRANCH-INTEGRATION-2026-09-04",
+      "mode": "implementation",
+      "owned_paths": [
+        "docs/",
+        ".harness/continuity/current.json"
+      ],
+      "started_at": "2026-09-03T22:49:11Z",
+      "last_update": "2026-09-03T22:49:11Z",
+      "status": "in_progress",
+      "blocked_by": null,
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
+      "notes": "Operator directive 2026-09-04: independently verify Codex's uncommitted security batch, then finish the integration. Part 1 verification DONE and clean (commits 351104e + d8037f3 confirmed; 5 trust-boundary properties verified by diff; own gate run 61/61 exit 0; no tracked secrets; ESTOP engaged; ARK_API_KEY gone from Hermes .env and present in Credential Manager). Now integrating: syncing canonical docs, writing the findings handoff, carrying forward the failover review's raw-output gap, pushing the feature branch, FF-merging to master, bumping continuity via write_current(), pushing master. MODEL-FREE ONLY — no BytePlus/Ollama, no ESTOP change, no canary, no M1-M7. Does not clear anything for live execution."
+    },
+    {
+      "agent": "codex",
+      "role": "Security repair, release preflight, branch integration, and independent review — BLOCKED (usage limit); code work committed, docs/continuity handed to claude-code",
+      "task_id": "SECURITY-PREFLIGHT-INTEGRATION-2026-09-03",
+      "mode": "implementation",
+      "owned_paths": [
+        "orchestrator/operator_auth.py",
+        "orchestrator/execution_pause.py",
+        "orchestrator/operator_cli.py",
+        "tests/run_all.py",
+        "tests/test_operator_auth.py",
+        "tests/test_estop_tamper.py",
+        "tests/test_operator_cli.py",
+        "tests/test_f108.py",
+        "scripts/requirements.txt",
+        "agi.ps1"
+      ],
+      "started_at": "2026-09-03T21:40:11Z",
+      "last_update": "2026-09-03T22:49:11Z",
+      "status": "blocked",
+      "blocked_by": "usage-limit reached mid-session; offline until ~2026-09-04T03:35 local per operator report. docs/ and .harness/continuity/current.json handed to claude-code (BRANCH-INTEGRATION-2026-09-04) for integration. The listed owned_paths are committed-and-verified code (351104e, d8037f3); no further edits expected from codex on this task.",
+      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
+      "notes": "Authorized by the operator to repair marker trust, add an authoritative model-free release preflight, reconcile dependencies, independently review release/security posture, integrate the feature branch, and synchronize canonical documentation. Code work landed in 351104e (security) and d8037f3 (preflight path fix); docs/continuity integration was interrupted by the usage limit and is being completed by claude-code, which independently re-verified the committed work before proceeding."
+    },
     {
       "agent": "claude-code",
       "role": "Multi-Provider Wiring + Phase 4 Job Objects + SQLite Migrations + Operator Identity — COMPLETED",
@@ -88,7 +128,7 @@
     "3. Multi-agent concurrent implementations require ephemeral git worktrees.",
     "4. All agents must inspect ACTIVE_WORK.json and AGENTS.md before modifying any file.",
     "5. An agent must update its handoff when stopping, being quota-blocked, or transferring ownership.",
-    "6. Completion requires evidence: files exist, full model-free gate green (55/55 suites), continuity validates, handoff updated.",
+    "6. Completion requires evidence: files exist, full model-free gate green (the suite count is dynamic — read it from tests/run_all.py output, never trust a hardcoded number), continuity validates, handoff updated.",
     "7. Hive agent edits to S:/AGI_like are gated at window-open time by cohort_hive_quiesce.py's process/fleet inventory; per-edit ownership is convention-based per rules 1-4 (no enforce.js file exists — verified absent 2026-09-03)."
   ]
 }
