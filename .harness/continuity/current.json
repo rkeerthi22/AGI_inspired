@@ -14,7 +14,7 @@
     "id": "M1-M7-VALIDATION",
     "phase": "post-cohort-backlog-1-4-done-security-batch-integrated",
     "status": "in_progress",
-    "next_action": "Security stack partially landed (operator-trust boundary, vaulted ARK_API_KEY, release preflight, CI pinning). Remaining open (each needs operator architectural decisions): host identity / engine-independent egress isolation (Job Object + outbound policy), tamper-evident off-machine audit retention, reproducible dependency hashes, independent critic evidence routing, sustained operational proof. Live verification of F104/F106 and the Anthropic->OpenAI failover transition still gated on an operator-authorized --controlled-window. Model-free only; nothing cleared for live execution (Munder boundary verdict + credential-rotation item still pending)."
+    "next_action": "Security stack partly landed. Still open: egress isolation, tamper-evident audit, reproducible dep hashes, independent critic, sustained ops. Live-verify F104/F106 + Anthropic->OpenAI failover gated on operator --controlled-window. Model-free only; not for live execution."
   },
   "completed": [
     "Task 110 supported recovery and 2026-09-02 rerun remain verified live; the original launch defect is closed",
@@ -26,11 +26,11 @@
     "M5 executed as task 116 and failed mechanically on citecheck reachability",
     "M6 first attempt task 117 exposed the early-stop failover bug; rerun task 118 completed after the fix and failed normally",
     "M7 executed as task 119 and failed the frozen spec",
-    "Deterministic gate is 61/61 green after the September 3 failover repairs, the F107-F109 hermeticity batch, and the operator-trust/preflight security batch",
+    "Deterministic gate 61/61 green after failover repairs, F107-F109, and operator-trust/preflight batch",
     "Operator-facing docs and agent handoff were re-synced to the 2026-09-03 live cohort state",
-    "F107-F109 hermeticity batch landed (4f773e6): protected-path masking silenced, test health events routed to a pid-scoped temp, test_f57 no longer pollutes production runs/",
-    "Operator-trust + release-preflight security batch landed (351104e, d8037f3) and independently re-verified by claude-code: unsigned/foreign/purpose-bound markers, fail-closed signing, UTF-16LE Credential Manager read/write; ARK_API_KEY vaulted in Windows Credential Manager and removed from the Hermes .env",
-    "Feature branch fast-forward merged to master (f9a07fe); model-free only, nothing cleared for live execution"
+    "F107-F109 hermeticity landed (4f773e6): test health events + test_f57 critic artifacts no longer pollute runs/",
+    "Operator-trust + preflight batch landed (351104e,d8037f3), re-verified by claude-code; ARK_API_KEY vaulted in Credential Manager",
+    "Feature branch FF-merged to master (f9a07fe); model-free only"
   ],
   "locked_constraints": [
     "Each further mission requires separate operator authorization",
@@ -41,7 +41,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "61/61 model-free suites green (own run, exit 0); continuity valid; ARK_API_KEY vaulted in Windows Credential Manager and removed from the Hermes .env; ESTOP engaged. Model-free only -- no live execution cleared."
+    "detail": "61/61 model-free green (own run); ARK_API_KEY vaulted; ESTOP engaged. Model-free only -- no live execution cleared."
   },
   "references": [
     {
@@ -71,7 +71,7 @@
     },
     {
       "path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
-      "purpose": "Security/preflight findings + carried-forward open-items tracker (failover raw-output gap A5)",
+      "purpose": "Security/preflight findings + open-items tracker",
       "sha256": "5a5796bb72f4212d67a64f8d242936c57f826865f9ca765003cd101be0c15772"
     }
   ]
