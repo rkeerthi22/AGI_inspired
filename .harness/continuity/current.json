@@ -1,78 +1,62 @@
 {
   "schema_version": 2,
-  "brief_revision": 57,
-  "created_at": "2026-09-03T23:58:40+00:00",
+  "brief_revision": 58,
+  "created_at": "2026-09-04T01:49:36.677520+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "68e79e9824c5cfc344550312675f429f2912ea1e"
+    "based_on_head": "0701dc52eb55c3aa98097fc5afc45d4561c2e0b8"
   },
   "task": {
-    "id": "M1-M7-VALIDATION",
-    "phase": "redteam-blueprint-for-codex-rc1-p0",
+    "id": "REDTEAM-BLUEPRINT-2026-09-04",
+    "phase": "rc1-f110-committed-a5-next",
     "status": "in_progress",
-    "next_action": "Codex forward implementer (claude-code=reviewer). P0=RC-1 citecheck 403/429 false-negative (red test tests/red/; cohort 1/6 mostly gate defect). Then A5, A3, P1 security. Blueprint: docs/CODEX_HANDOFF_2026-09-04. Live re-run needs operator. Model-free only."
+    "next_action": "Implement A5 diagnostic capture on early-abort worker and synthesis paths, then add regression coverage; model-free only."
   },
   "completed": [
-    "Task 110 supported recovery and 2026-09-02 rerun remain verified live; the original launch defect is closed",
-    "Hermes provider-id repair landed in 14dbafe: Anthropic uses native 'anthropic', OpenAI uses 'openai-api', and retrieval finalization maps those selectors back to harness provider names",
-    "Failover hardening landed in 5522926: worker and synthesis paths now continue past missing optional provider credentials or unsupported provider rungs",
-    "Fresh supervised BytePlus canary succeeded on 2026-09-03 at 01:53:09Z (byteplus_coding / ark-code-latest)",
-    "M3 executed as task 114 and failed the frozen spec",
-    "M4 executed as task 115 and passed",
-    "M5 executed as task 116 and failed mechanically on citecheck reachability",
-    "M6 first attempt task 117 exposed the early-stop failover bug; rerun task 118 completed after the fix and failed normally",
-    "M7 executed as task 119 and failed the frozen spec",
-    "Deterministic gate 61/61 green after failover repairs, F107-F109, and operator-trust/preflight batch",
-    "Operator-facing docs and agent handoff were re-synced to the 2026-09-03 live cohort state",
-    "F107-F109 hermeticity landed (4f773e6): test health events + test_f57 critic artifacts no longer pollute runs/",
-    "Operator-trust + preflight batch landed (351104e,d8037f3), re-verified by claude-code; ARK_API_KEY vaulted in Credential Manager",
-    "Feature branch FF-merged to master (f9a07fe); model-free only"
+    "RC-1/F110 committed as 0701dc5: blocked HTTP responses no longer count as dead citations",
+    "F110 promoted to tests/test_f110.py and registered in the model-free tier",
+    "62/62 model-free suites green; ESTOP engaged and no live execution authorized",
+    "Operator-trust and release-preflight batch integrated at 170161b"
   ],
   "locked_constraints": [
-    "Each further mission requires separate operator authorization",
-    "ESTOP remains engaged between windows",
-    "No F63 controller/prompt changes during the cohort",
-    "Rows 111-113 are legitimate queued seeds; no hand-editing",
-    "Live repository/runtime/process state outranks this brief"
+    "ESTOP remains engaged",
+    "No provider calls or live cohort execution",
+    "Each live mission requires separate operator authorization",
+    "Live repository state outranks this brief"
   ],
   "gate": {
     "status": "passed",
-    "detail": "61/61 model-free green (own run); ARK_API_KEY vaulted; ESTOP engaged. Model-free only -- no live execution cleared."
+    "detail": "62/62 model-free suites green after RC-1/F110; no live execution."
   },
   "references": [
-    {
-      "path": "docs/HARDENING.md",
-      "purpose": "F101 and F102 incident registry entries",
-      "sha256": "3b51017aa0b563131eba4e7a63407f3c085d3bd22001e7d21bac4d2b20f1bc89"
-    },
-    {
-      "path": "tests/test_fallback_chain.py",
-      "purpose": "Provider-id and unavailable-rung failover regressions",
-      "sha256": "78c33a474188220138ba3eab32c726ebc47ecf63d88c9e664651d8e15420f87c"
-    },
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
       "sha256": "6b56302fce2ac2d7bcb785a91f1b736a857c331922d869bb36b6dba6c14a88ef"
     },
     {
-      "path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
-      "purpose": "Cross-agent September 3 handoff",
-      "sha256": "7106ba42d329991a2e05256b469b1afbaac6a0c6f445ce47f2afe10306d7987c"
+      "path": "docs/HARDENING.md",
+      "purpose": "Incident and fix registry",
+      "sha256": "3b51017aa0b563131eba4e7a63407f3c085d3bd22001e7d21bac4d2b20f1bc89"
+    },
+    {
+      "path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
+      "purpose": "Forward implementation blueprint",
+      "sha256": "c7addda21099de8f72070fff9262cbe2e2dfc0270a012187661740f010413f97"
+    },
+    {
+      "path": "tests/test_f110.py",
+      "purpose": "RC-1 blocked-vs-dead regression",
+      "sha256": "2fb9c4a8ae19d238c6e2b0fec04d0b899c44c6eafa8a5a88e2b58258747101d9"
     },
     {
       "path": "workspace/validation/cohort_missions.json",
-      "purpose": "Frozen cohort specs",
+      "purpose": "Frozen cohort specifications",
       "sha256": "cd139598cd4a7f08b678e97bab9b4677dc7fa5cd11fa14258ad7c5ed9d641f3f"
-    },
-    {
-      "path": "docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md",
-      "purpose": "Security/preflight findings + open-items tracker",
-      "sha256": "5a5796bb72f4212d67a64f8d242936c57f826865f9ca765003cd101be0c15772"
     }
   ]
 }
