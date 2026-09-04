@@ -1,28 +1,30 @@
 {
   "schema_version": 2,
-  "brief_revision": 60,
-  "created_at": "2026-09-04T02:17:34.596379+00:00",
+  "brief_revision": 61,
+  "created_at": "2026-09-04T17:46:28+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "447346c92736877277b1dda308139ad87f281ce9"
+    "based_on_head": "87451438132e537c3b858aad256751308a163cf7"
   },
   "task": {
     "id": "REDTEAM-BLUEPRINT-2026-09-04",
-    "phase": "rc1-a5-audit-complete-p1-security-open",
+    "phase": "p1-security-impl-complete-docs-checkpointed-deployment-pending",
     "status": "in_progress",
-    "next_action": "Generate verified artifact hashes with --require-hashes, then select and test an engine-independent worker egress boundary; no live provider execution."
+    "next_action": "Independent security review of aa5afaf against the deployment runbook, then operator-owned deployment: restricted worker identity + OS egress boundary, append-only UNC audit share + restore drill, clean-machine CI proof. Branch is ahead of origin; push is an operator release action, not proof. No live execution."
   },
   "completed": [
     "RC-1/F110 committed as 0701dc5 and fully tested",
     "A5 early-abort diagnostics committed as 8fb3efd and fully tested",
     "A3 truthful failover reasons committed as 45d7846 and regression-tested",
     "Local trajectory audit chain and release-preflight verification committed as b9d7499",
+    "P1 repository security controls (dependency hashes, fail-closed egress broker, signed audit replication, independent critic routing) committed as aa5afaf",
     "Security blueprint and incident/current-state docs synchronized in 447346c",
-    "63/63 model-free suites green; ESTOP engaged; no live execution authorized"
+    "P1 documentation/ownership checkpoint + independent claude-code verification committed as 8745143 (gate 67/67, ESTOP engaged, both enforcement env vars unset)",
+    "67/67 model-free suites green; ESTOP engaged; no live execution authorized"
   ],
   "locked_constraints": [
     "ESTOP remains engaged",
@@ -32,28 +34,38 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "63/63 model-free suites green after RC-1, A5, trajectory audit chain, and documentation sync; no live execution."
+    "detail": "67/67 model-free suites green (own run, exit 0) after RC-1, A5, audit chain, and the P1 security batch; ARK_API_KEY vaulted; ESTOP engaged; HARNESS_EGRESS_ATTESTATION and HARNESS_AUDIT_ENFORCE both unset (deployment unprovisioned). No live execution."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "9a0ec1e71ad670416cdc2f08af39f769880c507b3c7e77c288d5a506ecbe5e15"
+      "sha256": "06529b7a9b0c0071139f872bff688bf27a4b2758d177d5e2bde7d31f49821eeb"
     },
     {
       "path": "docs/HARDENING.md",
       "purpose": "Incident and fix registry",
-      "sha256": "0c3fa4aefa1ff2859b66642aeefcae75b313f2b5715b8a2f74088c3437b248b9"
+      "sha256": "baf2c100dd557c584a1fd87180aede2938aea2679613c831fa21c9f616e958ac"
     },
     {
       "path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
-      "purpose": "Forward blueprint and implementation status",
+      "purpose": "Red-team findings + original forward blueprint",
       "sha256": "48ef5cffa93515a09ddff70f2911c6f8c4ef1826fe9175d37000809a6259b1f9"
+    },
+    {
+      "path": "docs/CODEX_HANDOFF_2026-09-04_P1_SECURITY_IMPLEMENTATION.md",
+      "purpose": "P1 implementation completion handoff (what was/wasn't done)",
+      "sha256": "a292dbb40e60263cf2062d4d9e0f467d9162cf8ff9501b14e5ff78c087a8d3d3"
+    },
+    {
+      "path": "docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md",
+      "purpose": "Operator-owned deployment/evidence/rollback runbook",
+      "sha256": "4ea7cb9420bf88a28b8274d755990e90661ffd8b33119cf192ab289736867d0b"
     },
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
       "purpose": "P1 security acceptance criteria",
-      "sha256": "23fa1252bef2249fb450315ef60b07863dd949c28abdc6151055d736c9ec7976"
+      "sha256": "9fcc47bc6b77e9cf5715fe9f745a0684e023d79413ddef814697185b5041fb95"
     },
     {
       "path": "tests/test_f110.py",
@@ -68,7 +80,7 @@
     {
       "path": "orchestrator/trajectory.py",
       "purpose": "Local audit chain",
-      "sha256": "7ed1dabdb009d0f649a3efe6ea63fbcd623a2fde3fd8159177d677ad66d6c6d9"
+      "sha256": "6165e1389bafb02ef8aa6cc62485673fa39835e71782d6ea348569e225d9dd0c"
     }
   ]
 }
