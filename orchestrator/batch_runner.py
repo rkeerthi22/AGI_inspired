@@ -147,14 +147,26 @@ def main() -> int:
         return 75
 
     # Apply pending schema migrations before any database operations.
+    # Fail-closed (audit 2026-09-05 / F106 §1): migrate_all() swallows
+    # MigrationError into a (-1, -1) result rather than raising, and the old
+    # `except` here swallowed every other error as "non-fatal". Both left the
+    # batch free to run against an un-migrated or partially-migrated schema,
+    # which is how silent data corruption takes root. A migration that errors
+    # OR returns a negative to-version means the schema state is unknown, so
+    # abort (return 75) before touching the ledger or acquiring the runlock.
     try:
         import migrations
         results = migrations.migrate_all()
         for name, (from_ver, to_ver) in results.items():
-            if to_ver >= 0:
+            if to_ver < 0:
+                log(f"migration {name} FAILED ({from_ver} -> {to_ver}) -- "
+                    "schema state unknown, aborting batch before any DB work")
+                return 75
+            if to_ver != from_ver:
                 log(f"migration {name}: {from_ver} -> {to_ver}")
     except Exception as exc:
-        log(f"migration check failed (non-fatal): {exc}")
+        log(f"migration check FAILED (fatal, aborting): {exc}")
+        return 75
 
     RUNS.mkdir(exist_ok=True)
     set_log_file(RUNS / f"batch_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log")

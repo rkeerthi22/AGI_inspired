@@ -383,44 +383,52 @@ def _run_research_task(context: _TaskContext) -> str:
     usage_path = rc.RUNS / f"task{tid}_worker.usage.json"
     fs_snapshot = integrity.fs_integrity_snapshot()
     usage: dict = {}
+    # F106 §2 (audit 2026-09-05): fs_integrity_check MUST run even when the
+    # worker call aborts (timeout / DB-containment violation / launch failure).
+    # Previously it sat AFTER the try/except on the success path only, so a
+    # worker that touched a protected file and then timed out bypassed the
+    # containment check entirely. The check is non-raising on violation (it
+    # logs, preserves evidence, and auto-reverts via git checkout), so an
+    # unconditional finally cannot mask the infra_failed returns above.
     try:
-        with integrity.DatabaseMutationGuard(f"task {tid} worker call"):
-            worker_options = {}
-            if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
-                worker_options["retrieval_profile"] = context.retrieval_profile
-            out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
-                prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
-                **worker_options)
-    except subprocess.TimeoutExpired:
-        write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout"}, "worker")
-        ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes="worker timeout",
-                           append_note=True)
-        rc.log(f"task {tid}: infra_failed (timeout)")
-        if tw:
-            tw.task_failed("worker timeout", failure_stage="execution")
-        return "infra_failed"
-    except integrity.DatabaseMutationViolation as exc:
-        write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc)}, "worker")
-        ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes=f"database containment violation: {exc}",
-                           append_note=True)
-        rc.log(f"task {tid}: infra_failed (database containment violation)")
-        if tw:
-            tw.task_failed("database containment violation", failure_stage="execution")
-        return "infra_failed"
-    except Exception as exc:
-        write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc)}, "worker")
-        ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                           critic_notes=f"worker launch failure: {exc}",
-                           append_note=True)
-        rc.log(f"task {tid}: infra_failed (worker launch failure: {exc})")
-        if tw:
-            tw.task_failed("worker launch failure", failure_stage="execution",
-                           detail=str(exc)[:200])
-        return "infra_failed"
-
-    integrity.fs_integrity_check(fs_snapshot, context=f"task {tid} worker call")
+        try:
+            with integrity.DatabaseMutationGuard(f"task {tid} worker call"):
+                worker_options = {}
+                if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
+                    worker_options["retrieval_profile"] = context.retrieval_profile
+                out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
+                    prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
+                    **worker_options)
+        except subprocess.TimeoutExpired:
+            write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout"}, "worker")
+            ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               critic_notes="worker timeout",
+                               append_note=True)
+            rc.log(f"task {tid}: infra_failed (timeout)")
+            if tw:
+                tw.task_failed("worker timeout", failure_stage="execution")
+            return "infra_failed"
+        except integrity.DatabaseMutationViolation as exc:
+            write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc)}, "worker")
+            ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               critic_notes=f"database containment violation: {exc}",
+                               append_note=True)
+            rc.log(f"task {tid}: infra_failed (database containment violation)")
+            if tw:
+                tw.task_failed("database containment violation", failure_stage="execution")
+            return "infra_failed"
+        except Exception as exc:
+            write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc)}, "worker")
+            ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               critic_notes=f"worker launch failure: {exc}",
+                               append_note=True)
+            rc.log(f"task {tid}: infra_failed (worker launch failure: {exc})")
+            if tw:
+                tw.task_failed("worker launch failure", failure_stage="execution",
+                               detail=str(exc)[:200])
+            return "infra_failed"
+    finally:
+        integrity.fs_integrity_check(fs_snapshot, context=f"task {tid} worker call")
     # Persist the FULL raw output regardless of what happens next -- a misclassified
     # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
     # nearly lost with only a 200-char snippet surviving in critic_notes.
