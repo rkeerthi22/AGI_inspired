@@ -30,6 +30,29 @@ require reproducible deployment, strong identity, OS-enforced isolation,
 durable audit, operational SLO evidence, and validated recovery under sustained
 use.
 
+### 2026-09-04 Implementation Addendum
+
+**Current rating: 3.2 / 5 enterprise readiness.** The control-plane design is
+now closer to an enterprise candidate because the repository has hash-locked
+dependencies, release preflight, fail-closed egress/audit contracts, and an
+independent-provider critic route. The operating system and deployment posture
+is still below enterprise candidate: those controls are not provisioned or
+independently verified on this host.
+
+**Release blockers before an enterprise-candidate claim:**
+
+* Restricted worker service identity plus Firewall/WFP, AppContainer, or VM
+  enforcement proving direct egress and raw-socket bypass are denied.
+* An append-only UNC audit replica, dedicated signing/KMS path, and a recorded
+  restore/verification drill.
+* Clean-machine Windows installation and CI evidence from the SHA-256 lock.
+* A calibrated independent evaluation corpus and independent security review.
+* Sustained, authorized operational evidence after the post-F110 cohort gate
+  repair; the previous cohort result cannot be treated as a fair product score.
+
+The full deployment sequence is in
+`docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md`.
+
 ### Review-time evidence
 
 * Git HEAD was `4e768eba118c0ca7d8ca276d4f6b2610beed983f`; the working tree was clean.

@@ -15,56 +15,54 @@ does not authorize provider calls, ESTOP changes, or cohort execution.
 | Failover telemetry | `45d7846`, trajectory regression | `failover_attempted` carries the classified prior reason. |
 | Local audit chain | `b9d7499`, `trajectory.verify_chain()` | New trajectory events are hash-linked; release preflight verifies them. |
 | Operator trust | `351104e`, `d8037f3` | Unsigned/foreign markers fail closed; purpose is bound; keys are vaulted locally. |
+| Dependency artifacts | `dependency_integrity.py`, `tests/test_dependency_integrity.py` | 205 public packages are SHA-256 locked; bootstrap uses `--require-hashes --no-deps --no-input`; Hermes is separately version/revision/hash attested. |
+| Worker egress contract | `egress_policy.py`, `egress_broker.py`, `tests/test_egress_policy.py` | Worker launch fails closed without a fresh signed boundary attestation; the broker allows HTTPS CONNECT only, validates exact hosts and public DNS answers, and bounds idle time and relay bytes. |
+| Remote audit protocol | `audit_replication.py`, `tests/test_audit_replication.py` | An enforced release copies verified trajectories to a configured UNC replica and appends signed hash-linked checkpoints; tampering, absence, and stale checkpoints block preflight. |
+| Independent critic route | `models.yaml`, `evaluation.py`, `tests/test_critic_independence.py` | Critic defaults to BytePlus while the worker defaults to Ollama; a same-provider failover becomes `needs_review` before a critic request. |
 
-## P1 Work Remaining
+## Deployment And Evidence Still Required
 
-### 1. Reproducible dependency artifacts
+### 1. Clean-machine dependency proof
 
-The repository currently has exact version pins, but not artifact hashes and
-bootstrap does not use `--require-hashes`. Do not add guessed hashes. Generate
-the lock from a clean, approved build environment with `pip-compile
---generate-hashes` or an equivalent audited process, retain all platform
-artifacts needed by Windows CI, then change `scripts/bootstrap.ps1` to install
-with `--require-hashes`. Acceptance requires a clean-machine install and a
-negative test proving a changed artifact hash fails.
+The public dependency lock and negative tamper test are implemented. A clean
+Windows machine and CI runner must still install from that lock successfully;
+the local Hermes checkout remains an explicitly attested external runtime, not
+a pretend PyPI package.
 
-### 2. Engine-independent egress boundary
+### 2. Actual Windows egress containment
 
-The Hermes tool configuration and Windows Job Object are not a network
-security boundary. The production design should run workers under a dedicated
-restricted service identity, deny direct outbound traffic by default, and
-allow only an audited egress broker. The broker must enforce HTTPS scheme,
-host allowlist, DNS resolution outside the worker, redirect revalidation,
-private/link-local address denial, request size and timeout limits, and an
-append-only decision log. Windows Firewall/AppContainer or an equivalent
-per-process policy must be selected and tested; a Job Object alone is
-insufficient.
+The repository does not create a Windows service identity, Firewall/WFP rule,
+AppContainer, or egress VM. Before release, deploy one of those OS-enforced
+boundaries so the worker cannot clear proxy variables, open a raw socket, or
+spawn an unconfined network-capable child. Produce the signed attestation only
+after that deployment passes its direct denial, raw-socket, and private-address
+tests. The broker's current provider-only allowlist deliberately does not
+authorize unrestricted web research; a mission-scoped public-web grant design
+is required before browser research can run through this boundary.
 
-Acceptance requires a containment test that attempts a denied host, a DNS
-rebinding/private-address test, and proof that the worker cannot bypass the
-broker by changing environment variables or opening a raw socket.
+### 3. Actual off-machine audit retention
 
-### 3. Audit durability and identity
+The protocol is present, but no `HARNESS_AUDIT_REPLICA_ROOT` UNC destination is
+configured and enforcement is intentionally disabled. Provision an append-only
+remote share, set `HARNESS_AUDIT_ENFORCE=1` only for the harness service, and
+perform an independent restore/verification drill. The current signer is a
+purpose-bound Credential Manager bridge, not a separate KMS or enterprise RBAC
+boundary.
 
-The trajectory chain is local detection, not tamper-proof retention. Production
-needs key-controlled verification, off-machine replication, retention policy,
-access audit, and a restore/verification drill. Credential Manager is better
-than plaintext but remains same-user accessible; it is not human identity or
-RBAC. Use a dedicated service account and operator authentication before
-calling this enterprise-grade.
+### 4. Independent evaluation calibration
 
-### 4. Independent evaluation
+Provider separation is enforced for the configured primary worker, but it is
+not a substitute for a labeled evaluation corpus, a calibrated critic, or an
+independent external reviewer. A worker that fails over to BytePlus is
+intentionally sent to human review rather than self-graded.
 
-The critic currently shares model/provider risk with the manager in some
-configurations. Choose a second provider/model or formally accept a
-single-provider fallback, then calibrate it against a labeled corpus. The
-current Codex review is adversarial but not an external separation-of-duties
-or penetration test.
+See `docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md` for the exact
+operator-owned prerequisites.
 
 ## Release Rule
 
 The harness may be used as a supervised internal/private pilot only after
 `python -B orchestrator/operator_cli.py preflight release` passes with no
 blockers, backups are freshly verified, and an operator scopes each run. It is
-not an enterprise-production release until the remaining P1 controls and
-independent security review are complete.
+not an enterprise-production release until the deployment requirements,
+restore evidence, and an independent security review are complete.

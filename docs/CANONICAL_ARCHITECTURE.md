@@ -9,11 +9,13 @@
 The current control plane includes fail-closed operator marker trust,
 Credential Manager provider routing, authoritative model-free release
 preflight, F110 blocked-vs-dead citation classification, A5 early-abort
-diagnostics, truthful failover reasons, and hash-linked trajectory events.
-These controls are local and regression-tested; they are not a substitute for
-restricted worker identity, engine-independent egress enforcement, hashed
-dependency artifacts, or off-machine audit retention. The roadmap below is
-read with this current-state note taking precedence over stale checkboxes.
+diagnostics, truthful failover reasons, SHA-256 dependency locking, a
+fail-closed worker egress contract, signed remote-audit replication, and an
+independent-provider critic route. These repository controls are
+regression-tested, but they are not proof that a restricted worker identity,
+OS egress policy, UNC audit share, clean-machine install, restore drill, or
+independent security review exists. The roadmap below is read with this
+current-state note taking precedence over stale checkboxes.
 
 ---
 
@@ -78,10 +80,15 @@ The AGI_like harness is an autonomous cognitive execution environment designed t
   - `stage`: `lifecycle`, `execution`, `evaluation`.
   - `event_type`: `task_started`, `provider_selected`, `failover_attempted`, `tool_call_finished`, `citecheck_completed`, `critic_evaluated`, `task_completed`, `task_failed`.
   - `payload`: Structured event parameters with deep recursive secret redaction for API keys and Bearer tokens.
+  - `prev_event_hash` / `event_hash`: Canonical hash-chain links that make
+    local event mutation detectable; enforced releases replicate verified
+    chains and signed checkpoints to a separately provisioned remote store.
 
 ### D. Provider Transport Layer (`orchestrator/provider_chat.py`)
 * Enforces a typed provider interface across BytePlus ModelArk (`byteplus_coding`), Ollama Cloud (`ollama`), Anthropic (`anthropic`), OpenAI (`openai`), and local models.
-* Credentials are securely resolved via `_secure_env_value()` from Hermes private environment configuration (`%LOCALAPPDATA%\hermes\.env`), keeping secrets out of repository files and logs.
+* Credentials are securely resolved through the local secret bridge, with
+  Windows Credential Manager used for vaulted provider credentials. Repository
+  files and logs must not contain provider secrets.
 
 ---
 

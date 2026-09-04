@@ -2554,16 +2554,54 @@ tampering and release preflight fails on invalid chains. Committed in `b9d7499`.
 The read-only release diagnostic now checks every persisted task trajectory
 chain. This is detection only; immutable off-machine retention remains open.
 
-### F114 - dependency pins were not artifact locked - P1 - open
+### F114 - dependency pins were not artifact locked - P1 - fixed in repository
 
-`scripts/requirements.txt` uses exact versions but no SHA-256 artifact hashes,
-and bootstrap does not use `--require-hashes`. A serial PyPI metadata probe was
-stopped after network timeouts; no hashes were guessed or added. Acceptance is
-a clean-machine hash-locked install plus a negative tampered-hash test.
+`scripts/requirements.txt` is now a generated SHA-256 lock for 205 public
+packages, and `scripts/bootstrap.ps1` installs it with `--require-hashes`,
+`--no-deps`, and `--no-input`. The editable local Hermes runtime is not falsely
+represented as a PyPI artifact: `hermes_runtime_attestation.json` pins its
+version, source revision, and approved dirty-file hash. The negative install
+test proves a changed artifact hash is rejected.
 
-### F115 - worker network isolation is not engine-independent - P1 - open
+Residual: a clean Windows machine and CI runner have not yet performed the
+full installation. That deployment evidence remains release-blocking.
 
-The Job Object controls process lifetime, not outbound network policy. A
-dedicated service identity, deny-by-default egress broker, DNS/private-address
-controls, and bypass tests are still required. See
-`docs/SECURITY_BLUEPRINT_2026-09-04.md`.
+### F115 - worker network isolation lacked a fail-closed control plane - P1 - fixed in repository, unprovisioned on host
+
+`egress_policy.py` now requires a fresh operator-signed boundary attestation
+before a worker launches, overwrites inherited proxy settings, rejects private
+DNS answers, and binds the attestation to worker/broker hashes and an OS policy
+identifier. `egress_broker.py` allows HTTPS CONNECT only, enforces the host
+allowlist and byte/idle bounds, and logs decisions without request content.
+`tests/test_egress_policy.py` proves denied host, private address, missing
+evidence, missing identity, and hostile proxy cases.
+
+Residual: Job Objects do not enforce network policy. A separate Windows worker
+identity plus Firewall/WFP, AppContainer, or isolated VM must be provisioned
+and independently tested. The provider-only allowlist also deliberately does
+not authorize unrestricted browser research.
+
+### F116 - trajectory audit was local-only - P1 - fixed in repository, unprovisioned on host
+
+`audit_replication.py` copies verified trajectories to a configured UNC root
+under content-hash names and appends purpose-bound signed, hash-linked remote
+checkpoints. Preflight rejects missing, stale, tampered, or mismatched remote
+evidence. If enforcement is enabled and replication fails, task finalization
+marks the row `infra_failed` instead of retaining a successful result.
+`tests/test_audit_replication.py` covers chaining, tampering, missing roots,
+delegation from `trajectory.end()`, and truthful task status on failure.
+
+Residual: no UNC root, append-only ACL, dedicated KMS signer, or restore drill
+exists yet. See `docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md`.
+
+### F117 - critic could share the worker provider failure domain - P1 - fixed in repository
+
+The primary worker remains Ollama while the critic route is BytePlus. Runtime
+evaluation receives the actual worker configuration and returns `needs_review`
+without a critic call if worker and critic share a provider after failover.
+Release preflight checks the declared worker, manager, and critic routes.
+`tests/test_critic_independence.py` proves same-provider rejection and
+cross-provider transport eligibility without a provider call.
+
+Residual: provider separation does not replace a calibrated labeled corpus or
+an independent external reviewer.

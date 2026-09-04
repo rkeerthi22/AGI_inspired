@@ -45,6 +45,25 @@ the first new hashed record without rewriting history.
 by the host account. Off-machine immutable retention and key management remain
 open enterprise controls.
 
+## 2026-09-04 - Security controls were local conventions rather than release gates
+
+**What happened:** dependency pins lacked artifact hashes, worker egress relied
+on inherited process behavior, trajectories were retained only locally, and
+the critic could share the worker provider. These were real prototype controls,
+not enterprise-release evidence.
+
+**Fix:** the repository now hash-locks public Python dependencies, attests the
+separate Hermes runtime, fails worker launch closed without a signed egress
+boundary, provides a bounded CONNECT broker, adds signed remote-audit
+replication, and enforces provider-separated critic routing. The release
+preflight reports each control as a blocker until its external state verifies.
+
+**Residual:** no restricted Windows service identity, OS network policy, UNC
+append-only share, KMS signer, clean-machine install, restore drill, or
+independent security review has been performed. The implementation must not be
+reported as deployment completion. See
+`docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md`.
+
 ## 2026-07-29 — The containment guard reverted the assistant's own uncommitted work
 
 **What happened:** a mission fire was triggered by hand to verify H7's new skill-injection log line

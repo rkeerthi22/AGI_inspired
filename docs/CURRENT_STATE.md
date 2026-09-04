@@ -1,13 +1,14 @@
 # Canonical Project State - AGI_like Harness
 
-> Forward implementation update (2026-09-04): RC-1/F110, A5, A3 telemetry
-> truth, and local trajectory hash chaining are complete and model-free
-> verified. The current gate is `63/63`; no live execution is authorized.
+> Forward implementation update (2026-09-04): dependency artifact hashes,
+> fail-closed egress and remote-audit protocols, and independent critic routing
+> are implemented. Deployment evidence remains required; no live execution is
+> authorized.
 
-**Last Updated:** 2026-09-03T22:49:11Z
-**Phase:** Immediate cohort actions complete through M7; post-cohort backlog items 1–4 done; operator-trust + release-preflight security batch integrated
+**Last Updated:** 2026-09-04T17:16:41Z
+**Phase:** Immediate cohort actions complete through M7; repository-controlled P1 security implementation complete; deployment evidence and independent review pending
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Live Verification:** `python -B tests/run_all.py` -> `61/61` green (own run, exit 0) | `python orchestrator/continuity.py recover` valid | `python -B orchestrator/operator_cli.py status --json` clean | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
+**Live Verification:** `python -B tests/run_all.py` -> `67/67` green (model-free, exit 0) | continuity refresh pending this documentation checkpoint | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
 
 ---
 
@@ -23,7 +24,7 @@ What is now true in live state:
 | Task 110 recovery | VERIFIED LIVE | Supported recovery already completed on 2026-09-02; row is no longer stranded in `running` |
 | Hermes provider-id repair | VERIFIED | `14dbafe` changed Anthropic to native `anthropic`, OpenAI to `openai-api`, and aligned finalizer mapping |
 | Unavailable-rung failover hardening | VERIFIED | `5522926` teaches both research and synthesis failover loops to continue past missing optional provider credentials or unsupported provider rungs |
-| Full model-free gate | VERIFIED | `61/61` suites green after both repairs, the F107–F109 hermeticity batch, and the operator-trust/preflight security batch |
+| Full model-free gate | VERIFIED | `67/67` suites green after the dependency, egress, audit, and independent-critic security batch |
 | Supervised BytePlus canary | VERIFIED LIVE | `2026-09-03T01:53:09Z`, `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, request id `02178840037366712014becacfaf8a37949eaec3c813975305d82` |
 | M3 / task 114 | FAILED | Real frozen-spec fail; deliverable did not explicitly account for all required blocked review platforms and attempts |
 | M4 / task 115 | PASSED | Clean synthesis pass |
@@ -119,11 +120,20 @@ Enterprise gaps:
   (weak-AI strategy), so those rungs will still report missing credentials — intentional.
 * an authoritative model-free release preflight (`agi preflight`) and CI pinning / venv
   fix landed (`scripts/ci.ps1`, `.github/workflows/model_free_gate.yml`).
-* **still open:** host identity / engine-independent egress sandbox (no Job Object
-  containment or outbound egress policy yet); tamper-evident off-machine audit retention;
-  reproducible dependency hashes (deps are pinned but not hash-verified); independent
-  critic evidence routing; sustained operational proof / restore-drill evidence. This is a
-  control prototype, not enterprise-finished.
+* dependency artifacts are hash-locked and bootstrap enforces hash verification;
+  Hermes is separately attested as an external checkout. A clean-machine/CI
+  installation remains unproven.
+* worker launch now fails closed without a signed, time-bounded egress boundary
+  attestation. The repository supplies a bounded HTTPS CONNECT broker, but no
+  Windows restricted identity or OS firewall/AppContainer boundary has been
+  provisioned on this host.
+* trajectory replication and signed remote checkpoints are implemented, but no
+  remote UNC root is configured and audit enforcement is deliberately off.
+* BytePlus is the configured critic provider while Ollama is the primary worker
+  provider. Same-provider failover routes to `needs_review`, not self-grading.
+* sustained operational proof, restore drills, a calibrated evaluation corpus,
+  and independent security review remain open. This is a control prototype,
+  not enterprise-finished.
 
 Product-quality gap:
 
@@ -145,11 +155,13 @@ Completed on `master`:
 * `b9d7499` local audit: new trajectory events carry `prev_event_hash` and
   `event_hash`; `agi preflight release` verifies persisted chains.
 
-The remaining P1 security work is not silently marked complete: dependency
-artifact hashes with `--require-hashes`, a dedicated worker identity and
-engine-independent egress boundary, off-machine audit retention, and an
-independent critic/evaluation corpus remain open. See
-`docs/SECURITY_BLUEPRINT_2026-09-04.md`.
+The repository-controlled P1 security work is implemented: SHA-256 dependency
+locking, fail-closed egress attestation and broker code, signed remote-audit
+replication, and independent critic routing. The remaining work is deployment
+and proof: a restricted worker identity and OS egress policy, an append-only
+UNC audit share plus restore drill, clean-machine CI, calibration, and an
+independent security review. See
+`docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md`.
 
 ---
 
@@ -178,3 +190,28 @@ independent critic/evaluation corpus remain open. See
    operational proof. See `docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md`
    for the fixed-vs-open breakdown. This is model-free repo work only and does NOT clear
    anything for live execution.
+
+---
+
+## 7. Release And Next Actions (Supersedes Section 5)
+
+The next action is not a live cohort retry. First conduct an independent review
+of `aa5afaf` against the release preflight and deployment runbook. The operator
+then provisions the real controls that repository code cannot create:
+
+1. A restricted worker service identity and OS-enforced egress rule, followed
+   by direct-denial, raw-socket, and private-address tests and a fresh signed
+   `HARNESS_EGRESS_ATTESTATION`.
+2. An append-only UNC audit replica with the harness write identity separated
+   from the review/restore identity, followed by enforcement and an independent
+   restore-and-verify drill.
+3. A clean Windows machine and pinned CI runner that install the hash lock and
+   run the model-free gate without hidden local dependencies.
+4. An independent security reviewer who records findings against the code,
+   host deployment evidence, access controls, and restore evidence.
+
+Only after `python -B orchestrator/operator_cli.py preflight release` has no
+blockers, the upstream is synchronized, and the operator explicitly opens a
+controlled window may a supervised live validation be considered. Provider
+capacity and missing Anthropic/OpenAI credentials must be treated as explicit
+operating constraints, not as a reason to weaken the gate.
