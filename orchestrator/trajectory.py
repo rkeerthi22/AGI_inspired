@@ -23,6 +23,7 @@ Design constraints:
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 from datetime import datetime, timezone
@@ -30,6 +31,7 @@ from pathlib import Path
 from typing import Any
 
 SCHEMA_VERSION = 1
+GENESIS_HASH = "GENESIS"
 
 
 # ── Secret redaction ──────────────────────────────────────────────────────
@@ -75,6 +77,46 @@ def _redact(obj: Any, depth: int = 0) -> Any:
     return obj
 
 
+def _canonical_event_bytes(event: dict[str, Any]) -> bytes:
+    unsigned = {key: value for key, value in event.items() if key != "event_hash"}
+    return json.dumps(unsigned, ensure_ascii=False, sort_keys=True,
+                      separators=(",", ":")).encode("utf-8")
+
+
+def _event_hash(event: dict[str, Any]) -> str:
+    return hashlib.sha256(_canonical_event_bytes(event)).hexdigest()
+
+
+def verify_chain(path: Path) -> bool:
+    """Verify hashed events and legacy-to-hashed transition anchors."""
+    if not path.is_file():
+        return True
+    previous = GENESIS_HASH
+    saw_hashed = False
+    with path.open("rb") as handle:
+        for raw in handle:
+            if not raw.strip():
+                continue
+            try:
+                event = json.loads(raw.decode("utf-8"))
+            except (UnicodeDecodeError, json.JSONDecodeError):
+                return False
+            if not isinstance(event, dict):
+                return False
+            stored = event.get("event_hash")
+            if stored is None:
+                if saw_hashed:
+                    return False
+                previous = hashlib.sha256(raw).hexdigest()
+                continue
+            if (event.get("prev_event_hash") != previous or
+                    stored != _event_hash(event)):
+                return False
+            previous = stored
+            saw_hashed = True
+    return True
+
+
 # ── Trajectory writer ─────────────────────────────────────────────────────
 
 class TrajectoryWriter:
@@ -99,12 +141,15 @@ class TrajectoryWriter:
         remain authoritative; malformed records are ignored, and the next append
         is separated from an unterminated tail without rewriting existing bytes.
         """
+        self._previous_hash = GENESIS_HASH
         if not self._path.is_file() or self._path.stat().st_size == 0:
             return 0, False
 
         highest = 0
-        with self._path.open("r", encoding="utf-8", errors="replace") as handle:
-            for raw_line in handle:
+        previous_hash = GENESIS_HASH
+        with self._path.open("rb") as handle:
+            for raw_bytes in handle:
+                raw_line = raw_bytes.decode("utf-8", errors="replace")
                 try:
                     event = json.loads(raw_line)
                 except (json.JSONDecodeError, UnicodeDecodeError):
@@ -114,10 +159,12 @@ class TrajectoryWriter:
                 sequence = event.get("sequence")
                 if type(sequence) is int and sequence > highest:
                     highest = sequence
+                    previous_hash = event.get("event_hash") or hashlib.sha256(raw_bytes).hexdigest()
 
         with self._path.open("rb") as handle:
             handle.seek(-1, os.SEEK_END)
             needs_separator = handle.read(1) not in (b"\n", b"\r")
+        self._previous_hash = previous_hash
         return highest, needs_separator
 
     # ── read-only properties ──────────────────────────────────────────
@@ -174,10 +221,13 @@ class TrajectoryWriter:
             "event_type": event_type,
             "actor": actor,
             "payload": _redact(payload) if payload else {},
+            "prev_event_hash": self._previous_hash,
         }
         if metrics:
             event["metrics"] = {k: v for k, v in metrics.items()
                                if k not in _SECRET_ENV_NAMES}
+        event["event_hash"] = _event_hash(event)
+        self._previous_hash = event["event_hash"]
         line = json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
         with open(self._path, "a", encoding="utf-8") as fh:
             if self._needs_separator:

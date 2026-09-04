@@ -462,6 +462,17 @@ def _release_database_state() -> dict:
             "databases": reports}
 
 
+def _trajectory_integrity_state() -> dict:
+    """Verify persisted trajectory chains without rewriting or repairing them."""
+    try:
+        import trajectory
+        paths = sorted(RUNS.glob("task*.trajectory.jsonl"))
+        invalid = [path.name for path in paths if not trajectory.verify_chain(path)]
+        return {"ok": not invalid, "files": len(paths), "invalid": invalid[:20]}
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
 def _dependency_state() -> dict:
     """Run pip's installed-distribution consistency check without network access."""
     try:
@@ -716,6 +727,11 @@ def _release_prerequisites() -> list[dict]:
                         if report.get("ok") is not True]
     add("database_integrity_and_schema", databases.get("ok") is True,
         "failed=" + (",".join(failed_databases) if failed_databases else "none"))
+
+    trajectories = _trajectory_integrity_state()
+    add("trajectory_audit_chain", trajectories.get("ok") is True,
+        f"files={trajectories.get('files')} invalid={trajectories.get('invalid') or []} "
+        f"error={trajectories.get('error')}")
 
     dependencies = _dependency_state()
     add("dependency_consistency", dependencies.get("ok") is True,

@@ -486,6 +486,7 @@ safe_release = {
     "_release_database_state": {"ok": True, "databases": {
         "ledger": {"ok": True}, "ledgerbook": {"ok": True},
         "fts_index": {"ok": True}, "predictions": {"ok": True}}},
+    "_trajectory_integrity_state": {"ok": True, "files": 12, "invalid": []},
     "_dependency_state": {"ran": True, "ok": True,
                           "summary": "No broken requirements found."},
     "_requirements_lock_state": {"ok": True, "entries": 10, "unpinned": []},
@@ -527,7 +528,8 @@ check("release preflight safe world passes", release["safe_to_proceed"], True)
 release_names = {item["check"] for item in release["checks"]}
 for expected in ("estop_engaged", "no_active_write_owners", "release_branch_master",
                  "git_tree_clean", "git_upstream_synchronized", "continuity_valid",
-                 "database_integrity_and_schema", "dependency_consistency",
+                  "database_integrity_and_schema", "trajectory_audit_chain",
+                  "dependency_consistency",
                  "dependency_versions_exactly_pinned", "ci_supply_chain_pinned",
                  "protected_paths_consistent",
                  "trusted_operator_key_present", "operator_key_vault_storage",

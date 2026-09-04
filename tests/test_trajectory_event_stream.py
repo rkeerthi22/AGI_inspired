@@ -85,6 +85,17 @@ with tempfile.TemporaryDirectory() as td:
           all(l["task_id"] == 101 and l["mission_id"] == "001-shopify" for l in lines))
     check("timestamps are valid ISO UTC format",
           all(datetime.fromisoformat(l["timestamp"]) for l in lines))
+    check("events carry a chained hash",
+          all(l.get("event_hash") and l.get("prev_event_hash") for l in lines))
+    check("first event links to the genesis marker",
+          lines[0]["prev_event_hash"] == trajectory.GENESIS_HASH)
+    check("trajectory hash chain verifies",
+          trajectory.verify_chain(traj_path))
+
+    tampered = traj_path.read_text(encoding="utf-8").replace(
+        "PromptHero MAU research", "Tampered research", 1)
+    traj_path.write_text(tampered, encoding="utf-8")
+    check("trajectory tampering is detected", not trajectory.verify_chain(traj_path))
 
 
 # ── Test 1b: Reopen/append resumes sequence without overwriting ──────────
