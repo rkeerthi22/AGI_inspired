@@ -1,5 +1,50 @@
 # Incidents
 
+## 2026-09-04 - RC-1 false negatives on bot-protected citations
+
+**What happened:** the cohort citecheck treated every non-2xx response as an
+unreachable/dead citation. Bot-protected pages returned 403/429/5xx even though
+the server responded and the cited sites existed. This contributed to false
+failures in M5, M6 rerun, and part of M7.
+
+**Fix:** `0701dc5` separates `BLOCKED` from `DEAD`. Only 404/410 and connection
+failures count toward the dead fraction; blocked responses remain visible to
+the critic as unverified rather than fabricated. F110 is covered by the model-
+free suite. A supervised cohort rerun is still required to measure the live
+outcome.
+
+**Lesson:** transport refusal is not evidence that a resource does not exist.
+The verdict vocabulary must preserve that distinction before model quality is
+assessed.
+
+## 2026-09-04 - Early-abort diagnostics were empty
+
+**What happened:** when failover terminated before a worker emitted text, the
+raw worker artifact could be zero bytes while useful details existed in
+`usage.failure` or `usage.process_error`. This weakened independent diagnosis
+of the M6 failure.
+
+**Fix:** `8fb3efd` writes bounded diagnostics for empty returned output and
+exception paths in both task and synthesis execution. The A5 regression proves
+that the artifact is non-empty and retains the failure cause.
+
+**Residual:** provider subprocess stdout capture and structured usage fields
+remain separate evidence channels; neither is an off-machine audit system.
+
+## 2026-09-04 - Local trajectory audit boundary added
+
+**What happened:** trajectories were append-only by convention but had no
+cryptographic linkage, so a modified historical JSONL record could not be
+detected from the file alone.
+
+**Fix:** `b9d7499` hash-links new records and makes `agi preflight release`
+verify all persisted chains. Existing legacy records are accepted and anchor
+the first new hashed record without rewriting history.
+
+**Residual:** local hashing does not prevent deletion or coordinated tampering
+by the host account. Off-machine immutable retention and key management remain
+open enterprise controls.
+
 ## 2026-07-29 — The containment guard reverted the assistant's own uncommitted work
 
 **What happened:** a mission fire was triggered by hand to verify H7's new skill-injection log line

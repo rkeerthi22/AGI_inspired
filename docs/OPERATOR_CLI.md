@@ -8,6 +8,11 @@ only** and is explicitly **not a second safety authority**: ESTOP, runlock,
 isolation, canary admission, and ACTIVE_WORK enforcement remain owned by their
 existing modules. A green preflight here authorizes nothing.
 
+Current release surface (2026-09-04): `agi preflight release` is the
+authoritative model-free release diagnostic. The local trajectory audit-chain
+check is included; off-machine audit retention, artifact hashes, and
+engine-independent egress remain separate enterprise work.
+
 This implements the "Single Recommended Next Implementation" from
 `docs/ENTERPRISE_READINESS_2026-08-31.md` (§11).
 
@@ -20,6 +25,7 @@ This implements the "Single Recommended Next Implementation" from
 | `agi status` | Consolidated read-only state | 0 |
 | `agi health --model-free` | Test gate + continuity + DB checks | 0 gate green, 1 gate failed |
 | `agi preflight canary` | Canary prerequisite diagnostic | 0 no blockers, 1 blocked |
+| `agi preflight release` | Release admission diagnostic | 0 no blockers, 1 blocked |
 
 Every command also accepts `--json` for stable machine-readable output
 (Control App V1 will consume this contract).
@@ -88,9 +94,23 @@ Checks (blockers marked ●):
 
 ---
 
+### `agi preflight release`
+
+Diagnostic only. It never authorizes execution or contacts a provider. It
+checks ESTOP and markers, restored isolation, runlock, process quiescence,
+ACTIVE_WORK, Git branch/tree/upstream state, continuity, database/schema
+integrity, local trajectory hash chains, dependencies, exact pins, immutable
+CI actions, protected paths, vaulted credentials, backup freshness/offsite
+configuration, and the model-free gate. The recorded provider canary is
+informational only.
+
+It does not fetch Git, rotate credentials, create backups, or clear ESTOP. Run
+those operational steps separately, then rerun the diagnostic. A PASS is not
+deployment or business approval.
+
 ## JSON contract
 
-All three commands emit stable JSON under `--json`:
+All commands emit stable JSON under `--json`:
 
 ```json
 {
@@ -107,7 +127,7 @@ never guessed as pass.
 
 ---
 
-## Safety contract (enforced by 115 assertions in `tests/test_operator_cli.py`)
+## Safety contract (enforced by 159 assertions in `tests/test_operator_cli.py`)
 
 The CLI never mutates:
 
@@ -175,6 +195,10 @@ not contact a provider or alter ESTOP, canary authorization, or isolation state.
 - Provider state is only as fresh as the last recorded health event. `agi`
   still performs no live probe by design; probes remain separately
   operator-gated.
+- The trajectory check detects tampering locally; it does not provide
+  immutable off-machine retention or human identity.
+- Requirements use exact versions but not artifact hashes; `--require-hashes`
+  remains open.
 - `health --model-free` runs the full gate (minutes); there is no fast mode.
 - Continuity discrepancy reporting reflects live repo drift at collection
   time; during active development the tree is intentionally dirty.

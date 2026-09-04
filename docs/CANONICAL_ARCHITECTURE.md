@@ -4,6 +4,17 @@
 **Revision:** 2026-08-30  
 **Target Audience:** All Autonomous Agents (Gemini, DeepSeek, Claude, Codex, Hermes) & Human Operators
 
+### Current Revision Note (2026-09-04)
+
+The current control plane includes fail-closed operator marker trust,
+Credential Manager provider routing, authoritative model-free release
+preflight, F110 blocked-vs-dead citation classification, A5 early-abort
+diagnostics, truthful failover reasons, and hash-linked trajectory events.
+These controls are local and regression-tested; they are not a substitute for
+restricted worker identity, engine-independent egress enforcement, hashed
+dependency artifacts, or off-machine audit retention. The roadmap below is
+read with this current-state note taking precedence over stale checkboxes.
+
 ---
 
 ## 1. Architectural System Overview

@@ -2486,3 +2486,84 @@ provider selectors (`custom:anthropic`, `custom:openai`), repaired separately
 in commit `14dbafe`.
 
 `orchestrator/execution.py` | `tests/test_fallback_chain.py` | commit `5522926`
+
+## 2026-09-04 forward implementation findings
+
+### F103 - mechanical cite evidence was not fed back to the worker - P2 - fixed
+
+Retry feedback previously carried critic prose instead of the verified dead-URL
+evidence already produced by citecheck. `45caf64` routes that evidence to the
+worker retry prompt. Existing retry coverage verifies the fail-soft behavior.
+
+### F104 - critic retry gaps were unstructured - P2 - fixed
+
+The critic now emits a parseable `MISSING:` list and retries turn it into a
+bounded numbered checklist. The list is capped at 12 items and 240 characters
+per item to prevent prompt-amplification. Covered by `tests/test_f104.py`.
+
+### F105 - provider health was discovered too late - P2 - fixed
+
+The cohort entry warning reads the last recorded BytePlus canary without making
+a call. It is advisory and does not authorize execution. Covered by
+`tests/test_f105.py`.
+
+### F106 - worker did not self-check citations in-loop - P2 - fixed
+
+The generic worker profile now receives a citation self-check instruction using
+the existing web extraction path. Dynamic-browser behavior remains unchanged.
+Covered by `tests/test_f106.py`; live compliance remains unverified.
+
+### F107 - protected-path warning was a false positive - P3 - fixed
+
+The local Claude settings file was listed in versioned `.gitignore`, removing
+the unversioned-mask warning while preserving protection of tracked files.
+Covered by `tests/test_f107.py`.
+
+### F108 - model-free tests polluted production health events - P2 - fixed
+
+Unit, containment, and integration tiers now redirect health events to a
+pid-scoped temporary path. The live tier receives no injected redirect.
+Covered by `tests/test_f108.py`.
+
+### F109 - test critic artifacts polluted production runs - P2 - fixed
+
+The test critic paths are redirected for the complete test section and a
+negative check proves the redirect is required. Covered by `tests/test_f109.py`.
+
+### F110 - citecheck classified bot refusal as dead citation - P0 - fixed
+
+HTTP 403/429/5xx responses mean the server responded and are now reported as
+`BLOCKED`, not fabricated `DEAD` URLs. 404/410 and connection failures remain
+dead and continue to count toward hard failure. Committed in `0701dc5`; covered
+by `tests/test_f110.py` and the `62/62` gate before later additions.
+
+### F111 - early-abort worker evidence was a zero-byte artifact - P1 - fixed
+
+When a provider returns empty output, or the worker/synthesis call raises,
+`worker_diagnostics.py` persists the bounded `failure`/`process_error` detail
+with a phase header. Committed in `8fb3efd`; covered by `tests/test_a5.py`.
+
+### F112 - trajectory events had no tamper-evident local linkage - P1 - fixed
+
+New trajectory events carry `prev_event_hash` and `event_hash`; legacy files
+are anchored by the exact previous record bytes. `verify_chain()` detects
+tampering and release preflight fails on invalid chains. Committed in `b9d7499`.
+
+### F113 - release preflight did not verify trajectory integrity - P1 - fixed
+
+The read-only release diagnostic now checks every persisted task trajectory
+chain. This is detection only; immutable off-machine retention remains open.
+
+### F114 - dependency pins were not artifact locked - P1 - open
+
+`scripts/requirements.txt` uses exact versions but no SHA-256 artifact hashes,
+and bootstrap does not use `--require-hashes`. A serial PyPI metadata probe was
+stopped after network timeouts; no hashes were guessed or added. Acceptance is
+a clean-machine hash-locked install plus a negative tampered-hash test.
+
+### F115 - worker network isolation is not engine-independent - P1 - open
+
+The Job Object controls process lifetime, not outbound network policy. A
+dedicated service identity, deny-by-default egress broker, DNS/private-address
+controls, and bypass tests are still required. See
+`docs/SECURITY_BLUEPRINT_2026-09-04.md`.

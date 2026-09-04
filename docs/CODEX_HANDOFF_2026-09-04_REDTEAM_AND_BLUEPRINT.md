@@ -216,3 +216,20 @@ already says. Don't let the security-batch landing inflate the framing.
 `docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md`; failover review (A3/A5
 evidence) at `docs/reviews/claude-code_FAILOVER_REVIEW_2026-09-03.md`; fix registry at
 `S:\ObsidianVault\Fix Registry.md` (next fix is **F110**).
+
+## Forward Implementer Update (2026-09-04)
+
+The earlier open RC-1 and A5 items in this handoff are now implemented on
+`master`: `0701dc5` (F110), `8fb3efd` (A5), and `b9d7499` (local trajectory
+hash chain plus release-preflight verification). A3 was already fixed in
+`45d7846` and is covered by the trajectory regression. The complete model-free
+gate is now `63/63` green and the live trajectory inventory is `11` files with
+`invalid=[]`.
+
+The remaining security blueprint is unchanged in substance: artifact hashes
+with `--require-hashes`, a dedicated worker identity and engine-independent
+egress boundary, off-machine audit retention, and independent critic
+calibration remain open. No hashes were guessed after the bounded PyPI
+metadata probe timed out. ESTOP remains engaged; this update authorizes no
+provider or cohort execution. Canonical details are in
+`docs/SECURITY_BLUEPRINT_2026-09-04.md`.

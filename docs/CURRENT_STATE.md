@@ -1,5 +1,9 @@
 # Canonical Project State - AGI_like Harness
 
+> Forward implementation update (2026-09-04): RC-1/F110, A5, A3 telemetry
+> truth, and local trajectory hash chaining are complete and model-free
+> verified. The current gate is `63/63`; no live execution is authorized.
+
 **Last Updated:** 2026-09-03T22:49:11Z
 **Phase:** Immediate cohort actions complete through M7; post-cohort backlog items 1–4 done; operator-trust + release-preflight security batch integrated
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
@@ -127,6 +131,25 @@ Product-quality gap:
 
 This remains a strong enterprise-candidate control prototype, not an
 enterprise-finished product.
+
+## 6. Forward Implementation Update (2026-09-04)
+
+Completed on `master`:
+
+* `0701dc5` F110: citecheck distinguishes blocked server responses from dead
+  citations and preserves hard failures for genuinely gone/unreachable URLs.
+* `8fb3efd` A5: empty worker and synthesis failures persist bounded diagnostic
+  text instead of zero-byte raw artifacts.
+* `45d7846` A3: failover trajectory events carry the actual prior failure
+  reason; the authentication transition is regression-tested.
+* `b9d7499` local audit: new trajectory events carry `prev_event_hash` and
+  `event_hash`; `agi preflight release` verifies persisted chains.
+
+The remaining P1 security work is not silently marked complete: dependency
+artifact hashes with `--require-hashes`, a dedicated worker identity and
+engine-independent egress boundary, off-machine audit retention, and an
+independent critic/evaluation corpus remain open. See
+`docs/SECURITY_BLUEPRINT_2026-09-04.md`.
 
 ---
 
