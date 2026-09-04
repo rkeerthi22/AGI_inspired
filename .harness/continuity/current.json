@@ -1,26 +1,28 @@
 {
   "schema_version": 2,
-  "brief_revision": 58,
-  "created_at": "2026-09-04T01:49:36.677520+00:00",
+  "brief_revision": 59,
+  "created_at": "2026-09-04T02:06:16.348538+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "0701dc52eb55c3aa98097fc5afc45d4561c2e0b8"
+    "based_on_head": "b9d7499a6d048d735b545388e0144796c6b415fb"
   },
   "task": {
     "id": "REDTEAM-BLUEPRINT-2026-09-04",
-    "phase": "rc1-f110-committed-a5-next",
+    "phase": "a5-and-local-audit-chain-complete-p1-next",
     "status": "in_progress",
-    "next_action": "Implement A5 diagnostic capture on early-abort worker and synthesis paths, then add regression coverage; model-free only."
+    "next_action": "Scope reproducible dependency artifact hashes and the engine-independent egress boundary; no provider calls or live cohort execution."
   },
   "completed": [
-    "RC-1/F110 committed as 0701dc5: blocked HTTP responses no longer count as dead citations",
-    "F110 promoted to tests/test_f110.py and registered in the model-free tier",
-    "62/62 model-free suites green; ESTOP engaged and no live execution authorized",
-    "Operator-trust and release-preflight batch integrated at 170161b"
+    "RC-1/F110 committed as 0701dc5: 403/429/5xx responses are blocked, not dead citations",
+    "A5 committed as 8fb3efd: empty worker and synthesis failures persist bounded diagnostics",
+    "Trajectory audit chain committed as b9d7499: new events hash-chain and release preflight verifies them",
+    "A3 failover transition reason is already truthful and regression-tested in 45d7846",
+    "63/63 model-free suites green after A5 and audit-chain changes",
+    "ESTOP remains engaged; no live execution authorized"
   ],
   "locked_constraints": [
     "ESTOP remains engaged",
@@ -30,7 +32,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "62/62 model-free suites green after RC-1/F110; no live execution."
+    "detail": "63/63 model-free suites green after RC-1, A5, and trajectory audit-chain changes; no live execution."
   },
   "references": [
     {
@@ -45,18 +47,23 @@
     },
     {
       "path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
-      "purpose": "Forward implementation blueprint",
+      "purpose": "Forward blueprint",
       "sha256": "c7addda21099de8f72070fff9262cbe2e2dfc0270a012187661740f010413f97"
     },
     {
       "path": "tests/test_f110.py",
-      "purpose": "RC-1 blocked-vs-dead regression",
+      "purpose": "RC-1 regression",
       "sha256": "2fb9c4a8ae19d238c6e2b0fec04d0b899c44c6eafa8a5a88e2b58258747101d9"
     },
     {
-      "path": "workspace/validation/cohort_missions.json",
-      "purpose": "Frozen cohort specifications",
-      "sha256": "cd139598cd4a7f08b678e97bab9b4677dc7fa5cd11fa14258ad7c5ed9d641f3f"
+      "path": "orchestrator/trajectory.py",
+      "purpose": "Hash-chain implementation",
+      "sha256": "7ed1dabdb009d0f649a3efe6ea63fbcd623a2fde3fd8159177d677ad66d6c6d9"
+    },
+    {
+      "path": "tests/test_a5.py",
+      "purpose": "Early-abort diagnostic regression",
+      "sha256": "eda49d27028a36badba065854baf2c2c9e6ae876c58cbfbc394e9137f468c5c3"
     }
   ]
 }
