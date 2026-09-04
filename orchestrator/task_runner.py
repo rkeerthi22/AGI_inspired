@@ -151,11 +151,12 @@ def _run_research_task(context: _TaskContext) -> str:
                 f"{notes[:600]}\n"
                 "Address each objection specifically in this attempt.")
         # Mechanical citation evidence (weak-AI efficiency): the prior attempt's
-        # citecheck produced an UNREACHABLE/OK list per URL — that is FACT, not the
+        # citecheck produced a BLOCKED/DEAD/OK list per URL — that is FACT, not the
         # critic's opinion of it. Feed it to the worker directly so a cheap model
         # can act on "URL X is dead, replace it" instead of only "sourcing felt weak".
-        # See citecheck.evidence_block; persisted at runs/task{tid}_citation_evidence.json
-        # by evaluation.run_critic. Fail-soft: a missing/unreadable file adds nothing.
+        # See citecheck.evidence_block / citecheck.is_dead; persisted at
+        # runs/task{tid}_citation_evidence.json by evaluation.run_critic. Fail-soft: a
+        # missing/unreadable file adds nothing.
         try:
             import json as _json
             _ev_path = rc.RUNS / f"task{tid}_citation_evidence.json"
@@ -163,15 +164,19 @@ def _run_research_task(context: _TaskContext) -> str:
                 _ev = _json.loads(_ev_path.read_text(encoding="utf-8"))
                 if _ev.get("evidence"):
                     _block = citecheck.evidence_block(_ev["evidence"])
-                    _dead = sum(1 for e in _ev["evidence"] if not e.get("reachable"))
+                    # RC-1: only genuinely-DEAD citations need replacing. A BLOCKED
+                    # URL (403/429) is a live page the bot couldn't fetch -- replacing
+                    # it wastes a retry on a URL that wasn't actually broken.
+                    _dead = sum(1 for e in _ev["evidence"] if citecheck.is_dead(e))
                     if _dead:
                         prior_feedback += (
                             f"\n\nMECHANICAL CITATION CHECK ({_dead} of "
-                            f"{len(_ev['evidence'])} URLs unreachable in the prior "
+                            f"{len(_ev['evidence'])} URLs dead or fabricated in the prior "
                             "attempt — this is verified fact, not opinion):\n"
                             f"{_block}\n"
-                            "Replace every UNREACHABLE URL with a live one you have "
-                            "actually fetched. Do not resubmit a dead URL.")
+                            "Replace every DEAD URL with a live one you have actually "
+                            "fetched. BLOCKED URLs (403/429) are live pages the bot "
+                            "could not fetch — keep those, do not replace them.")
         except Exception:
             pass  # never let an audit artifact block a retry
     baseline_note = (

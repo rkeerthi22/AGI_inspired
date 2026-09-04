@@ -284,6 +284,57 @@ with tempfile.TemporaryDirectory() as td:
         execution.load_fallback_chain = old_fallback
         trajectory.end()
 
+# ── Test 6b: failover_attempted records the REAL prior reason, not a hardcoded label ──
+# A3 guard (review docs/reviews/claude-code_FAILOVER_REVIEW_2026-09-03.md, finding A3):
+# pre-45d7846 code emitted reason="quota_exhausted" for EVERY failover transition. That
+# mislabeled non-quota transitions (authentication/provider_unavailable). 45d7846 threaded
+# last_failure_reason through. This locks that in: an authentication failure on rung 1 must
+# surface as reason="authentication" on the rung-2 failover_attempted event, NOT quota_exhausted.
+
+with tempfile.TemporaryDirectory() as td:
+    traj_path = Path(td) / "task502.trajectory.jsonl"
+    writer = trajectory.TrajectoryWriter(traj_path, task_id=502, mission_id="001-shopify")
+    trajectory._active = writer
+
+    old_worker = execution.hermes_worker
+    old_fallback = execution.load_fallback_chain
+    try:
+        execution.load_fallback_chain = lambda: [
+            {"provider": "byteplus_coding", "model": "ark-code-latest", "quota_group": "byteplus"},
+            {"provider": "ollama", "model": "glm-5.2:cloud", "quota_group": "ollama-cloud"},
+        ]
+        call_count = {"n": 0}
+
+        def mock_worker_auth(prompt, cfg, attempt_path, timeout=900):
+            call_count["n"] += 1
+            if call_count["n"] == 1:
+                # real captured auth string (task117); classifies as "authentication"
+                return "Error: No Anthropic credentials found.", {
+                    "failed": True, "failure": "No Anthropic credentials found."}
+            return "Success from fallback model", {}
+
+        execution.hermes_worker = mock_worker_auth
+
+        out, usage, cfg_used, exhausted = execution.worker_with_failover(
+            "test prompt",
+            {"provider": "byteplus_coding", "model": "ark-code-latest", "quota_group": "byteplus"},
+            Path(td) / "usage.json",
+            log_prefix="task 502",
+        )
+
+        lines = [json.loads(line) for line in traj_path.read_text(encoding="utf-8").splitlines() if line]
+
+        check("auth-failure failover returned success on second model",
+              not exhausted and cfg_used["model"] == "glm-5.2:cloud")
+        fa = [l for l in lines if l["event_type"] == "failover_attempted"]
+        check("failover_attempted emitted for rung 2", len(fa) == 1)
+        check("failover_attempted reason is the REAL prior reason (authentication), not hardcoded quota_exhausted",
+              bool(fa and fa[0]["payload"]["reason"] == "authentication"))
+    finally:
+        execution.hermes_worker = old_worker
+        execution.load_fallback_chain = old_fallback
+        trajectory.end()
+
 
 # ── Test 7: Retrieval Progress Controller Trajectory Emission ─────────────
 

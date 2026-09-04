@@ -33,13 +33,24 @@
       "role": "Forward implementer — red-team blueprint (RC-1 citecheck, A5 raw stdout, A3 failover reason, P1 security gaps). BLOCKED (usage limit); resumes ~2026-09-04T03:35 local",
       "task_id": "REDTEAM-BLUEPRINT-2026-09-04",
       "mode": "implementation",
-      "owned_paths": [],
+      "owned_paths": [
+        "orchestrator/citecheck.py",
+        "orchestrator/evaluation.py",
+        "orchestrator/task_runner.py",
+        "tests/test_f110.py",
+        "tests/red/test_citecheck_waf_false_negative.py",
+        "tests/tiers.json",
+        "tests/test_f57.py",
+        "tests/test_trajectory_event_stream.py",
+        ".harness/continuity/current.json",
+        "docs/ACTIVE_WORK.json"
+      ],
       "started_at": "2026-09-04T00:15:00Z",
-      "last_update": "2026-09-04T00:15:00Z",
-      "status": "blocked",
-      "blocked_by": "usage limit (carried over from SECURITY-PREFLIGHT task); offline until ~2026-09-04T03:35 local. On resume, claim owned_paths per the blueprint's priority order (P0 RC-1 first: orchestrator/citecheck.py + evaluation.py).",
+      "last_update": "2026-09-04T03:30:00Z",
+      "status": "in_progress",
+      "blocked_by": null,
       "handoff_path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
-      "notes": "Operator role split (2026-09-04): codex = implementer going forward; claude-code = red-team/reviewer invoked on demand. Blueprint + red-team findings + acceptance criteria + red-test pointer all in handoff_path. P0 = RC-1 citecheck 403/429 false-negative (red test at tests/red/test_citecheck_waf_false_negative.py, currently RED); fixing it likely flips M5 + M6-rerun cohort failures and dissolves M7's 'factual error'. MODEL-FREE only until an operator authorizes a live cohort re-run."
+      "notes": "Operator role split (2026-09-04): codex = implementer; claude-code = red-team/reviewer on demand. RC-1 is present in the worktree and is being committed first. Model-free only; ESTOP remains engaged."
     },
     {
       "agent": "claude-code",

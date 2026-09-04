@@ -264,9 +264,9 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
                                summary["dead_frac"],
                                hard_fail=citecheck.is_hard_fail(summary))
     if citecheck.is_hard_fail(summary):
-        dead = [e["url"] for e in evidence if not e["reachable"]][:5]
+        dead = [e["url"] for e in evidence if citecheck.is_dead(e)][:5]
         return _finish("fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
-                                f"URLs unreachable (dead_frac={summary['dead_frac']}): {dead}"))
+                                f"URLs dead or fabricated (dead_frac={summary['dead_frac']}): {dead}"))
 
     if policy.manager_call_budget_breached():
         if tw:

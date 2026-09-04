@@ -433,7 +433,7 @@ with silence_log():
         baseline=False, scope_note="",
     )
 check("mechanical hard-fail returns 'fail'", verdict, "fail")
-check("mechanical hard-fail mentions unreachable URLs", "unreachable" in text, True)
+check("mechanical hard-fail mentions dead URLs", "dead or fabricated" in text, True)
 check("mechanical hard-fail skips the LLM", len(calls_stub.calls), 0)
 mp.undo()
 

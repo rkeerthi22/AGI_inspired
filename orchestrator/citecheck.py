@@ -38,6 +38,12 @@ MAX_BYTES = 400_000
 DEAD_FRAC_HARD_FAIL = 0.34   # >1/3 of checked citations unreachable -> mechanical fail
 MIN_CHECKED_FOR_HARD_FAIL = 3  # don't hard-fail on a tiny, noisy sample
 
+# RC-1 (2026-09-04): HTTP statuses that mean the resource is genuinely GONE (the URL
+# points at no real page) -- as opposed to 403/429/5xx where the server RESPONDED and the
+# page exists but the bot was refused. Only these count toward `dead`/dead_frac; a
+# responding-but-refused page is "blocked", not dead. See is_dead().
+DEAD_HTTP_STATUSES = frozenset({404, 410})
+
 # F23c (docs/HARDENING.md): `<` must be excluded or an inline HTML tag is swallowed into
 # the URL. Workers emit markdown containing `<br>`, so `...fun-3d-icons<br>` extracted as
 # `https://...fun-3d-icons<br`, which of course 404s. Measured 2026-07-28: 4 of the 6
@@ -329,9 +335,37 @@ def verify(text: str) -> list[dict]:
     return results
 
 
+def is_dead(e: dict) -> bool:
+    """RC-1 (2026-09-04): True only when a citation is fabricated or the resource is
+    genuinely gone -- NOT when a live page merely refused the bot.
+
+    A server that RESPONDED with 4xx/5xx (403 WAF-block, 429 rate-limit, 5xx) means the
+    page EXISTS and the citation is real; the bot was just refused. Counting those as
+    'dead' inflated dead_frac and mechanically hard-failed tasks whose citations were to
+    live, bot-protected sites: M5/task116 had flowgpt.com return 403 (the mission's OWN
+    subject site) and counted it dead -- true dead_frac 0.125 vs the gate's 0.50, a false
+    negative that flipped a passing deliverable to fail. Only 404/410 and host-doesn't-
+    exist connection errors (DNS failure, timeout, connection refused) are dead.
+
+    Safety refusals (SSRF private-net guard, unsupported scheme, redirect problems) are
+    NOT dead: the harness refused the fetch; the URL may still point at a real page.
+    """
+    if e.get("reachable"):
+        return False
+    status = e.get("http_status")
+    if status is not None:
+        return status in DEAD_HTTP_STATUSES
+    err = e.get("error") or ""
+    if err.startswith("blocked") or err == "unsupported scheme" or "redirect" in err:
+        return False
+    # No HTTP response and no safety refusal: DNS failure / timeout / connection refused
+    # -> host unreachable -> treat as dead (likely fabricated or genuinely gone).
+    return True
+
+
 def summarize(evidence: list[dict]) -> dict:
     checked = len(evidence)
-    dead = sum(1 for e in evidence if not e["reachable"])
+    dead = sum(1 for e in evidence if is_dead(e))
     lit_checked = [e for e in evidence if e["literal"] and e["reachable"]]
     lit_missing = sum(1 for e in lit_checked if e["literal_found"] is False)
     return {"checked": checked, "dead": dead,
@@ -351,7 +385,16 @@ def evidence_block(evidence: list[dict]) -> str:
         return "(no citations found to verify)"
     lines = []
     for e in evidence[:MAX_CITATIONS]:
-        status = "OK" if e["reachable"] else f"UNREACHABLE ({e.get('error') or e.get('http_status')})"
+        if e["reachable"]:
+            status = "OK"
+        elif is_dead(e):
+            status = f"DEAD ({e.get('http_status') or e.get('error')})"
+        else:
+            # RC-1: server responded (403/429/5xx) but the bot was refused -- the page
+            # likely EXISTS, so this is "blocked", not "dead"/fabricated. Telling the
+            # critic a blocked page is "UNREACHABLE" made a true claim look like a lie
+            # (M7/task119: model said FlowGPT "loads", gate said UNREACHABLE 403).
+            status = f"BLOCKED ({e.get('http_status') or e.get('error')})"
         lit = f", claimed value '{e['literal']}' found on page: {e['literal_found']}" \
             if e["literal"] and e["reachable"] else ""
         lines.append(f"- {e['url']}: {status}{lit}")
