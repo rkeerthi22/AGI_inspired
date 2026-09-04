@@ -1,20 +1,20 @@
 {
   "schema_version": 2,
-  "brief_revision": 56,
-  "created_at": "2026-09-03T22:58:57.300539+00:00",
+  "brief_revision": 57,
+  "created_at": "2026-09-03T23:58:40+00:00",
   "status": "in_progress",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "f9a07fe1728a240b210f530a02bd311fc2a13af6"
+    "based_on_head": "68e79e9824c5cfc344550312675f429f2912ea1e"
   },
   "task": {
     "id": "M1-M7-VALIDATION",
-    "phase": "post-cohort-backlog-1-4-done-security-batch-integrated",
+    "phase": "redteam-blueprint-for-codex-rc1-p0",
     "status": "in_progress",
-    "next_action": "Security stack partly landed. Still open: egress isolation, tamper-evident audit, reproducible dep hashes, independent critic, sustained ops. Live-verify F104/F106 + Anthropic->OpenAI failover gated on operator --controlled-window. Model-free only; not for live execution."
+    "next_action": "Codex forward implementer (claude-code=reviewer). P0=RC-1 citecheck 403/429 false-negative (red test tests/red/; cohort 1/6 mostly gate defect). Then A5, A3, P1 security. Blueprint: docs/CODEX_HANDOFF_2026-09-04. Live re-run needs operator. Model-free only."
   },
   "completed": [
     "Task 110 supported recovery and 2026-09-02 rerun remain verified live; the original launch defect is closed",
