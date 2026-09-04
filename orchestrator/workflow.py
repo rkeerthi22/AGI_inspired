@@ -47,6 +47,7 @@ import ledger  # noqa: F401 -- used via ledger.<name>(...)
 import policy  # noqa: F401 -- used via policy.<name>(...)
 import prompts  # noqa: F401 -- used via prompts.<name>(...)
 import scheduler  # noqa: F401 -- used via scheduler.<name>(...)
+from worker_diagnostics import write_worker_raw
 
 
 def _status_for_critic_verdict(verdict: str) -> str:
@@ -153,11 +154,14 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
             usage_out=syn_usage)
         out, model_used_cfg, exhausted = synthesis_result
     except urllib.error.HTTPError as e:
+        write_worker_raw(rc.RUNS, tid, "", {"process_error": f"synthesis HTTP {e.code}"},
+                         "synthesis")
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis HTTP {e.code}",
                            append_note=True)
         rc.log(f"task {tid}: infra_failed (HTTP {e.code})"); return "infra_failed"
     except Exception as e:
+        write_worker_raw(rc.RUNS, tid, "", {"process_error": str(e)}, "synthesis")
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis call failed: {e}",
                            append_note=True)
@@ -183,7 +187,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                            f"exhaustion on the primary worker", trigger="model_failover", task_id=tid)
         worker_cfg = model_used_cfg  # so the deliverable footer below is truthful too
 
-    (rc.RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
+    write_worker_raw(rc.RUNS, tid, out, syn_usage, "synthesis")
     out = execution._strip_tool_chatter(out)
     if len(out.strip()) < 200:
         ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",

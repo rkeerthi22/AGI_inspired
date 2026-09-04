@@ -25,6 +25,7 @@ from retrieval_progress import (DEFAULT_RETRIEVAL_PROFILE,
                                 DYNAMIC_BROWSER_PROFILE,
                                 retrieval_policy_for_profile)
 from health_events import emit as emit_health_event
+from worker_diagnostics import write_worker_raw
 
 
 @dataclass(frozen=True)
@@ -381,6 +382,7 @@ def _run_research_task(context: _TaskContext) -> str:
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     usage_path = rc.RUNS / f"task{tid}_worker.usage.json"
     fs_snapshot = integrity.fs_integrity_snapshot()
+    usage: dict = {}
     try:
         with integrity.DatabaseMutationGuard(f"task {tid} worker call"):
             worker_options = {}
@@ -390,6 +392,7 @@ def _run_research_task(context: _TaskContext) -> str:
                 prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
                 **worker_options)
     except subprocess.TimeoutExpired:
+        write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout"}, "worker")
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes="worker timeout",
                            append_note=True)
@@ -398,6 +401,7 @@ def _run_research_task(context: _TaskContext) -> str:
             tw.task_failed("worker timeout", failure_stage="execution")
         return "infra_failed"
     except integrity.DatabaseMutationViolation as exc:
+        write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc)}, "worker")
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"database containment violation: {exc}",
                            append_note=True)
@@ -406,6 +410,7 @@ def _run_research_task(context: _TaskContext) -> str:
             tw.task_failed("database containment violation", failure_stage="execution")
         return "infra_failed"
     except Exception as exc:
+        write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc)}, "worker")
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"worker launch failure: {exc}",
                            append_note=True)
@@ -419,7 +424,7 @@ def _run_research_task(context: _TaskContext) -> str:
     # Persist the FULL raw output regardless of what happens next -- a misclassified
     # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
     # nearly lost with only a 200-char snippet surviving in critic_notes.
-    (rc.RUNS / f"task{tid}_worker_raw.txt").write_text(out, encoding="utf-8")
+    write_worker_raw(rc.RUNS, tid, out, usage, "worker")
     out = execution._strip_tool_chatter(out)
 
     if exhausted:
