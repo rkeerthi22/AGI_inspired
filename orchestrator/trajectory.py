@@ -366,6 +366,17 @@ def begin(task_id: int, mission_id: str) -> TrajectoryWriter:
 
 
 def end() -> None:
-    """Clear the active writer (call after task completion)."""
+    """Seal the active trajectory before clearing it.
+
+    Replication is a no-op outside an explicitly provisioned release
+    environment. When enforcement is enabled, a replication failure propagates
+    instead of claiming that the task has a durable remote audit record.
+    """
     global _active
-    _active = None
+    writer = _active
+    try:
+        if writer is not None:
+            import audit_replication
+            audit_replication.replicate_if_enforced(writer.path)
+    finally:
+        _active = None

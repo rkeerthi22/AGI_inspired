@@ -1,0 +1,32 @@
+# Worker egress is deny-by-default. This file configures the broker contract;
+# the Windows/AppContainer boundary is provisioned outside the repository and
+# attested through HARNESS_EGRESS_ATTESTATION before any worker may launch.
+schema_version: 1
+mode: broker_required
+broker:
+  host: 127.0.0.1
+  port: 8787
+  connect_port: 443
+  idle_timeout_seconds: 30
+  max_connection_bytes: 10485760
+  allowed_hosts:
+    - ark.ap-southeast.bytepluses.com
+    - api.anthropic.com
+    - api.openai.com
+    - api.ollama.com
+attestation:
+  environment_variable: HARNESS_EGRESS_ATTESTATION
+  purpose: egress-boundary-v1
+  max_age_hours: 24
+  required_evidence:
+    - restricted_worker_identity
+    - deny_direct_egress
+    - broker_only_egress
+    - raw_socket_bypass_test
+    - private_address_test
+  required_claims:
+    - worker_identity
+    - worker_program_sha256
+    - broker_program_sha256
+    - boundary_policy_id
+audit_log_environment_variable: HARNESS_EGRESS_AUDIT

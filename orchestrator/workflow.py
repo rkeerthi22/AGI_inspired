@@ -201,7 +201,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                     encoding="utf-8")
     critic_usage: dict = {}
     verdict, verdict_text = evaluation.run_critic(
-        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage)
+        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
+        worker_config=worker_cfg)
     mission_usage = evaluation.build_mission_usage(tid, syn_usage, critic_usage)
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",

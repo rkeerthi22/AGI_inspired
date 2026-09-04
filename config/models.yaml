@@ -14,11 +14,12 @@ roles:
     max_calls_per_day: 40          # low volume by design; guards cost + quota
 
   critic:
-    # Separate prompt, and a DIFFERENT model from the worker when affordable
-    # (independent judge — see §2.4). Falls back to manager model if unset.
-    provider: ollama
-    model: glm-5.2:cloud
-    quota_group: ollama-cloud
+    # Separate provider from the worker: quota, credentials, routing, and
+    # no upstream outage is shared. There is no same-provider fallback: a
+    # worker that reaches BytePlus is escalated to human review, not self-graded.
+    provider: byteplus_coding
+    model: ark-code-latest
+    quota_group: byteplus-coding
 
   worker:
     # Bulk research/analysis. Shares Ollama Cloud account quota with manager

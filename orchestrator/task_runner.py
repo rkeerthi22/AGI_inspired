@@ -499,7 +499,8 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
 
     critic_usage: dict = {}
     verdict, verdict_text = evaluation.run_critic(
-        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage)
+        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
+        worker_config=worker_cfg)
     mission_usage = evaluation.build_mission_usage(tid, usage, critic_usage)
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
@@ -592,4 +593,16 @@ def run_task(tid: int, mission: dict, roles: dict,
         tw.task_failed(f"unhandled task runner exception: {exc}", failure_stage="task_runner")
         raise
     finally:
-        trajectory.end()
+        try:
+            trajectory.end()
+        except Exception as audit_error:
+            # A release environment explicitly requesting remote audit retention
+            # must not leave a successfully graded row that lacks that record.
+            ledger.finish_task(
+                tid, artifacts=[], status="infra_failed",
+                critic_notes=f"remote audit replication failed: {audit_error}",
+                append_note=True)
+            integrity.escalate(
+                f"task {tid}: remote audit replication failed ({audit_error})",
+                trigger="remote_audit_replication_failure", task_id=tid)
+            raise

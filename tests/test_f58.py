@@ -136,9 +136,8 @@ class _P:
         self._undo.clear()
 
 
-# Match the real signature exactly: model, prompt, timeout=300,
-# trace_path=None, usage_out=None. The trace is persisted by the real
-# implementation; the stub doesn't need to persist anything.
+# Match the real signature plus provider-routing kwargs. The trace is persisted
+# by the real implementation; the stub only records the call.
 def make_critic_stub(replies):
     """Stub for execution.ollama_chat (the critic's load-bearing call).
 
@@ -146,7 +145,7 @@ def make_critic_stub(replies):
     """
     calls = []
 
-    def stub(model, prompt, timeout=300, trace_path=None, usage_out=None):
+    def stub(model, prompt, timeout=300, trace_path=None, usage_out=None, **kwargs):
         calls.append({"model": model, "prompt_len": len(prompt),
                       "trace_path": str(trace_path) if trace_path else None})
         return replies.pop(0) if replies else ""
@@ -510,7 +509,7 @@ try:
            "tokens_in": 100, "tokens_out": 200}
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -567,7 +566,7 @@ try:
            "pass_criteria": "Must cover X."}
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -616,7 +615,7 @@ try:
            "pass_criteria": "Must cover X."}
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -660,7 +659,7 @@ try:
            "pass_criteria": "Must cover X."}
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -822,7 +821,7 @@ try:
         return "done"
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -850,7 +849,7 @@ try:
         return "done"
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -877,7 +876,7 @@ try:
         return "chain_exhausted"
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
 
     with silence_log():
@@ -1118,7 +1117,7 @@ try:
            "pass_criteria": "Must cover X."}
     mission = {"id": "001-test"}
     roles = {"worker": {"provider": "ollama", "model": "m"},
-             "critic": {"provider": "ollama", "model": "c"},
+             "critic": {"provider": "byteplus_coding", "model": "c"},
              "manager": {"provider": "ollama", "model": "g"}}
     with silence_log():
         br.run_synthesis(tid, row, mission, roles, out_dir,

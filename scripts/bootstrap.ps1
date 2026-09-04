@@ -46,8 +46,12 @@ if (-not (Test-Path -LiteralPath $venvPython)) {
 if ($SkipInstall) {
     Write-Host "Dependency installation skipped by request."
 } else {
-    Write-Host "Installing pinned Python dependencies."
-    Invoke-Checked { & $venvPython -m pip install --requirement $requirementsPath } "Pinned dependency installation failed"
+    Write-Host "Installing hash-verified public Python dependencies."
+    Invoke-Checked {
+        & $venvPython -m pip install --requirement $requirementsPath `
+            --require-hashes --no-deps --no-input --disable-pip-version-check
+    } "Hash-verified dependency installation failed"
+    Invoke-Checked { & $venvPython -m pip check } "Installed dependency consistency check failed"
 }
 
 Write-Host "BOOTSTRAP COMPLETE"

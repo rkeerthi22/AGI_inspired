@@ -194,8 +194,24 @@ def extract_facts(tid: int, deliverable: str, manager_model: str,
     return written
 
 
+def critic_is_independent(worker_config: dict | None,
+                          critic_config: dict | None) -> bool:
+    """Return whether a critic is isolated from the worker's provider failure domain.
+
+    Different models behind one provider still share credentials, quota, routing,
+    and often the same upstream outage. The production boundary is provider
+    separation, not a cosmetic model-name difference.
+    """
+    if not isinstance(worker_config, dict) or not isinstance(critic_config, dict):
+        return False
+    worker_provider = str(worker_config.get("provider") or "").strip().lower()
+    critic_provider = str(critic_config.get("provider") or "").strip().lower()
+    return bool(worker_provider and critic_provider and worker_provider != critic_provider)
+
+
 def run_critic(row: dict, out: str, roles: dict, baseline: bool,
-               scope_note: str = "", usage_out: dict | None = None) -> tuple[str, str]:
+               scope_note: str = "", usage_out: dict | None = None,
+               worker_config: dict | None = None) -> tuple[str, str]:
     """Tool-free critic judging deliverable CONTENT, now backed by a mechanical,
     non-LLM truth signal (H4, docs/HARDENING.md — fixes F3, F4). Returns
     (verdict, text) where verdict is 'pass' | 'fail' | 'needs_review' — the third
@@ -212,16 +228,11 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     so persistence exceptions are logged and swallowed -- the verdict path
     stays trustworthy regardless of disk state.
 
-    NOTE on F5 (critic self-anchoring): H4's other prescribed fix, "a distinct
-    critic model whenever a second provider exists," is not applied here --
-    manager and critic are still the SAME model (glm-5.2:cloud) because the
-    model hierarchy stays Ollama-only until the operator adds a second provider
-    (locked decision, CLAUDE.md). This function is already blind to its own
-    prior notes (row['pass_criteria'] never carries a past verdict — prior
-    feedback is injected into the WORKER's prompt only, in run_task), so the
-    remaining F5 exposure is real but narrower than the original finding
-    implied. citecheck's mechanical hard-fail below is a genuinely independent
-    signal regardless: it never calls any LLM at all."""
+    The production caller passes the actual worker configuration. A critic on
+    the same provider is not independent, even when its model string differs:
+    provider quota, credentials, routing, and outages are shared. In that case
+    the result is ``needs_review`` before any critic call. Mechanical citecheck
+    remains independent and runs before this routing guard."""
     usage = usage_out if usage_out is not None else {}
     usage["api_calls"] = 0
     usage["input_tokens"] = 0
@@ -268,6 +279,23 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
         return _finish("fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
                                 f"URLs dead or fabricated (dead_frac={summary['dead_frac']}): {dead}"))
 
+    critic_cfg = roles.get("critic") if isinstance(roles, dict) else {}
+    if not isinstance(critic_cfg, dict):
+        critic_cfg = {}
+    if worker_config is not None and not critic_is_independent(worker_config, critic_cfg):
+        worker_provider = str(worker_config.get("provider") or "").strip() \
+            if isinstance(worker_config, dict) else ""
+        critic_provider = str((critic_cfg or {}).get("provider") or "").strip()
+        if tw:
+            tw.critic_evaluated("needs_review",
+                                model=str((critic_cfg or {}).get("model") or ""),
+                                provider=critic_provider)
+        return _finish(
+            "needs_review",
+            "critic independence unavailable: worker and critic must use different "
+            f"providers (worker={worker_provider or 'missing'}, "
+            f"critic={critic_provider or 'missing'})")
+
     if policy.manager_call_budget_breached():
         if tw:
             tw.critic_evaluated("needs_review", model="manager_budget_breached", provider="")
@@ -277,7 +305,8 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     model_usage: dict = {}
     usage["api_calls"] = 1
     try:
-        critic_cfg = roles["critic"]
+        if not critic_cfg:
+            raise KeyError("critic")
         call_options = _provider_call_options(critic_cfg, "critic")
         verdict_text = execution.ollama_chat(
             critic_cfg["model"],

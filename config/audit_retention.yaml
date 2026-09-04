@@ -1,0 +1,13 @@
+# Remote audit retention is deliberately not enabled by default. A release
+# preflight fails closed until an operator supplies a reachable UNC path and
+# enables enforcement in the harness service environment.
+schema_version: 1
+mode: signed_hash_chain
+replica:
+  root_environment_variable: HARNESS_AUDIT_REPLICA_ROOT
+  require_unc: true
+  artifact_subdirectory: trajectories
+  checkpoint_filename: trajectory-checkpoints.jsonl
+enforcement_environment_variable: HARNESS_AUDIT_ENFORCE
+checkpoint_max_age_hours: 24
+minimum_retention_days: 365

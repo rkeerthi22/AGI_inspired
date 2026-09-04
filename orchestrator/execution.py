@@ -45,6 +45,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 from runtime_context import ROOT, log  # noqa: E402
 import provider_chat as provider_transport  # noqa: E402
 import trajectory  # noqa: E402 — P0 unified task trace
+import egress_policy  # noqa: E402
 import yaml  # for load_fallback_chain()
 
 # Module constants needed by the moved functions.
@@ -89,6 +90,12 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
     env = dict(os.environ)
     env.update(provider_transport.authentication_env_from_config(model_cfg))
+    # Proxy variables matter only with the separately attested OS boundary.
+    # Refuse launch rather than allowing a child to bypass that boundary.
+    try:
+        env = egress_policy.worker_environment(env)
+    except egress_policy.EgressPolicyError as exc:
+        raise RuntimeError(f"worker egress boundary unavailable: {exc}") from exc
     # F66: this launcher is used only for policy-approved research workers.
     # Authorize a dedicated local headless browser instead of attaching to the
     # user's Chrome (which requires interactive remote-debugging approval).

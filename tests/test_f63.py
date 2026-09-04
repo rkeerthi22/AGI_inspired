@@ -282,6 +282,7 @@ captured = {}
 real_which = execution.shutil.which
 real_auth_env = execution.provider_transport.authentication_env_from_config
 real_pause = execution_pause.pause_engaged
+real_egress_env = execution.egress_policy.worker_environment
 try:
     execution.shutil.which = lambda name: str(
         Path("C:/Hermes/venv/Scripts/hermes.exe"))
@@ -305,6 +306,10 @@ try:
     pty_daemon.create_contained_process = fake_create_contained
     execution.provider_transport.authentication_env_from_config = lambda cfg: {
         "ARK_API_KEY": "test-only-placeholder"}
+    execution.egress_policy.worker_environment = lambda env: dict(env, **{
+        "HTTPS_PROXY": "http://127.0.0.1:8787",
+        "HARNESS_EGRESS_POLICY_SHA256": "test-policy",
+    })
     # Mock pause_engaged to False so the ESTOP watchdog doesn't kill
     # the mock process (real ESTOP is engaged on this system).
     execution_pause.pause_engaged = lambda: False
@@ -325,11 +330,14 @@ try:
           DYNAMIC_BROWSER_PROFILE)
     check("declared provider credential injected into Hermes child only",
           captured["env"].get("ARK_API_KEY"), "test-only-placeholder")
+    check("worker receives attested egress proxy settings",
+          captured["env"].get("HTTPS_PROXY"), "http://127.0.0.1:8787")
     check("prior attempt audit removed before launch", audit_attempt.exists(), False)
 finally:
     execution.shutil.which = real_which
     pty_daemon.create_contained_process = real_create
     execution.provider_transport.authentication_env_from_config = real_auth_env
+    execution.egress_policy.worker_environment = real_egress_env
     execution_pause.pause_engaged = real_pause
     usage.unlink(missing_ok=True)
     audit_attempt.unlink(missing_ok=True)

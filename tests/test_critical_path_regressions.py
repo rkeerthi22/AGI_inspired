@@ -288,7 +288,8 @@ def _fake_synth_failover(prompt, cfg, log_prefix="", usage_out=None):
     return ("synthesis deliverable text " * 40, cfg, False)
 
 
-def _fake_critic_pass(row, out, roles, baseline, scope_note="", usage_out=None):
+def _fake_critic_pass(row, out, roles, baseline, scope_note="", usage_out=None,
+                      worker_config=None):
     if usage_out is not None:
         usage_out.update({"input_tokens": 400, "output_tokens": 120,
                           "api_calls": 1, "total_tokens": 520})

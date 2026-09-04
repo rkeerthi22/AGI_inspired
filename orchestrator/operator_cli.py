@@ -31,6 +31,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from dotenv import dotenv_values
+import yaml
 
 ROOT = Path(__file__).resolve().parents[1]
 ORCH = ROOT / "orchestrator"
@@ -46,6 +47,7 @@ TIERS_MANIFEST = ROOT / "tests" / "tiers.json"
 BATCH_LOCK = RUNS / ".batch.lock"
 CANARY_SCRIPT = ROOT / "workspace" / "validation" / "byteplus_connectivity_canary.py"
 REQUIREMENTS_LOCK = ROOT / "scripts" / "requirements.txt"
+MODELS_CONFIG = ROOT / "config" / "models.yaml"
 RELEASE_BACKUP_MAX_AGE_HOURS = 26.0
 
 # ---------------------------------------------------------------- helpers ---
@@ -490,16 +492,75 @@ def _dependency_state() -> dict:
 
 
 def _requirements_lock_state() -> dict:
-    """Verify the bootstrap requirements file uses exact pins throughout."""
+    """Verify the public dependency lock is exact-pinned and hash-complete."""
     try:
-        lines = REQUIREMENTS_LOCK.read_text(encoding="utf-8").splitlines()
-    except OSError as exc:
+        import dependency_integrity
+        return dependency_integrity.requirements_lock_state(REQUIREMENTS_LOCK)
+    except Exception as exc:
         return {"ok": False, "error": type(exc).__name__}
-    entries = [line.strip() for line in lines
-               if line.strip() and not line.lstrip().startswith("#")]
-    unpinned = [entry for entry in entries if "==" not in entry]
-    return {"ok": bool(entries) and not unpinned, "entries": len(entries),
-            "unpinned": unpinned[:10]}
+
+
+def _bootstrap_hash_enforcement_state() -> dict:
+    try:
+        import dependency_integrity
+        return dependency_integrity.bootstrap_hash_enforcement_state()
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def _hermes_runtime_attestation_state() -> dict:
+    try:
+        import dependency_integrity
+        return dependency_integrity.hermes_runtime_state()
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def _egress_boundary_state() -> dict:
+    try:
+        import egress_policy
+        return egress_policy.boundary_state()
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def _independent_critic_state() -> dict:
+    """Read the declared critic route without importing execution modules."""
+    try:
+        data = yaml.safe_load(MODELS_CONFIG.read_text(encoding="utf-8"))
+        roles = data.get("roles") if isinstance(data, dict) else None
+        worker = roles.get("worker") if isinstance(roles, dict) else None
+        critic = roles.get("critic") if isinstance(roles, dict) else None
+        manager = roles.get("manager") if isinstance(roles, dict) else None
+        if not all(isinstance(config, dict) for config in (worker, critic, manager)):
+            return {"ok": False, "error": "role_configuration_missing"}
+        worker_provider = str(worker.get("provider") or "").strip().lower()
+        critic_provider = str(critic.get("provider") or "").strip().lower()
+        manager_provider = str(manager.get("provider") or "").strip().lower()
+        worker_model = str(worker.get("model") or "").strip()
+        critic_model = str(critic.get("model") or "").strip()
+        manager_model = str(manager.get("model") or "").strip()
+        ok = bool(worker_provider and critic_provider and manager_provider and
+                  worker_model and critic_model and manager_model and
+                  critic_provider != worker_provider and
+                  critic_provider != manager_provider)
+        return {
+            "ok": ok,
+            "worker": f"{worker_provider}/{worker_model}",
+            "critic": f"{critic_provider}/{critic_model}",
+            "manager": f"{manager_provider}/{manager_model}",
+            "error": None if ok else "critic_provider_not_independent",
+        }
+    except (OSError, yaml.YAMLError, AttributeError, TypeError) as exc:
+        return {"ok": False, "error": type(exc).__name__}
+
+
+def _audit_retention_state() -> dict:
+    try:
+        import audit_replication
+        return audit_replication.audit_state()
+    except Exception as exc:
+        return {"ok": False, "error": type(exc).__name__}
 
 
 def _ci_supply_chain_state() -> dict:
@@ -740,7 +801,32 @@ def _release_prerequisites() -> list[dict]:
 
     lock = _requirements_lock_state()
     add("dependency_versions_exactly_pinned", lock.get("ok") is True,
-        f"entries={lock.get('entries')} unpinned={lock.get('unpinned') or []}")
+        f"entries={lock.get('entries')} missing_hashes={lock.get('missing_hashes') or []} "
+        f"public_only={lock.get('public_only')}")
+
+    bootstrap_lock = _bootstrap_hash_enforcement_state()
+    add("bootstrap_enforces_dependency_hashes", bootstrap_lock.get("ok") is True,
+        f"missing={bootstrap_lock.get('missing') or []} error={bootstrap_lock.get('error')}")
+
+    hermes_runtime = _hermes_runtime_attestation_state()
+    add("hermes_runtime_attested", hermes_runtime.get("ok") is True,
+        f"version={hermes_runtime.get('version')} revision={hermes_runtime.get('revision')} "
+        f"error={hermes_runtime.get('error')}")
+
+    egress = _egress_boundary_state()
+    add("worker_egress_boundary_attested", egress.get("ok") is True,
+        f"endpoint={egress.get('broker_endpoint')} error={egress.get('error')}")
+
+    critic = _independent_critic_state()
+    add("independent_critic_routing", critic.get("ok") is True,
+        f"worker={critic.get('worker')} critic={critic.get('critic')} "
+        f"manager={critic.get('manager')} error={critic.get('error')}")
+
+    audit = _audit_retention_state()
+    add("off_machine_audit_retention", audit.get("ok") is True,
+        f"checkpoints={audit.get('checkpoints')} latest={audit.get('latest')} "
+        f"fresh={audit.get('fresh')} artifact_ok={audit.get('artifact_ok')} "
+        f"error={audit.get('error')}")
 
     ci = _ci_supply_chain_state()
     add("ci_supply_chain_pinned", ci.get("ok") is True,
