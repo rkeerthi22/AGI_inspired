@@ -5,10 +5,31 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05T02:10:00Z
-**Phase:** Immediate cohort actions complete through M7; repository-controlled P1 security implementation complete; deployment evidence and independent review pending
+**Last Updated:** 2026-09-05 (local master integration checkpoint)
+**Phase:** F111/F118 integrated into local master; architecture remediation, deployment evidence, and independent review remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Live Verification:** `python -B tests/run_all.py` -> `69/69` green (model-free, exit 0) | continuity refresh pending this documentation checkpoint | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
+**Verification:** Feature baseline `1d822a8`: `python -B tests/run_all.py` -> `69/69` green, exit 0. Master verification is recorded in the integration handoff below; use continuity recovery for the active checkpoint. Last recorded supervised BytePlus canary: `2026-09-03T01:53:09Z` (historical, not rerun).
+
+## Current Integration Checkpoint
+
+Local master now includes `7c1d19f` (F111), `f4b9e1d` (F118), and
+`1d822a8` (Gemini handoff), fast-forwarded with the Codex ownership checkpoint.
+No push or live execution was performed. The current handoff is
+`docs/CODEX_HANDOFF_2026-09-05_MASTER_INTEGRATION.md`.
+
+This is a model-free verified control prototype, not an enterprise release.
+The September 5 audit supersedes earlier claims that only operator deployment
+remains. Open code/design findings include cross-writer audit serialization,
+verification of historical replica artifacts, restricted worker identity and
+signer separation, and consistent runtime admission of release prerequisites.
+The research launcher already checks egress attestation; the narrower runtime
+admission must not be described as having no egress check at all.
+
+Next bounded code task: reproduce corruption/deletion of an older replicated
+artifact while the newest artifact remains intact, then make full-history audit
+verification fail closed. Deployment still requires actual OS denial evidence,
+UNC retention/restore proof, clean-machine CI, and independent security review.
+No current `safe_to_proceed=true` result is claimed.
 
 ---
 
@@ -63,7 +84,7 @@ green gate before more live cohort work was spent.
 * Rows 111-113 remain untouched legitimate queued seeds.
 * Live repository, process, and operator status outrank historical documents.
 
-Current operator status on `2026-09-03T22:49:11Z`:
+Historical operator status on `2026-09-03T22:49:11Z` (not the current branch/checkpoint):
 
 * on branch `claude-code/telemetry-truth-fixes-2026-09-03`, 6 commits ahead of `master`, working tree carrying only the doc-sync edits
 * continuity revision `55` (pending bump to `56` after the master FF-merge + integration commit)

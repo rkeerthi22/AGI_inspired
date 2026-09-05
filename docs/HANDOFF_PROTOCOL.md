@@ -3,10 +3,10 @@
 **Version:** 1.0 (2026-08-30)  
 **Applicability:** Universal standard for Gemini, DeepSeek/Cade, Claude, Codex, Hermes, and the Human Operator.
 
-**Current shared runtime handoff:** `docs/CODEX_HANDOFF_2026-09-04_P1_SECURITY_IMPLEMENTATION.md`
+**Current shared runtime handoff:** `docs/CODEX_HANDOFF_2026-09-05_MASTER_INTEGRATION.md`
 
 Historical handoffs remain useful for implementation detail, but resuming
-agents should treat the latest P1-security implementation handoff plus
+agents should treat the latest master-integration handoff plus
 `docs/CURRENT_STATE.md` and `.harness/continuity/current.json` as the current
 authoritative state.
 
