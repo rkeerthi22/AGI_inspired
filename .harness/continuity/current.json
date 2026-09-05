@@ -1,26 +1,26 @@
 {
   "schema_version": 2,
-  "brief_revision": 64,
-  "created_at": "2026-09-05T03:30:00Z",
+  "brief_revision": 65,
+  "created_at": "2026-09-05T04:45:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "e7f8dfd8bb7c80da8b0fe3e6a61a6da87b464cdc"
+    "based_on_head": "f0beea06d00724ade63fab28e39f2ed8b0c3f1bc"
   },
   "task": {
-    "id": "HISTORICAL-AUDIT-VERIFICATION-2026-09-05",
-    "phase": "historical-audit-verification-complete",
+    "id": "AUDIT-SERIALIZATION-2026-09-05",
+    "phase": "audit-serialization-complete",
     "status": "completed",
-    "next_action": "Codex handover from docs/CODEX_HANDOFF_2026-09-05_HISTORICAL_AUDIT_FIX.md. Verify 69/69 gate. Options: cross-writer serialization, host deployment runbook, or SQLite WAL mode."
+    "next_action": "Read docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md. Verify 70/70 gate. Next options: runtime admission contract for release prerequisites, host deployment automation, or SQLite WAL mode."
   },
   "completed": [
-    "F111 and F118 plus Gemini handoff fast-forwarded into local master through 53bb656",
-    "Feature and master model-free gates each passed 69/69 with exit 0",
-    "Documentation reconciled in 7843b5d; ownership released; no push or live calls",
-    "F119 full-history replica artifact verification landed in orchestrator/audit_replication.py (7/7 tests green, gate 69/69)"
+    "F119 full-history replica verification landed on master in f0beea0 (69/69 green)",
+    "F120 whole-transaction OS-backed sidecar locking (portalocker) landed in orchestrator/audit_replication.py",
+    "Historical verification reordered ahead of artifact copy to prevent silent replica recreation on retry",
+    "Integration test suite tests/test_audit_serialization.py (8/8) added to tiers.json, advancing model-free gate to 70/70 green"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -30,24 +30,24 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "69/69 suites green. ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "70/70 suites green. ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "70828399f0ef94a6eecbe070a984f18dbca1e541ca70dda4a311a4f1684d7eff"
+      "sha256": "93fc3868764f0d226f6ce2b1163877d4ca0614e8827f41c036e989cc9d4799cc"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "51317af2559ebc390d99e271fe6eec960ea205b763fe313023c6a16e9d3651fd"
+      "sha256": "b4edb7e5b5872d1c3e6ebf1ca89a62bb78b5318739b2a81d6b9c3298a5a5f571"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
-      "sha256": "f14ddafdcc6ce898a62e2989ee3e0601a726560ade5ea9be6a5d943caf7aeb2a"
+      "sha256": "cde6b565660dd9a13b0a96d52c97ca3eba56d5c2be43b4b7c16c42f3a1902670"
     },
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-05_MASTER_INTEGRATION.md",
-      "sha256": "efeb0f28159f516cd2e8b34823cfda7c0406c0a8261e7448c0b34c02d7d957e1"
+      "path": "docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md",
+      "sha256": "2baf5088c5e729b148c20953eece51e67c32cc36991cd42e814a96ee90887d09"
     },
     {
       "path": "docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md",
@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md",
-      "sha256": "4ea7cb9420bf88a28b8274d755990e90661ffd8b33119cf192ab289736867d0b"
+      "sha256": "086fa5276cda60e4d146cb5cff4d7e057ffb0b92b6044861b39aa88421364d43"
     },
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
@@ -63,7 +63,7 @@
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "3d97a81d730a633fd1abfdce42d500ada9350b7e9869fbc051b59609ff1a18ad"
+      "sha256": "2c57df31e17770b8193ab2c2664fc2a7c109c5bd07419e26a606ca6b0dd0658c"
     }
   ]
 }

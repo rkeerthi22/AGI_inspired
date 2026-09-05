@@ -12,6 +12,7 @@ import json
 import os
 import re
 import shutil
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = ROOT / "config" / "audit_retention.yaml"
 GENESIS_HASH = "GENESIS"
+CHECKPOINT_LOCK_TIMEOUT_SECONDS = 10.0
 
 
 class AuditReplicationError(RuntimeError):
@@ -124,6 +126,36 @@ def _replica_root(config: AuditRetentionConfig,
 
 def _checkpoint_path(root: Path, config: AuditRetentionConfig) -> Path:
     return root / config.checkpoint_filename
+
+
+@contextmanager
+def _checkpoint_lock(checkpoint_path: Path):
+    """Serialize cooperating writers through a persistent OS-locked sidecar.
+
+    Never unlink or steal this file: replacing it can create two lock domains.
+    Shared-store deployments must prove server-side locking on their actual SMB
+    configuration; this is not a distributed lease or a fencing-token service.
+    """
+    try:
+        import portalocker
+    except ImportError as exc:
+        raise AuditReplicationError("replica_lock_backend_unavailable") from exc
+    lock = portalocker.Lock(
+        checkpoint_path.with_name(checkpoint_path.name + ".lock"),
+        mode="a+b", timeout=CHECKPOINT_LOCK_TIMEOUT_SECONDS,
+        check_interval=0.05, flags=portalocker.LOCK_EX | portalocker.LOCK_NB,
+    )
+    try:
+        handle = lock.acquire()
+    except (OSError, portalocker.exceptions.LockException) as exc:
+        raise AuditReplicationError(f"replica_lock_unavailable:{type(exc).__name__}") from exc
+    try:
+        yield
+    finally:
+        try:
+            lock.release()
+        finally:
+            handle.close()
 
 
 def _checkpoint_hash(checkpoint: dict[str, Any]) -> str:
@@ -276,31 +308,36 @@ def replicate_trajectory(
     artifact_name = f"{task_name}-{digest}.trajectory.jsonl"
     artifact_relative = Path(config.artifact_subdirectory) / artifact_name
     destination = root / artifact_relative
-    _copy_immutable(source, destination, digest)
     if verify_checkpoint is None:
         import audit_signing
         verify_checkpoint = audit_signing.verify_checkpoint
-    chain = verify_checkpoint_chain(
-        _checkpoint_path(root, config), config, verify_checkpoint, replica_root=root)
-    if chain.get("ok") is not True:
-        raise AuditReplicationError(f"remote_checkpoint_invalid:{chain.get('error')}")
-    checkpoint = {
-        "schema_version": 1,
-        "task_id": int(re.search(r"task(\d+)", source.name).group(1))
-        if re.search(r"task(\d+)", source.name) else None,
-        "artifact_relative_path": artifact_relative.as_posix(),
-        "trajectory_sha256": digest,
-        "source_bytes": source.stat().st_size,
-        "replicated_at": (now or datetime.now(timezone.utc)).isoformat(),
-        "previous_checkpoint_hash": (chain.get("latest_checkpoint") or {}).get(
-            "checkpoint_hash", GENESIS_HASH),
-    }
-    checkpoint["checkpoint_hash"] = _checkpoint_hash(checkpoint)
     if sign_checkpoint is None:
         import audit_signing
         sign_checkpoint = audit_signing.sign_checkpoint
-    signature = sign_checkpoint(checkpoint)
-    _append_checkpoint(_checkpoint_path(root, config), checkpoint, signature)
+    checkpoint_path = _checkpoint_path(root, config)
+    # The tip must be read under the SAME lock held through durable append.
+    # Verify history before copying so retries cannot silently repair a missing
+    # historical replica and erase evidence of the retention failure.
+    with _checkpoint_lock(checkpoint_path):
+        chain = verify_checkpoint_chain(
+            checkpoint_path, config, verify_checkpoint, replica_root=root)
+        if chain.get("ok") is not True:
+            raise AuditReplicationError(f"remote_checkpoint_invalid:{chain.get('error')}")
+        _copy_immutable(source, destination, digest)
+        checkpoint = {
+            "schema_version": 1,
+            "task_id": int(re.search(r"task(\d+)", source.name).group(1))
+            if re.search(r"task(\d+)", source.name) else None,
+            "artifact_relative_path": artifact_relative.as_posix(),
+            "trajectory_sha256": digest,
+            "source_bytes": destination.stat().st_size,
+            "replicated_at": (now or datetime.now(timezone.utc)).isoformat(),
+            "previous_checkpoint_hash": (chain.get("latest_checkpoint") or {}).get(
+                "checkpoint_hash", GENESIS_HASH),
+        }
+        checkpoint["checkpoint_hash"] = _checkpoint_hash(checkpoint)
+        signature = sign_checkpoint(checkpoint)
+        _append_checkpoint(checkpoint_path, checkpoint, signature)
     return {"artifact_relative_path": artifact_relative.as_posix(),
             "trajectory_sha256": digest, "checkpoint_hash": checkpoint["checkpoint_hash"]}
 

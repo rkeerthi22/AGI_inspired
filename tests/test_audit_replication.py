@@ -150,6 +150,21 @@ minimum_retention_days: 365
                 source3, self.config, self.environment, _sign, _verify)
         self.assertIn("replica_artifact_missing", str(ctx.exception))
 
+    def test_same_source_retry_does_not_recreate_deleted_history(self) -> None:
+        source = self._trajectory()
+        first = audit_replication.replicate_trajectory(
+            source, self.config, self.environment, _sign, _verify)
+        artifact = self.replica / first["artifact_relative_path"]
+        artifact.unlink()
+        checkpoint_path = self.replica / "trajectory-checkpoints.jsonl"
+        before = checkpoint_path.read_bytes()
+        with self.assertRaisesRegex(audit_replication.AuditReplicationError,
+                                    "replica_artifact_missing"):
+            audit_replication.replicate_trajectory(
+                source, self.config, self.environment, _sign, _verify)
+        self.assertFalse(artifact.exists())
+        self.assertEqual(checkpoint_path.read_bytes(), before)
+
     def test_missing_replica_root_fails_closed(self) -> None:
         state = audit_replication.audit_state(
             self.config, {"HARNESS_TEST_AUDIT_ENFORCE": "1"},

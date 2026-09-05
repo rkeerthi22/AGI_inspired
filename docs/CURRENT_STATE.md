@@ -5,22 +5,22 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05T03:25:00Z
-**Phase:** F111/F118/F119 landed on master; full-history audit verification complete; deployment evidence and independent review pending
+**Last Updated:** 2026-09-05 (F120 audit serialization checkpoint)
+**Phase:** F119 historical verification plus F120 cooperating-writer serialization; runtime/identity architecture, deployment evidence, and independent review remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Full model-free gate `python -B tests/run_all.py` -> `69/69` green, exit 0 (7/7 audit replication checks passing). ESTOP true, isolation restored.
+**Verification:** Full model-free gate `python -B tests/run_all.py` -> `70/70` green, exit 0 (8/8 audit replication, 8/8 audit serialization). ESTOP true, isolation restored.
 
 ## Current Integration Checkpoint
 
 Local master now includes `7c1d19f` (F111), `f4b9e1d` (F118), and
 `1d822a8` (Gemini handoff), fast-forwarded with the Codex ownership checkpoint.
 No push or live execution was performed. The current handoff is
-`docs/CODEX_HANDOFF_2026-09-05_MASTER_INTEGRATION.md`.
+`docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md`.
 
 This is a model-free verified control prototype, not an enterprise release.
 The September 5 audit supersedes earlier claims that only operator deployment
-remains. Open code/design findings include cross-writer audit serialization,
-restricted worker identity and signer separation, and consistent runtime
+remains. Open code/design findings include restricted worker identity and
+signer separation, and consistent runtime
 admission of release prerequisites. The research launcher already checks
 egress attestation; the narrower runtime admission must not be described as
 having no egress check at all.
@@ -28,6 +28,10 @@ having no egress check at all.
 F119 completed: full-history replica verification implemented in `audit_state()`
 and `replicate_trajectory()` with hermetic regressions (`tests/test_audit_replication.py`),
 ensuring corruption or deletion of older historical replicas fails closed.
+F120 serializes the full tip-read/copy/sign/append transaction with an OS-backed
+sidecar lock, and verifies history before copying so a same-source retry cannot
+silently recreate a deleted historical replica. Cross-host SMB/failover evidence
+is still required; the local regression suite does not establish fencing.
 Deployment still requires actual OS denial evidence, UNC retention/restore proof,
 clean-machine CI, and independent security review. No current `safe_to_proceed=true`
 result is claimed.

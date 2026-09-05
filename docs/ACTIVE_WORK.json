@@ -3,6 +3,19 @@
   "last_updated": "2026-09-05T03:30:00Z",
   "active_agents": [
     {
+      "agent": "gemini-cli / codex",
+      "role": "Cross-writer audit serialization (F120)",
+      "task_id": "AUDIT-SERIALIZATION-2026-09-05",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-05T03:43:00Z",
+      "last_update": "2026-09-05T04:40:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md",
+      "notes": "DONE. F120 landed and verified: whole-transaction OS-backed sidecar locking (portalocker) in replicate_trajectory(), historical verification precedes artifact copy, and deterministic multi-process serialization and negative-control regressions in tests/test_audit_serialization.py (8/8) and tests/test_audit_replication.py (8/8). Full gate 70/70 green (unit, containment, integration). ESTOP engaged; no live calls, host provisioning, or push."
+    },
+    {
       "agent": "codex",
       "role": "Local master integration and verified handoff",
       "task_id": "MASTER-INTEGRATION-2026-09-05",

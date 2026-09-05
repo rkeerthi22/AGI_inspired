@@ -45,6 +45,37 @@ provider call or a controlled mission window.
    verify the checkpoint chain, restore a selected trajectory, and compare its
    SHA-256 to the signed checkpoint.
 
+### Cross-Writer Coordination (F120)
+
+All writers must use the F120 serialization protocol before sharing a replica.
+Quiesce older writers during rollout. The persistent coordination file is
+`<checkpoint_filename>.lock` beside the checkpoint log (not in a local temp
+directory). Provision read/write-open access for writer identities to that
+sidecar, and prevent its deletion/replacement while the service is running.
+Its existence does not indicate a held lock: the OS lock is authoritative.
+Never remove it as stale based on a PID, timestamp, or machine restart.
+
+The writer holds an exclusive OS-backed lock through full-history verification,
+artifact copy, signing, checkpoint append, and fsync. Contention retries are
+bounded to 10 seconds; acquisition/open failures abort instead of writing
+unlocked. That retry budget is not a deadline for a stalled SMB open, filesystem
+operation, or signer. Read-only diagnostics do not acquire/create the sidecar;
+they may fail closed if they observe an in-progress append. Retry diagnostics
+after writers are quiescent, not by weakening verification.
+
+Before allowing multiple hosts, retain evidence from the actual server/share:
+two hosts contending on the same lock; concurrent completions yielding one
+verified chain; holder crash and subsequent acquisition; access-denied lock
+failure with no checkpoint append; disconnect/reconnect during a write; and
+denied deletion/replacement of the sidecar by service identities. Preserve a
+torn append for operator investigation; do not automatically truncate or reset
+the checkpoint chain. Validate staging-file permissions for artifact copying
+without allowing deletion of retained artifacts.
+
+Local process tests do NOT establish distributed fencing or SMB failover safety.
+If the server cannot maintain these guarantees, use a reviewed single-writer
+audit service with fencing rather than falling back to a process-local lock.
+
 ## 3. Explicit Limits
 
 * A signed local attestation is not proof that a Windows policy was deployed.

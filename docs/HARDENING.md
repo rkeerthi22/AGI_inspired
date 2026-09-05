@@ -2656,4 +2656,32 @@ Fixed:
   `test_deleted_historical_artifact_fails_closed` in `tests/test_audit_replication.py`
   (7/7 checks green).
 
+### F120 - Concurrent audit writers could fork the checkpoint chain - P1 - fixed for cooperating writers
+
+`replicate_trajectory()` read the remote chain tip, signed, and appended without
+cross-process exclusion. Two completions could sign the same predecessor and
+append an invalid fork. Locking only `_append_checkpoint()` would still use the
+stale tip. Same-process threads could also collide on the PID-named copy temp.
+
+An exclusive OS-backed `portalocker` lock now spans historical verification,
+copy, signing, append, and fsync. The already hash-pinned dependency is reused;
+the persistent checkpoint-adjacent sidecar is never deleted or stolen. Lock
+acquisition errors fail closed with bounded contention retries.
+
+Historical validation now precedes copying. This also closes a narrow F119
+ordering gap: retrying the exact same source used to recreate its missing
+historical artifact before verification, silently hiding the retention loss.
+The new same-source regression fails against `f0beea0` and passes with F120.
+
+Evidence: `tests/test_audit_serialization.py` covers real spawned-process
+exclusion, an unlocked negative control that reproduces a fork, contention,
+process-exit lock release, signing/append errors, denied lock opening,
+same-source threads, and preserved partial appends (8 tests). The existing
+audit suite now has 8 tests including same-source historical deletion.
+
+Limits: cooperating writers and local Windows behavior are tested. Actual
+multi-host SMB locking, ACLs, network partitions, and failover/fencing still
+require deployment proof. Read-only diagnostics can fail closed during a write.
+This is not an enterprise release approval or a distributed consensus service.
+
 
