@@ -89,6 +89,7 @@ WK = scheduler.week_key()
 
 # Track which sections fail. exit code reflects this at the end.
 fails = []
+FS_GUARD_CALLS = []
 
 
 def check(name, got, want):
@@ -362,9 +363,24 @@ def temp_root_with_ledger():
         src.backup(dst)
 
     # Snapshot original values per (module, attr) -- duplicates are intentional.
+    # F123: workflow.run_canaries uses integrity's captured live ROOT/RUNS.
+    # This suite tests orchestration, not containment. Never invoke its real
+    # filesystem remediator against a concurrently edited developer worktree.
+    # Real containment behavior is exercised by the disposable containment tier.
+    def fs_snapshot_stub():
+        FS_GUARD_CALLS.append("snapshot")
+        return {"fixture_root": tmp_root}
+
+    def fs_check_stub(snapshot, context):
+        if snapshot != {"fixture_root": tmp_root}:
+            raise AssertionError("filesystem guard escaped the F58 fixture")
+        FS_GUARD_CALLS.append("check")
+
     assignments = [
         (rc, "ROOT", tmp_root), (ev, "ROOT", tmp_root),
         (rc, "RUNS", tmp_root / "runs"), (ev, "RUNS", tmp_root / "runs"),
+        (integrity, "fs_integrity_snapshot", fs_snapshot_stub),
+        (integrity, "fs_integrity_check", fs_check_stub),
     ]
     real = {}
     for mod, attr, val in assignments:
@@ -1147,6 +1163,8 @@ assert_snapshot_invariant("suite before/after", _SUITE_BEFORE, _SUITE_AFTER)
 # last line of defense.
 check("zero promote.cmd_rollback attempts across the suite",
       ALL_ROLLBACK_ATTEMPTS, [])
+check("isolated filesystem snapshot seam exercised", "snapshot" in FS_GUARD_CALLS, True)
+check("isolated filesystem check seam exercised", "check" in FS_GUARD_CALLS, True)
 
 # ── Summary ────────────────────────────────────────────────────────────
 

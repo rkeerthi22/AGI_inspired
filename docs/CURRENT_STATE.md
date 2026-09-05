@@ -5,10 +5,19 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05 (F121 runtime release admission checkpoint)
-**Phase:** F119 historical verification, F120 cooperating-writer serialization, F121 fail-closed runtime release admission; host/identity process fencing, UNC restore evidence, and live pass rates remain open
+**Last Updated:** 2026-09-05 (F122 signer service / F123 test isolation checkpoint)
+**Phase:** Dedicated audit signer code implemented; actual worker-token fencing, signer deployment, UNC restore evidence, and live pass rates remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Full model-free gate `python -B tests/run_all.py` -> `71/71` green, exit 0 (8/8 audit replication, 8/8 audit serialization, 10/10 runtime admission). ESTOP true, isolation restored.
+**Verification:** Final model-free gate: 72/72, exit 0; signer suite: 17/17; isolated F58: PASS. See the current handoff and continuity checkpoint for provenance. ESTOP remains engaged.
+
+Current handoff: `docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md`.
+F122 replaces controller-side operator-key audit signing with a dedicated
+Ed25519 signer daemon and public-only verification. Missing signer configuration
+or service health fails closed; there is no legacy local-key signing fallback.
+No service account, private key, production daemon, or host policy was provisioned.
+The three-identity deployment and restricted worker launcher are still required:
+same-identity workers can act as the controller even if the key is elsewhere.
+F123 isolates F58's filesystem remediator after it quarantined a concurrent edit.
 
 ## Current Integration Checkpoint
 
@@ -20,7 +29,7 @@ No push or live execution was performed.
 This is a model-free verified control prototype, not an enterprise release.
 The September 5 audit supersedes earlier claims that only operator deployment
 remains. Open code/design findings include restricted worker identity and
-signer separation, while runtime admission of release prerequisites has now been
+proof of deployed signer separation, while runtime admission of release prerequisites has now been
 hardened in F121.
 
 F119 completed: full-history replica verification implemented in `audit_state()`

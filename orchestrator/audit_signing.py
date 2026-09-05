@@ -1,32 +1,30 @@
-"""Purpose-bound signatures for replicated audit checkpoints.
-
-Checkpoint signatures reuse the locally trusted operator key while binding the
-payload to the audit-checkpoint action. This is a deployable bridge until the
-worker runs under a separate service identity backed by an external KMS; it
-does not claim that same-user Credential Manager storage is enterprise RBAC.
-"""
+"""Public-key audit verification and RPC client; no private-key/vault access."""
 from __future__ import annotations
 
+import os
 from typing import Any
 
+from audit_signer_protocol import (SignerError, fingerprint, load_config,
+                                   validate_checkpoint, verify_token)
 
 ACTION = "audit_checkpoint"
 
 
-class AuditSigningError(RuntimeError):
+class AuditSigningError(SignerError):
     """A checkpoint cannot be signed or verified against the trusted key."""
 
 
 def sign_checkpoint(checkpoint: dict[str, Any]) -> str:
     """Return a purpose-bound signature token for one canonical checkpoint."""
-    if not isinstance(checkpoint, dict):
-        raise AuditSigningError("checkpoint_must_be_object")
     try:
-        import operator_auth
-        state = operator_auth.key_status()
-        if state.get("present") is not True or state.get("storage") != "credential_manager":
-            raise AuditSigningError("credential_manager_signer_required")
-        return operator_auth.sign_marker({"action": ACTION, "checkpoint": checkpoint})
+        from audit_signer_pipe import request
+        config = load_config()
+        validate_checkpoint(checkpoint)
+        response = request(config, {"op": "sign", "checkpoint": checkpoint})
+        token = response.get("token")
+        if verify_token(token, config) != {"action": ACTION, "checkpoint": checkpoint}:
+            raise AuditSigningError("signer_response_not_bound_to_request")
+        return token
     except Exception as exc:
         raise AuditSigningError(f"checkpoint_signing_failed:{type(exc).__name__}") from exc
 
@@ -34,26 +32,27 @@ def sign_checkpoint(checkpoint: dict[str, Any]) -> str:
 def verify_checkpoint(token: str) -> dict[str, Any] | None:
     """Return a trusted checkpoint payload only for the audit action."""
     try:
-        import operator_auth
-        payload = operator_auth.verify_marker(token)
+        payload = verify_token(token, load_config())
+        if not isinstance(payload, dict) or payload.get("action") != ACTION:
+            return None
+        checkpoint = payload.get("checkpoint")
+        return checkpoint if isinstance(checkpoint, dict) else None
     except Exception:
         return None
-    checkpoint = payload.get("checkpoint") if isinstance(payload, dict) else None
-    if payload.get("action") != ACTION or not isinstance(checkpoint, dict):
-        return None
-    return checkpoint
 
 
 def signer_state() -> dict[str, Any]:
-    """Expose key presence without reading or printing key material."""
+    """Challenge the service and authenticate its response with the public pin."""
     try:
-        import operator_auth
-        status = operator_auth.key_status()
+        from audit_signer_pipe import request
+        config = load_config()
+        nonce = os.urandom(32).hex()
+        reply = request(config, {"op": "health", "nonce": nonce})
+        trusted = verify_token(reply.get("token"), config)
+        ok = trusted == {"action": "audit_signer_health", "nonce": nonce}
         return {
-            "ok": status.get("present") is True and
-                  status.get("storage") == "credential_manager",
-            "storage": status.get("storage"),
-            "fingerprint": status.get("fingerprint"),
+            "ok": ok, "storage": "dedicated_signer_service", "fingerprint": fingerprint(config),
+            "error": None if ok else "signer_health_untrusted",
         }
     except Exception as exc:
-        return {"ok": False, "error": type(exc).__name__}
+        return {"ok": False, "error": f"audit_signer_unavailable:{type(exc).__name__}"}

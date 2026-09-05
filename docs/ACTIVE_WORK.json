@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-05T08:45:00Z",
+  "last_updated": "2026-09-05T10:32:02Z",
   "active_agents": [
+    {
+      "agent": "codex",
+      "role": "Dedicated audit signer service and public-key client",
+      "task_id": "AUDIT-SIGNER-ISOLATION-2026-09-05",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-05T09:49:51Z",
+      "last_update": "2026-09-05T10:32:02Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md",
+      "notes": "COMPLETE: F122 dedicated Ed25519 signer daemon/public-only client; F123 F58 filesystem-remediation isolation and restored quarantined test. Final gate 72/72, signer 17/17, exit 0. No host/key provisioning, providers, ESTOP change, or push. Worker-token isolation and three-identity deployment proof remain prerequisites. Final continuity checkpoint follows the implementation commit."
+    },
     {
       "agent": "gemini-cli",
       "role": "Runtime release admission contract (F121)",

@@ -2700,5 +2700,48 @@ Fixed:
 - Created `tests/test_runtime_admission.py` with 10 model-free unit tests covering profile resolution, development profile admission/pause, release profile fail-closed behavior across all five prerequisite failure modes, successful release admission, and batch_runner/run_task CLI refusal.
 - Registered `test_runtime_admission` in `tests/tiers.json` (`unit` tier), advancing the test gate from 70/70 to 71/71 suites green.
 
+### F122 - Audit signing shared the controller's operator private key - P1 - service implementation; deployment pending
+
+`audit_signing.py` signed AND verified through `operator_auth`, loading the
+operator keypair in the controller. The audit signature algorithm was Ed25519,
+not HMAC as some handoffs described.
+
+The audit client now uses a dedicated local named-pipe signer and public-key-only
+verification. A separate Credential Manager target is loaded only by the signer
+daemon, whose configured user SID must differ from controller and worker SIDs.
+The pipe rejects remote clients, has an explicit DACL without controller
+CREATE_PIPE_INSTANCE permission, checks the actual caller SID/restricted-SID
+token, limits messages, and uses overlapped I/O with cancellation on timeout.
+Only typed checkpoint and nonce-bound health operations exist. No private-key
+export or operator-marker signing operation exists; no local-key fallback exists.
+
+Legacy v1 signatures require BOTH explicit public-key pins and exact historical
+checkpoint-hash pins. A retired operator key cannot authorize arbitrary new or
+backdated checkpoints. Synthetic-key regressions cover forged responses, caller
+denial, key/identity mismatch, outage, migration limits, safe initialization and
+error output, fatal impersonation-revert failure, and actual local pipe transport
+(17 tests). A failed identity restoration exits the daemon, not merely the request.
+
+This is not proof of deployed isolation. Workers still run in the parent token;
+until that changes they can impersonate controller behavior as the same user.
+Three-account deployment, protected code/config ACLs, private-key denial tests,
+service supervision and independent security review remain required. No account,
+key, production daemon, or enforcement variable was provisioned by this task.
+
+### F123 - F58 orchestration tests could quarantine live source edits - P1 - test isolation repaired
+
+During a concurrent edit, F58's mocked canary path called real
+`integrity.fs_integrity_check()` with integrity's captured live repository paths.
+It moved the edited untracked signer test to
+`runs/reverted_20260905_120035/tests/test_audit_signer.py`, causing both a missing
+test and F58's own Git snapshot-drift failure. The preserved copy was restored;
+the quarantine evidence was not deleted. No other agent deletion was established.
+
+F58 now substitutes scoped filesystem snapshot/check seams in its temporary
+fixture and asserts both are exercised. Actual filesystem remediation remains
+covered by the disposable containment tier. Production integrity behavior is
+unchanged. Full gates should still run without concurrent worktree edits because
+other tests deliberately assert before/after Git state stability.
+
 
 

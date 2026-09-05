@@ -49,6 +49,14 @@ perform an independent restore/verification drill. The current signer is a
 purpose-bound Credential Manager bridge, not a separate KMS or enterprise RBAC
 boundary.
 
+F122 update (2026-09-05): the repository now provides a dedicated Ed25519 audit
+signer daemon, SID-gated local named-pipe transport, and public-only controller
+verification. The old operator-key audit-signing fallback is removed. The service
+has NOT been provisioned or independently deployed. See
+`docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md` for the configuration/migration
+contract and required three-identity deployment. Restricted worker launch is still
+open; a same-user worker can act as its controller and must not be called isolated.
+
 ### 4. Independent evaluation calibration
 
 Provider separation is enforced for the configured primary worker, but it is
