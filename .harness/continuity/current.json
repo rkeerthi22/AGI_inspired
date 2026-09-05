@@ -1,70 +1,68 @@
 {
   "schema_version": 2,
-  "brief_revision": 67,
-  "created_at": "2026-09-05T09:35:00Z",
+  "brief_revision": 68,
+  "created_at": "2026-09-05T10:32:33.423592+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "ed9828aa25257099bcaeeb1a3efe637b8d997711"
+    "based_on_head": "993cc9f09fe03a1ad21f8f2215ce0fb4bb397677"
   },
   "task": {
-    "id": "RUNTIME-RELEASE-ADMISSION-2026-09-05",
-    "phase": "runtime-release-admission-complete",
+    "id": "AUDIT-SIGNER-ISOLATION-2026-09-05",
+    "phase": "signer-code-complete-deployment-and-worker-isolation-open",
     "status": "completed",
-    "next_action": "Read docs/GEMINI_HANDOFF_2026-09-05_RUNTIME_RELEASE_ADMISSION.md. Full gate 71/71 green. Next options: Windows host OS worker process fencing/firewall or isolated HMAC trajectory signer daemon."
+    "next_action": "Read docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md. Implement restricted worker launch preserving Job Object containment and broker access; prove worker denial of signer/controller credentials and IPC before deploying three identities."
   },
   "completed": [
-    "F121 fail-closed runtime release admission contract implemented in orchestrator/runtime_admission.py",
-    "Runtime admission directly wired into batch_runner.py, task_runner.py, and run_task.py before task dispatch",
-    "Comprehensive model-free unit tests tests/test_runtime_admission.py (10/10 green) registered in tests/tiers.json",
-    "Test gate advanced from 70/70 to 71/71 suites green (unit, containment, integration tiers all passing)",
-    "Handoff documented in docs/GEMINI_HANDOFF_2026-09-05_RUNTIME_RELEASE_ADMISSION.md"
+    "F122 dedicated Ed25519 signer daemon, SID-gated local IPC, public-only verification; no operator-key fallback",
+    "F123 F58 filesystem-remediation seams isolated; quarantined test restored with evidence preserved",
+    "Final model-free gate 72/72 exit 0; signer tests 17/17; implementation and handoff committed as 993cc9f"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
-    "Keep local unpushed until operator release decision",
-    "Claim file ownership before edits; live state outranks documents",
-    "Green tests are not enterprise release approval"
+    "No push without operator release decision",
+    "Claim write ownership before edits; no concurrent worktree edits during full gates",
+    "No host accounts, keys or production daemon provisioned; code is not deployed isolation"
   ],
   "gate": {
     "status": "passed",
-    "detail": "71/71 suites green. ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "72/72 model-free suites, exit 0, including 17 signer tests; documentation-only closeout afterward. ESTOP true, isolation restored, no batch lock/canary. Signer/egress/audit enforcement unconfigured."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "240cee6963444bd2a489acee264db20b65affb1cf1e2dcf51df67b160cf060e6"
+      "sha256": "d6caeffd38c46dfb2e3c9b65f6f8d9e05c1d15e8e157bae7a7e1d2fa6915e71f"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "c39767183e998406c7f5d5cc3f312ab9a3eeee077f2aecc2fc58b1ca0ab094a9"
+      "sha256": "4ee4635abfa3d1ed0408bc715cbfca5985ab4a7e6b896d6c30c3e0aff6936bef"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
-      "sha256": "3b4bcf0292e2221de75fd98eb55b246ae22b02fc1654a2578dde0d8c1748c586"
+      "sha256": "134e55ff58f9d35425536c6804956a5f56b42a4d6a8117a2669835dd3c7395db"
     },
     {
-      "path": "docs/GEMINI_HANDOFF_2026-09-05_RUNTIME_RELEASE_ADMISSION.md",
-      "sha256": "5ea05556f1a9f4ee4fa36f9b162b96176f85ae62aab8f8fe0959ee780c327e20"
-    },
-    {
-      "path": "docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md",
-      "sha256": "91976b1b901a4dae4515cdc9adbaff58847fa4737c8ef62309cd79edb590d412"
-    },
-    {
-      "path": "docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md",
-      "sha256": "086fa5276cda60e4d146cb5cff4d7e057ffb0b92b6044861b39aa88421364d43"
+      "path": "docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md",
+      "sha256": "46bd428a95e37cfa61107a99413613322a8115c6f1427dc858d790edab33e4bf"
     },
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
-      "sha256": "9fcc47bc6b77e9cf5715fe9f745a0684e023d79413ddef814697185b5041fb95"
+      "sha256": "6b34bf2a4352d958165444af8fd6976ac2091ce67c5a758cef10f220889a21bb"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "b80732168df47efc6d39008ef5fa1ad8e8896c11271a35a762a119717397be1d"
+      "sha256": "75ef3333a65eb2750b5835988a9b9008342b76c1a8e0174c8e137d80463a2292"
+    },
+    {
+      "path": "orchestrator/audit_signer_pipe.py",
+      "sha256": "22fbf7383fe48132f59d62425d52ff0547c55dc78b90b96b4b62c3b25b7fdf92"
+    },
+    {
+      "path": "tests/test_audit_signer.py",
+      "sha256": "e44b6b55f2247357e20316284df3aff22340f0881ea35dbef68910aa9323806c"
     }
   ]
 }
