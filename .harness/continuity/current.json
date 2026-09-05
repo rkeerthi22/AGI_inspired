@@ -1,84 +1,68 @@
 {
   "schema_version": 2,
-  "brief_revision": 62,
-  "created_at": "2026-09-05T02:15:00+00:00",
-  "status": "in_progress",
+  "brief_revision": 63,
+  "created_at": "2026-09-05T03:00:08.600736+00:00",
+  "status": "completed",
   "repository": {
-    "branch": "claude-code/audit-failclosed-fixes-2026-09-05",
-    "upstream": "origin/claude-code/audit-failclosed-fixes-2026-09-05",
+    "branch": "master",
+    "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "7c1d19f629d488adbc38cc28aa9eeabc948a7fd3"
+    "based_on_head": "7843b5d2821ca222f6dd5b079652383ea025417d"
   },
   "task": {
-    "id": "REDTEAM-BLUEPRINT-2026-09-04",
-    "phase": "p1-security-impl-complete-docs-checkpointed-deployment-pending",
-    "status": "in_progress",
-    "next_action": "Independent security review of aa5afaf against the deployment runbook, then operator-owned deployment: restricted worker identity + OS egress boundary, append-only UNC audit share + restore drill, clean-machine CI proof. Branch is ahead of origin; push is an operator release action, not proof. No live execution."
+    "id": "MASTER-INTEGRATION-2026-09-05",
+    "phase": "local-master-integrated-architecture-and-deployment-open",
+    "status": "completed",
+    "next_action": "Claim audit_replication.py and its tests; reproduce corruption/deletion of an older replica and implement full-history fail-closed verification. See the master integration handoff for remaining architecture and deployment blockers."
   },
   "completed": [
-    "RC-1/F110, A5, A3, and local trajectory audit chain committed and verified",
-    "P1 security controls (dependency hashes, egress broker, signed audit, critic routing) committed in aa5afaf",
-    "P1 documentation/ownership checkpoint + independent claude-code verification committed as 8745143",
-    "F111 fail-closed migrations and abnormal worker exit fs_integrity committed in 7c1d19f",
-    "F118 egress broker TCP FIN half-close propagation and integration test suite landed",
-    "69/69 model-free suites green; ESTOP engaged; no live execution authorized"
+    "F111 and F118 plus Gemini handoff fast-forwarded into local master through 53bb656",
+    "Feature and master model-free gates each passed 69/69 with exit 0",
+    "Documentation reconciled in 7843b5d; ownership released; no push or live calls"
   ],
   "locked_constraints": [
-    "ESTOP remains engaged",
-    "No provider calls or live cohort execution",
-    "Each live mission requires separate operator authorization",
-    "Live repository state outranks this brief"
+    "ESTOP stays engaged; no providers or live cohorts",
+    "Keep local unpushed until operator release decision",
+    "Claim file ownership before edits; live state outranks documents",
+    "Green tests are not enterprise release approval"
   ],
   "gate": {
     "status": "passed",
-    "detail": "69/69 model-free suites green across unit, containment, and integration tiers; ARK_API_KEY vaulted; ESTOP engaged; HARNESS_EGRESS_ATTESTATION and HARNESS_AUDIT_ENFORCE unset. No live execution."
+    "detail": "69/69 suites at master 53bb656; subsequent changes documentation/continuity only. ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "purpose": "Canonical state",
-      "sha256": "806c82e835bbebba1e6c24109031075f1a9f72f67222ee71d87b51718508a112"
+      "sha256": "df9bf2f6a997e59b60a1be411fa8992dff2744dc05ca5b1ab632335b4a4d4e14"
     },
     {
-      "path": "docs/HARDENING.md",
-      "purpose": "Incident and fix registry",
-      "sha256": "e2e4f2d589d8b55bd8e0aaa1ea647e59e5d9d6e30b0991289de0fae40418bdb4"
+      "path": "docs/ACTIVE_WORK.json",
+      "sha256": "1f3f58c450433b822c7763b3b77ef9cda035b4a7a02e99e6b354278528a4d45f"
     },
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
-      "purpose": "Red-team findings + original forward blueprint",
-      "sha256": "48ef5cffa93515a09ddff70f2911c6f8c4ef1826fe9175d37000809a6259b1f9"
+      "path": "docs/HANDOFF_PROTOCOL.md",
+      "sha256": "f14ddafdcc6ce898a62e2989ee3e0601a726560ade5ea9be6a5d943caf7aeb2a"
     },
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-04_P1_SECURITY_IMPLEMENTATION.md",
-      "purpose": "P1 implementation completion handoff (what was/wasn't done)",
-      "sha256": "a292dbb40e60263cf2062d4d9e0f467d9162cf8ff9501b14e5ff78c087a8d3d3"
+      "path": "docs/CODEX_HANDOFF_2026-09-05_MASTER_INTEGRATION.md",
+      "sha256": "efeb0f28159f516cd2e8b34823cfda7c0406c0a8261e7448c0b34c02d7d957e1"
+    },
+    {
+      "path": "docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md",
+      "sha256": "91976b1b901a4dae4515cdc9adbaff58847fa4737c8ef62309cd79edb590d412"
     },
     {
       "path": "docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md",
-      "purpose": "Operator-owned deployment/evidence/rollback runbook",
       "sha256": "4ea7cb9420bf88a28b8274d755990e90661ffd8b33119cf192ab289736867d0b"
     },
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
-      "purpose": "P1 security acceptance criteria",
       "sha256": "9fcc47bc6b77e9cf5715fe9f745a0684e023d79413ddef814697185b5041fb95"
     },
     {
-      "path": "tests/test_f110.py",
-      "purpose": "RC-1 regression",
-      "sha256": "2fb9c4a8ae19d238c6e2b0fec04d0b899c44c6eafa8a5a88e2b58258747101d9"
-    },
-    {
-      "path": "tests/test_a5.py",
-      "purpose": "A5 regression",
-      "sha256": "eda49d27028a36badba065854baf2c2c9e6ae876c58cbfbc394e9137f468c5c3"
-    },
-    {
-      "path": "orchestrator/trajectory.py",
-      "purpose": "Local audit chain",
-      "sha256": "6165e1389bafb02ef8aa6cc62485673fa39835e71782d6ea348569e225d9dd0c"
+      "path": "docs/HARDENING.md",
+      "sha256": "605eb11ecef766c902f4f5760d98227360cebd18155dff3c560fecbe50c5c106"
     }
   ]
 }
