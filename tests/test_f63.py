@@ -283,12 +283,15 @@ real_which = execution.shutil.which
 real_auth_env = execution.provider_transport.authentication_env_from_config
 real_pause = execution_pause.pause_engaged
 real_egress_env = execution.egress_policy.worker_environment
+real_sandbox_env = execution.worker_sandbox.worker_environment
 try:
     execution.shutil.which = lambda name: str(
         Path("C:/Hermes/venv/Scripts/hermes.exe"))
 
     class FakePipeDrain:
         text = ""
+        def wait(self, timeout=None):
+            pass
 
     class FakeProc:
         returncode = 0
@@ -297,8 +300,8 @@ try:
         def kill(self):
             pass
 
-    def fake_create_contained(cmd, cwd=None, env=None):
-        captured.update(cmd=cmd, cwd=cwd, env=env)
+    def fake_create_contained(cmd, cwd=None, env=None, *, restricted_worker=False):
+        captured.update(cmd=cmd, cwd=cwd, env=env, restricted_worker=restricted_worker)
         return FakeProc(), 12345, FakePipeDrain(), FakePipeDrain()
 
     import pty_daemon
@@ -306,6 +309,7 @@ try:
     pty_daemon.create_contained_process = fake_create_contained
     execution.provider_transport.authentication_env_from_config = lambda cfg: {
         "ARK_API_KEY": "test-only-placeholder"}
+    execution.worker_sandbox.worker_environment = lambda base, auth: dict(auth)
     execution.egress_policy.worker_environment = lambda env: dict(env, **{
         "HTTPS_PROXY": "http://127.0.0.1:8787",
         "HARNESS_EGRESS_POLICY_SHA256": "test-policy",
@@ -318,6 +322,7 @@ try:
                     "authentication_reference": "env:ARK_API_KEY"}, usage,
         retrieval_profile=DYNAMIC_BROWSER_PROFILE)
     check("worker output preserved", out, "")
+    check("research worker requires restricted token", captured["restricted_worker"], True)
     check("missing usage remains empty", measured, {})
     check("venv Python selected", captured["cmd"][0].endswith("python.exe"), True)
     check("controlled launcher selected",
@@ -338,6 +343,7 @@ finally:
     pty_daemon.create_contained_process = real_create
     execution.provider_transport.authentication_env_from_config = real_auth_env
     execution.egress_policy.worker_environment = real_egress_env
+    execution.worker_sandbox.worker_environment = real_sandbox_env
     execution_pause.pause_engaged = real_pause
     usage.unlink(missing_ok=True)
     audit_attempt.unlink(missing_ok=True)

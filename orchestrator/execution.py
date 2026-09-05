@@ -46,6 +46,7 @@ from runtime_context import ROOT, log  # noqa: E402
 import provider_chat as provider_transport  # noqa: E402
 import trajectory  # noqa: E402 — P0 unified task trace
 import egress_policy  # noqa: E402
+import worker_sandbox  # noqa: E402
 import yaml  # for load_fallback_chain()
 
 # Module constants needed by the moved functions.
@@ -69,11 +70,12 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # the actual browser_* tools that real web research needs), so it just broke
     # search without fixing containment. Real web research in this agent runs via
     # browser_* tools in the default toolset, confirmed working in the passing run.
-    # Defense now has two independent layers instead: (1) the prompt below never
+    # Historical defense had two independent layers: (1) the prompt below never
     # mentions any internal path/schema, so there's nothing for the model to act on
     # even with tools present; (2) db_integrity_guard() below verifies no write
     # happened and reverts it if one did. Prevention-by-ignorance + verification,
-    # not a trust-the-flag claim.
+    # not a trust-the-flag claim. F124 adds preventative token/ACL enforcement;
+    # these after-the-fact guards remain defense in depth, not the sandbox.
     #
     # Phase 4 (Munder Blueprint §5): workers are now contained in Windows Job
     # Objects with KILL_ON_JOB_CLOSE, ensuring orphan-free termination.
@@ -88,8 +90,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     hermes_provider = model_cfg.get("hermes_provider", model_cfg["provider"])
     cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", hermes_provider,
            "-m", model_cfg["model"], "--usage-file", str(usage_path)]
-    env = dict(os.environ)
-    env.update(provider_transport.authentication_env_from_config(model_cfg))
+    env = worker_sandbox.worker_environment(
+        dict(os.environ), provider_transport.authentication_env_from_config(model_cfg))
     # Proxy variables matter only with the separately attested OS boundary.
     # Refuse launch rather than allowing a child to bypass that boundary.
     try:
@@ -113,7 +115,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # Spawn the worker inside a Windows Job Object for process containment.
     try:
         import pty_daemon as _pty
-        proc, h_job, sout, serr = _pty.create_contained_process(cmd, cwd=str(ROOT), env=env)
+        proc, h_job, sout, serr = _pty.create_contained_process(
+            cmd, cwd=str(ROOT), env=env, restricted_worker=True)
     except Exception as exc:
         raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
 
@@ -148,6 +151,11 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
             _pty.close_job(h_job)
         except Exception:
             pass
+        # Drain final pipe bytes before collecting output or releasing streams.
+        sout.wait(timeout=5)
+        serr.wait(timeout=5)
+        if isinstance(proc, worker_sandbox.RestrictedProcess):
+            proc.close()
 
     # Collect output from pipe drains.
     stdout_text = sout.text

@@ -14,11 +14,22 @@ import threading
 from ctypes import wintypes
 from pathlib import Path
 from typing import Callable
+from worker_sandbox import RestrictedProcess
 
 # ── kernel32 types and constants (ctypes only, no pywin32 dependency) ──────
 
 _kernel32 = ctypes.windll.kernel32  # type: ignore[attr-defined]
 _ntdll = ctypes.WinDLL("ntdll", use_last_error=True)  # type: ignore[attr-defined]
+
+# HANDLE is pointer-sized, including on 64-bit Windows.
+for _function, _arguments, _result in (
+    (_kernel32.CreateJobObjectW, [wintypes.LPVOID, wintypes.LPCWSTR], wintypes.HANDLE),
+    (_kernel32.SetInformationJobObject, [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD], wintypes.BOOL),
+    (_kernel32.AssignProcessToJobObject, [wintypes.HANDLE, wintypes.HANDLE], wintypes.BOOL),
+    (_kernel32.TerminateJobObject, [wintypes.HANDLE, wintypes.UINT], wintypes.BOOL),
+    (_kernel32.CloseHandle, [wintypes.HANDLE], wintypes.BOOL),
+):
+    _function.argtypes, _function.restype = _arguments, _result
 
 CREATE_SUSPENDED = 0x00000004
 JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE = 0x00002000
@@ -190,7 +201,8 @@ def create_contained_process(
     command_list: list[str],
     cwd: str | Path | None = None,
     env: dict[str, str] | None = None,
-) -> tuple[subprocess.Popen, int, PipeDrain, PipeDrain]:
+    *, restricted_worker: bool = False,
+) -> tuple[subprocess.Popen | RestrictedProcess, int, PipeDrain, PipeDrain]:
     """Create a contained process tree via Windows Job Objects.
 
     The process is spawned suspended, assigned to a Job Object with
@@ -207,11 +219,14 @@ def create_contained_process(
         Environment variables for the child process.  If ``None`` the
         parent's environment is inherited (the default ``Popen``
         behaviour).
+    restricted_worker : bool
+        Required for research workers. Uses a deny-only user token, explicit
+        pipe inheritance, private desktop and UI limits. Never falls back.
 
     Returns
     -------
     (proc, h_job, stdout_drain, stderr_drain)
-        ``proc`` — the ``subprocess.Popen`` instance.
+        ``proc`` — a ``Popen`` or restricted native process adapter.
         ``h_job`` — kernel handle for the Job Object.
         ``stdout_drain``, ``stderr_drain`` — running ``PipeDrain`` threads.
     """
@@ -219,40 +234,57 @@ def create_contained_process(
         raise PtyDaemonError("command_list must be non-empty")
 
     h_job = _create_job_object()
+    proc = None
+    drains = []
     try:
         _configure_kill_on_close(h_job)
+        if restricted_worker:
+            # Restrict USER handles outside this job, desktop switching,
+            # clipboard, display/system settings and shutdown operations.
+            limits = wintypes.DWORD(0xFF)
+            if not _kernel32.SetInformationJobObject(h_job, 4, ctypes.byref(limits), ctypes.sizeof(limits)):
+                raise ctypes.WinError()
 
-        proc = subprocess.Popen(
-            command_list,
-            cwd=str(cwd) if cwd else None,
-            env=env,
-            creationflags=CREATE_SUSPENDED,
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-        )
+        if restricted_worker:
+            from worker_sandbox import spawn_suspended
+            proc = spawn_suspended(command_list, cwd, env)
+        else:
+            proc = subprocess.Popen(
+                command_list,
+                cwd=str(cwd) if cwd else None,
+                env=env,
+                creationflags=CREATE_SUSPENDED,
+                stdin=subprocess.PIPE,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                bufsize=1,
+            )
 
-        try:
-            _assign_process_to_job(h_job, proc._handle)
-            _resume_process(proc._handle)
-        except Exception:
-            _terminate_job(h_job)
-            proc.kill()
-            proc.wait()
-            raise
+        _assign_process_to_job(h_job, proc._handle)
+        _resume_process(proc._handle)
 
         stdout_drain = PipeDrain(proc.stdout, "stdout")
+        drains.append(stdout_drain)
         stderr_drain = PipeDrain(proc.stderr, "stderr")
+        drains.append(stderr_drain)
         return proc, h_job, stdout_drain, stderr_drain
-    except PtyDaemonError:
-        _close_handle(h_job)
-        raise
-    except OSError as exc:
-        _close_handle(h_job)
+    except Exception as exc:
+        try:
+            _terminate_job(h_job)
+            if proc is not None:
+                try:
+                    proc.kill()
+                    proc.wait(timeout=5)
+                finally:
+                    for drain in drains:
+                        drain.wait(timeout=5)
+                    if restricted_worker:
+                        proc.close()
+        finally:
+            _close_handle(h_job)
         raise PtyDaemonError(str(exc)) from exc
 
 

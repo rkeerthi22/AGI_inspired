@@ -2743,5 +2743,65 @@ covered by the disposable containment tier. Production integrity behavior is
 unchanged. Full gates should still run without concurrent worktree edits because
 other tests deliberately assert before/after Git state stability.
 
+### F124 - Research workers inherited unrestricted controller tokens and ambient environment - P1 - repository token boundary implemented
+
+`execution.hermes_worker` previously copied the entire controller environment
+and used the parent's unrestricted primary token. Job Objects supplied teardown,
+not credential or ACL isolation. F122 signer separation was therefore insufficient.
+
+`worker_sandbox.py` now creates a primary token with DISABLE_MAX_PRIVILEGE,
+deny-only user/administrative/custom group SIDs and restricting SIDs (Users,
+Everyone, Restricted Code). Only SeChangeNotifyPrivilege remains. The logon SID
+is retained for Windows USER32 initialization; this does not create a new logon.
+The user-deny flag is essential: privilege removal alone does not deny CredRead.
+Token properties are checked before native CreateProcessAsUserW. Worker stdin,
+stdout and stderr are the only inherited handles (STARTUPINFOEX handle list).
+The worker starts suspended; a KILL_ON_JOB_CLOSE Job Object and all eight UI
+restriction flags apply before resume, on a randomly named private desktop.
+There is no unrestricted fallback. Failed token setup/assignment/drain startup
+reaps the worker and releases handles. Job HANDLE signatures are now 64-bit safe.
+
+`execution.py` passes only a small OS environment allowlist and the declared
+provider credential, not other API keys, signer config or loader overrides.
+An explicit existing absolute `HARNESS_WORKER_HOME` is required. Egress policy
+still supplies its verified broker settings. Final pipe bytes are drained before
+output collection and native process resources are explicitly closed.
+
+Evidence: `tests/test_worker_sandbox.py` has 16 model-free tests, including actual
+Windows restricted Python and descendant execution, tree-kill, 150KB on each
+output pipe, loopback echo, an unrelated inheritable event not crossing, existing
+synthetic vault targets denied, current signer pipe DACL denial, and protected
+controller file/process denial. The linked UAC token can be queried and adopted
+only at identification level; impersonation-level duplication and synthetic
+credential reads through that path fail. An absent credential is not accepted
+as denial evidence. F63 pins the research call site's restricted-worker flag.
+
+Limits: private resources must not grant public/restricted-code groups access.
+The worker default object DACL grants builtin Users for runtime initialization,
+so this is not mutual isolation between local users/workers. No production
+accounts, ACLs, interpreter packaging, keys, signer service or firewall were
+provisioned. Same-session/SSPI review, separate identities, denied-access host
+drills and real Hermes/browser compatibility remain release prerequisites.
+The gate proves local token mechanics, not enterprise security certification.
+
+### F125 - Signer preconnected-pipe race could hang accept cancellation - P1 - repaired during F124 verification
+
+The first F124 full gate failed 72/73 on signer reply timeout. Repeated isolated
+runs reproduced it (fourth suite run; thirteenth transport-only run). Thread
+stacks showed the server waiting indefinitely in cancellation completion for
+an accept operation that had never been pending.
+
+pywin32's ConnectNamedPipe returns integer ERROR_PIPE_CONNECTED (535) when the
+client connects first. `_io` only recognized that condition as an exception,
+then waited on an unsignaled event and called GetOverlappedResult(wait=True).
+The transport now immediately accepts return 535 or synchronous success 0.
+The pending-997 timeout/cancellation and security checks are unchanged.
+
+Two regressions cover a real pipe with the client connected before accept,
+and synchronous success without event waiting. The negative control fails
+immediately on old behavior rather than hanging a test. Signer suite is now
+19 tests; 20 consecutive complete signer-suite runs passed after this repair.
+The initial failed full gate remains recorded, not relabeled as green.
+
 
 

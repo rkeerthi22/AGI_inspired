@@ -5,19 +5,33 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05 (F122 signer service / F123 test isolation checkpoint)
-**Phase:** Dedicated audit signer code implemented; actual worker-token fencing, signer deployment, UNC restore evidence, and live pass rates remain open
+**Last Updated:** 2026-09-05 (F124 restricted worker launch)
+**Phase:** Restricted worker launch implemented; production runtime ACLs, three-identity deployment, egress/UNC evidence, and live pass rates remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Final model-free gate: 72/72, exit 0; signer suite: 17/17; isolated F58: PASS. See the current handoff and continuity checkpoint for provenance. ESTOP remains engaged.
+**Verification:** Full model-free gate: 73/73 suites green, exit 0 (16/16 worker sandbox, 19/19 audit signer). Final post-change gate verified by Gemini CLI after Codex quota limit. ESTOP remains engaged.
 
-Current handoff: `docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md`.
+Current handoff: `docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md`.
+F124 research workers now use CreateRestrictedToken/CreateProcessAsUserW,
+a deny-only user SID, removed privileges, restricting SIDs, explicit pipe-only
+inheritance, private desktop and Job Object/UI restrictions. Real synthetic
+tests prove credential, signer-pipe and controller-resource denial, worker/child
+execution and tree teardown. There is no unrestricted research fallback.
+`HARNESS_WORKER_HOME` must name a separately provisioned worker directory;
+ambient controller secrets and loader overrides are not copied to the child.
+This is not a distinct Windows account, per-worker tenant isolation, or a firewall.
+The production user-private Hermes runtime has not been repackaged or ACL-granted;
+its compatibility and the actual three-account deployment remain unproven.
 F122 replaces controller-side operator-key audit signing with a dedicated
 Ed25519 signer daemon and public-only verification. Missing signer configuration
 or service health fails closed; there is no legacy local-key signing fallback.
 No service account, private key, production daemon, or host policy was provisioned.
-The three-identity deployment and restricted worker launcher are still required:
-same-identity workers can act as the controller even if the key is elsewhere.
+The three-identity deployment is still required. F124 replaces the unrestricted
+same-user launch; token-level denial is proven only within the documented ACL
+contract, not against every same-session service or host configuration.
 F123 isolates F58's filesystem remediator after it quarantined a concurrent edit.
+F125 fixes a reproduced signer preconnected-pipe accept hang discovered during
+the F124 full gate. Two new regressions pass; signer suite is now 19/19 with
+20 consecutive suite runs green. Final full post-change gate passed 73/73 suites green.
 
 ## Current Integration Checkpoint
 

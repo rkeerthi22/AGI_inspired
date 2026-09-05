@@ -49,7 +49,12 @@ def _io(handle, operation, data=None, timeout_ms=IO_TIMEOUT_MS):
     try:
         try:
             if operation == "connect":
-                pipe.ConnectNamedPipe(handle, overlapped)
+                result = pipe.ConnectNamedPipe(handle, overlapped)
+                # pywin32 RETURNS 535 when the client won the connect race.
+                # No I/O is pending, so waiting/cancelling this OVERLAPPED can
+                # hang forever. Zero is synchronous success as well.
+                if result in (0, 535):
+                    return None
             elif operation == "read":
                 file.ReadFile(handle, buffer, overlapped)
             else:

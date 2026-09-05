@@ -206,6 +206,40 @@ class AuditSignerTests(unittest.TestCase):
             write.assert_not_called()
 
     @unittest.skipUnless(os.name == "nt", "Windows IPC transport")
+    def test_preconnected_pipe_does_not_wait_for_nonexistent_io(self):
+        import pywintypes
+        import win32event
+        import win32file
+        import win32pipe
+        import win32security
+        sa = pywintypes.SECURITY_ATTRIBUTES()
+        sa.SECURITY_DESCRIPTOR = win32security.ConvertStringSecurityDescriptorToSecurityDescriptor(
+            f"D:P(A;;GA;;;{pipe.current_sid()})", 1)
+        server = win32pipe.CreateNamedPipe(self.config.pipe, 3 | 0x40000000 | 0x80000,
+                                           0x6 | 0x8, 1, 4096, 4096, 1000, sa)
+        try:
+            client_handle = win32file.CreateFile(self.config.pipe, 0x12019B, 0, None, 3, 0, None)
+            try:
+                # Deterministic race winner: client connects BEFORE server accept.
+                # Fail immediately on old code, rather than hanging cancellation.
+                with mock.patch.object(win32event, "WaitForSingleObject",
+                                       side_effect=AssertionError("no connect I/O pending")):
+                    self.assertIsNone(pipe._io(server, "connect"))
+            finally:
+                client_handle.Close()
+        finally:
+            server.Close()
+
+    @unittest.skipUnless(os.name == "nt", "Windows IPC transport")
+    def test_synchronous_connect_completion_does_not_wait(self):
+        import win32event
+        import win32pipe
+        with mock.patch.object(win32pipe, "ConnectNamedPipe", return_value=0), \
+             mock.patch.object(win32event, "WaitForSingleObject",
+                               side_effect=AssertionError("already completed")):
+            self.assertIsNone(pipe._io(123, "connect"))
+
+    @unittest.skipUnless(os.name == "nt", "Windows IPC transport")
     def test_real_local_pipe_transport_and_peer_identity(self):
         # Transport-only same-user test, not proof of deployed account separation.
         actual_sid = pipe.current_sid()

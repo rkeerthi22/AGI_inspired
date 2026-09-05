@@ -1,68 +1,69 @@
 {
   "schema_version": 2,
-  "brief_revision": 68,
-  "created_at": "2026-09-05T10:32:33.423592+00:00",
+  "brief_revision": 69,
+  "created_at": "2026-09-05T20:30:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "993cc9f09fe03a1ad21f8f2215ce0fb4bb397677"
+    "based_on_head": "3f455bce963da1abdc4e6d5b8f5733af731c99cb"
   },
   "task": {
-    "id": "AUDIT-SIGNER-ISOLATION-2026-09-05",
-    "phase": "signer-code-complete-deployment-and-worker-isolation-open",
+    "id": "WORKER-TOKEN-ISOLATION-2026-09-05",
+    "phase": "worker-token-isolation-and-signer-accept-complete",
     "status": "completed",
-    "next_action": "Read docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md. Implement restricted worker launch preserving Job Object containment and broker access; prove worker denial of signer/controller credentials and IPC before deploying three identities."
+    "next_action": "Read docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md. Model-free gate 73/73 green. Next options: deployment readiness diagnostic for worker runtime/home ACLs, or three-identity host provisioning."
   },
   "completed": [
-    "F122 dedicated Ed25519 signer daemon, SID-gated local IPC, public-only verification; no operator-key fallback",
-    "F123 F58 filesystem-remediation seams isolated; quarantined test restored with evidence preserved",
-    "Final model-free gate 72/72 exit 0; signer tests 17/17; implementation and handoff committed as 993cc9f"
+    "F124 restricted worker launch: CreateRestrictedToken/CreateProcessAsUserW with deny-only user SID, restricting SIDs, Job Object UI restrictions, private desktop, no unrestricted research fallback",
+    "F125 audit signer pipe accept race repair: handled pywin32 preconnected 535 and synchronous 0 without event wait hang",
+    "Model-free tests: 16/16 native worker sandbox tests in tests/test_worker_sandbox.py, 19/19 audit signer tests",
+    "Final full model-free gate 73/73 suites green, exit 0, verified by Gemini CLI after Codex quota limit"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
     "No push without operator release decision",
     "Claim write ownership before edits; no concurrent worktree edits during full gates",
-    "No host accounts, keys or production daemon provisioned; code is not deployed isolation"
+    "No production keys or host accounts provisioned; local token checks are not deployed three-identity isolation"
   ],
   "gate": {
     "status": "passed",
-    "detail": "72/72 model-free suites, exit 0, including 17 signer tests; documentation-only closeout afterward. ESTOP true, isolation restored, no batch lock/canary. Signer/egress/audit enforcement unconfigured."
+    "detail": "73/73 model-free suites green, exit 0 (16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "d6caeffd38c46dfb2e3c9b65f6f8d9e05c1d15e8e157bae7a7e1d2fa6915e71f"
+      "sha256": "7c403e38d7b5be5f3984864b9bcdbe81f10dabed19fb559b2719b29743e7a02d"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "4ee4635abfa3d1ed0408bc715cbfca5985ab4a7e6b896d6c30c3e0aff6936bef"
+      "sha256": "dff848ccf014efaae7db8b05ce2a38201c1494581e7cc59e1db7768de62337f2"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
-      "sha256": "134e55ff58f9d35425536c6804956a5f56b42a4d6a8117a2669835dd3c7395db"
+      "sha256": "c4f2be2998b3993f97e8ff6e9d76519b73346f46eab385343577c3c33bd0db86"
     },
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md",
-      "sha256": "46bd428a95e37cfa61107a99413613322a8115c6f1427dc858d790edab33e4bf"
+      "path": "docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md",
+      "sha256": "5ef5489ca86659a12d2ef5ee80cc5898199a7d197e94a99df4856ca398cc780c"
     },
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
-      "sha256": "6b34bf2a4352d958165444af8fd6976ac2091ce67c5a758cef10f220889a21bb"
+      "sha256": "fee9caa8a5418dda5ed181973174e32d776d89c88b7493b99c94c8b545f8d193"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "75ef3333a65eb2750b5835988a9b9008342b76c1a8e0174c8e137d80463a2292"
+      "sha256": "c5c37624c2a96603de1e88328c561467b7f20227242c8e051d648b4f7d2f4370"
     },
     {
-      "path": "orchestrator/audit_signer_pipe.py",
-      "sha256": "22fbf7383fe48132f59d62425d52ff0547c55dc78b90b96b4b62c3b25b7fdf92"
+      "path": "orchestrator/worker_sandbox.py",
+      "sha256": "9d776d179c47c1ea6a32bbd2eff049d6ff78e2a2ce8059341746cb91989f788a"
     },
     {
-      "path": "tests/test_audit_signer.py",
-      "sha256": "e44b6b55f2247357e20316284df3aff22340f0881ea35dbef68910aa9323806c"
+      "path": "tests/test_worker_sandbox.py",
+      "sha256": "f0430bb976e4738403e21bae6ed3b4f44e2bde01aca5c8ca8b420d29646ba389"
     }
   ]
 }

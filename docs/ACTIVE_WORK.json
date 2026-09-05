@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-05T10:32:02Z",
+  "last_updated": "2026-09-05T20:25:00Z",
   "active_agents": [
+    {
+      "agent": "codex / gemini-cli",
+      "role": "Restricted worker launch and Windows token fencing (F124/F125)",
+      "task_id": "WORKER-TOKEN-ISOLATION-2026-09-05",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-05T19:55:00Z",
+      "last_update": "2026-09-05T20:25:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md",
+      "notes": "COMPLETE: F124 restricted worker token boundary (CreateRestrictedToken/CreateProcessAsUserW, deny-only user SID, restricting SIDs, Job Object UI restrictions, private desktop, no unrestricted research fallback) and F125 audit signer preconnected-pipe race fix. Full gate 73/73 green (16/16 worker sandbox tests, 19/19 signer tests). Verified and finalized by Gemini CLI after Codex quota limit."
+    },
     {
       "agent": "codex",
       "role": "Dedicated audit signer service and public-key client",

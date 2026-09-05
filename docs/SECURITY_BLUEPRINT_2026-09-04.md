@@ -55,7 +55,23 @@ verification. The old operator-key audit-signing fallback is removed. The servic
 has NOT been provisioned or independently deployed. See
 `docs/CODEX_HANDOFF_2026-09-05_AUDIT_SIGNER.md` for the configuration/migration
 contract and required three-identity deployment. Restricted worker launch is still
-open; a same-user worker can act as its controller and must not be called isolated.
+open at that checkpoint; F124 below supersedes that launcher status.
+
+F124 update (2026-09-05): research launch now disables the user SID, removes
+privileges except traversal, applies restricting SIDs and uses native
+CreateProcessAsUserW with explicit standard-pipe inheritance. Private desktop
+and Job UI restrictions are applied with KILL_ON_JOB_CLOSE before resume.
+Synthetic native tests establish Credential Manager denial (including the
+identification-only linked-UAC path), signer DACL denial, protected controller
+file/process denial, loopback availability and descendant containment.
+No production ACLs, accounts, keys or firewall rules were provisioned.
+Runtime dependencies must be worker-readable, private controller resources must
+not grant Users/Everyone/Restricted Code access, and a dedicated
+`HARNESS_WORKER_HOME` must be supplied. New worker objects permit builtin Users
+access for runtime initialization: this is NOT per-worker/multi-tenant isolation.
+The token retains its logon identity; SSPI, same-session services and deployed
+three-identity denial/bypass evidence remain independent-review obligations.
+See `docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md` before any deployment.
 
 ### 4. Independent evaluation calibration
 
