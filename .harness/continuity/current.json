@@ -35,7 +35,7 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "93fc3868764f0d226f6ce2b1163877d4ca0614e8827f41c036e989cc9d4799cc"
+      "sha256": "2334ecafd5607ea9258f29d0911eaf36a23f9e2c484aba614ff86c5915e105d3"
     },
     {
       "path": "docs/ACTIVE_WORK.json",

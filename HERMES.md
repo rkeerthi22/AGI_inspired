@@ -1,7 +1,7 @@
-# CODEX.md — Agent Instructions for Codex & OpenAI Models
+# HERMES.md — Agent Instructions for Hermes
 
-**Agent Identifier:** Codex / OpenAI CLI  
-**Default Role:** Specialist Task Worker / Code Refactoring Specialist  
+**Agent Identifier:** Hermes Agent / Nous Hermes CLI  
+**Default Role:** Specialist Task Worker & Gateway Operator  
 **Canonical Rules & Bootstrap:** Follow [`AGENTS.md`](AGENTS.md) strictly.
 
 ---
@@ -17,5 +17,7 @@
 ## 2. Hard Behavioral Constraints
 * **ESTOP Discipline:** Never disengage ESTOP without an authorized `--controlled-window` execution path.
 * **Single Write Scope:** Never edit files outside your assigned write scope in `docs/ACTIVE_WORK.json`.
-* **Deterministic Verification:** Ensure the model-free test gate (`python -B tests/run_all.py` -> suite count is dynamic, currently 70/70 green, exit 0) and continuity validation (`python orchestrator/continuity.py validate` -> 0 errors) pass before completing work.
+* **Zero Live Runs During Quota Blocks:** Respect upstream provider quota limits (BytePlus HTTP 429).
+* **Deterministic Testing:** Ensure `python -B tests/run_all.py` reports all suites green with zero `[FAIL]` lines before handoff (suite count is dynamic, currently 70/70 — read it from `tests/run_all.py` output, never match a hardcoded number).
+* **Credential Vaulting:** Never expose `ARK_API_KEY` or provider secrets in plaintext files; use the Windows Credential Manager bridge.
 * **Handoff Compliance:** Update your handoff document following [`docs/HANDOFF_PROTOCOL.md`](docs/HANDOFF_PROTOCOL.md) upon session end or context compaction.

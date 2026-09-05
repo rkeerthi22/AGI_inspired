@@ -10,7 +10,7 @@
 1. Follow the universal 8-step sequence in [`AGENTS.md`](AGENTS.md).
 2. Check [`docs/ACTIVE_WORK.json`](docs/ACTIVE_WORK.json) for current task ownership.
 3. Review [`docs/CANONICAL_ARCHITECTURE.md`](docs/CANONICAL_ARCHITECTURE.md) and [`docs/CURRENT_STATE.md`](docs/CURRENT_STATE.md).
-4. Review your review handoff in [`docs/GEMINI_REVIEW_DOSSIER.md`](docs/GEMINI_REVIEW_DOSSIER.md).
+4. Review your review handoffs in [`docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md`](docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md) and [`docs/GEMINI_REVIEW_DOSSIER.md`](docs/GEMINI_REVIEW_DOSSIER.md).
 
 ---
 
