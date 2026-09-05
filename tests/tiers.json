@@ -10,7 +10,8 @@
     "test_provider_chat", "test_fallback_chain", "test_citecheck",
     "test_pty_daemon",
     "test_migrations",
-    "test_operator_auth"
+    "test_operator_auth",
+    "test_runtime_admission"
   ],
   "containment": [
     "test_db_mutation_guard_red", "test_f36", "test_f42", "test_f47", "test_f52", "test_h7_gate", "test_f107"

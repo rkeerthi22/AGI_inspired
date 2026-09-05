@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-05T03:30:00Z",
+  "last_updated": "2026-09-05T08:45:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Runtime release admission contract (F121)",
+      "task_id": "RUNTIME-RELEASE-ADMISSION-2026-09-05",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-05T06:55:00Z",
+      "last_update": "2026-09-05T08:45:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "DONE. F121 landed and verified: fail-closed runtime release admission contract implemented in orchestrator/runtime_admission.py, wired into batch_runner.py, task_runner.py, and run_task.py before task dispatch, and covered by tests/test_runtime_admission.py (10/10). Full gate 71/71 green. ESTOP engaged; no live calls or push."
+    },
     {
       "agent": "gemini-cli / codex",
       "role": "Cross-writer audit serialization (F120)",

@@ -579,6 +579,12 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
 def run_task(tid: int, mission: dict, roles: dict,
              retrieval_profile: str | None = None) -> str:
     """Execute one queued/parked task through worker→classifier→critic→ledger."""
+    # F121: Enforce runtime admission if executing under the release profile.
+    import runtime_admission
+    profile = runtime_admission.get_harness_profile()
+    if profile == "release":
+        runtime_admission.enforce_runtime_admission(profile)
+
     tw = trajectory.begin(tid, mission["id"])
     try:
         row = _load_task(tid)

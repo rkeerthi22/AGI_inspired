@@ -62,6 +62,8 @@ def _parser() -> argparse.ArgumentParser:
     parser.add_argument("--niche", default="")
     parser.add_argument("--dry-run", action="store_true",
                         help="validate and print the task without queueing it")
+    parser.add_argument("--release", action="store_true",
+                        help="enforce strict release admission prerequisites before task dispatch")
     return parser
 
 
@@ -93,6 +95,15 @@ def main(argv: list[str] | None = None) -> int:
             if not integrity.preflight():
                 print("[blocked] harness preflight failed", file=sys.stderr)
                 return 5
+            # F121: Enforce runtime admission if in release profile or invoked with --release.
+            import runtime_admission
+            target_profile = "release" if args.release else runtime_admission.get_harness_profile()
+            if target_profile == "release":
+                try:
+                    runtime_admission.enforce_runtime_admission(target_profile)
+                except runtime_admission.RuntimeAdmissionError as exc:
+                    print(f"[blocked] runtime release admission refused: {exc}", file=sys.stderr)
+                    return 5
             # The process may have waited for another lock owner. Recheck so an
             # ESTOP engaged during that wait cannot race with queue admission.
             if execution_pause.pause_engaged():

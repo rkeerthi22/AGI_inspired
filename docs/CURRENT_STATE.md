@@ -5,33 +5,35 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05 (F120 audit serialization checkpoint)
-**Phase:** F119 historical verification plus F120 cooperating-writer serialization; runtime/identity architecture, deployment evidence, and independent review remain open
+**Last Updated:** 2026-09-05 (F121 runtime release admission checkpoint)
+**Phase:** F119 historical verification, F120 cooperating-writer serialization, F121 fail-closed runtime release admission; host/identity process fencing, UNC restore evidence, and live pass rates remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Full model-free gate `python -B tests/run_all.py` -> `70/70` green, exit 0 (8/8 audit replication, 8/8 audit serialization). ESTOP true, isolation restored.
+**Verification:** Full model-free gate `python -B tests/run_all.py` -> `71/71` green, exit 0 (8/8 audit replication, 8/8 audit serialization, 10/10 runtime admission). ESTOP true, isolation restored.
 
 ## Current Integration Checkpoint
 
-Local master now includes `7c1d19f` (F111), `f4b9e1d` (F118), and
-`1d822a8` (Gemini handoff), fast-forwarded with the Codex ownership checkpoint.
-No push or live execution was performed. The current handoff is
-`docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md`.
+Local master now includes `7c1d19f` (F111), `f4b9e1d` (F118),
+`1d822a8` (Gemini handoff), fast-forwarded with the Codex ownership checkpoint,
+and F121 runtime release admission enforcement.
+No push or live execution was performed.
 
 This is a model-free verified control prototype, not an enterprise release.
 The September 5 audit supersedes earlier claims that only operator deployment
 remains. Open code/design findings include restricted worker identity and
-signer separation, and consistent runtime
-admission of release prerequisites. The research launcher already checks
-egress attestation; the narrower runtime admission must not be described as
-having no egress check at all.
+signer separation, while runtime admission of release prerequisites has now been
+hardened in F121.
 
 F119 completed: full-history replica verification implemented in `audit_state()`
 and `replicate_trajectory()` with hermetic regressions (`tests/test_audit_replication.py`),
 ensuring corruption or deletion of older historical replicas fails closed.
 F120 serializes the full tip-read/copy/sign/append transaction with an OS-backed
 sidecar lock, and verifies history before copying so a same-source retry cannot
-silently recreate a deleted historical replica. Cross-host SMB/failover evidence
-is still required; the local regression suite does not establish fencing.
+silently recreate a deleted historical replica.
+F121 completed: fail-closed runtime release admission contract implemented in
+`orchestrator/runtime_admission.py`, directly enforced before worker/task dispatch in
+`orchestrator/batch_runner.py`, `orchestrator/task_runner.py`, and `orchestrator/run_task.py`,
+and covered by `tests/test_runtime_admission.py` (10/10 green).
+Cross-host SMB/failover evidence is still required; the local regression suite does not establish fencing.
 Deployment still requires actual OS denial evidence, UNC retention/restore proof,
 clean-machine CI, and independent security review. No current `safe_to_proceed=true`
 result is claimed.
@@ -50,7 +52,7 @@ What is now true in live state:
 | Task 110 recovery | VERIFIED LIVE | Supported recovery already completed on 2026-09-02; row is no longer stranded in `running` |
 | Hermes provider-id repair | VERIFIED | `14dbafe` changed Anthropic to native `anthropic`, OpenAI to `openai-api`, and aligned finalizer mapping |
 | Unavailable-rung failover hardening | VERIFIED | `5522926` teaches both research and synthesis failover loops to continue past missing optional provider credentials or unsupported provider rungs |
-| Full model-free gate | VERIFIED | `70/70` suites green after the dependency, egress, audit, serialization, and independent-critic security batch |
+| Full model-free gate | VERIFIED | `71/71` suites green after the dependency, egress, audit, serialization, and runtime admission security batch |
 | Supervised BytePlus canary | VERIFIED LIVE | `2026-09-03T01:53:09Z`, `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, request id `02178840037366712014becacfaf8a37949eaec3c813975305d82` |
 | M3 / task 114 | FAILED | Real frozen-spec fail; deliverable did not explicitly account for all required blocked review platforms and attempts |
 | M4 / task 115 | PASSED | Clean synthesis pass |

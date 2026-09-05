@@ -136,6 +136,8 @@ def main() -> int:
     ap.add_argument("--deliver", action="store_true",
                     help="with --scorecard: also push the summary line to Telegram (fail-soft)")
     ap.add_argument("--max-tasks", type=int, default=MAX_WORKER_CALLS_PER_RUN)
+    ap.add_argument("--release", action="store_true",
+                    help="enforce strict release admission prerequisites before task dispatch")
     args = ap.parse_args()
 
     import execution_pause
@@ -201,6 +203,20 @@ def _run(args) -> int:
 
     if not preflight():
         return 3
+
+    # F121: Enforce runtime admission contract before queueing or dispatching tasks.
+    # In release profile (or with --release), fails closed if egress attestation,
+    # remote audit replication, dependency hashes, or critic independence are unverified.
+    import runtime_admission
+    target_profile = "release" if getattr(args, "release", False) else runtime_admission.get_harness_profile()
+    if target_profile == "release":
+        try:
+            runtime_admission.enforce_runtime_admission(target_profile)
+            log("runtime admission: release prerequisites verified")
+        except runtime_admission.RuntimeAdmissionError as exc:
+            log(f"runtime admission REFUSED: {exc}")
+            escalate(f"batch run aborted: {exc}")
+            return 75
     # F13 (docs/HARDENING.md): one-time-per-run consistency check between the
     # fs-guard's PROTECTED_PATHS (H9) and policy.yaml's declared writable roots --
     # catches the two lists silently drifting apart. Warns + escalates, doesn't

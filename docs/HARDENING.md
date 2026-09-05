@@ -2684,4 +2684,21 @@ multi-host SMB locking, ACLs, network partitions, and failover/fencing still
 require deployment proof. Read-only diagnostics can fail closed during a write.
 This is not an enterprise release approval or a distributed consensus service.
 
+### F121 - Runtime release admission contract was diagnostic-only and not enforced before worker dispatch - P1 - fixed in repository
+
+`operator_cli.py preflight release` verified release prerequisites for human operators, but the runtime execution entry points (`batch_runner.py`, `task_runner.py`, `run_task.py`) only checked ESTOP and basic Ollama reachability. A release batch execution or task dispatch could proceed even if required release boundaries (outbound worker egress broker attestation, signed off-machine audit replication, dependency SHA-256 hash enforcement, or independent worker/critic routing) were missing, broken, or expired.
+
+Fixed:
+- Implemented `orchestrator/runtime_admission.py` defining profile resolution (`get_harness_profile`), structured evaluation (`check_admission`), and fail-closed enforcement (`enforce_runtime_admission`) raising `RuntimeAdmissionError`.
+- Under the `release` execution profile (or CLI `--release`), task and batch execution engines fail closed before claiming tasks or dispatching workers if:
+  - Global ESTOP is engaged or its integrity check fails.
+  - Outbound egress boundary attestation token is missing, expired, or rejected (`egress_policy.boundary_state`).
+  - Remote off-machine audit replication is unconfigured, unreachable, or untrusted (`audit_replication.audit_state`).
+  - SHA-256 dependency hash pinning is missing in `scripts/bootstrap.ps1` or `scripts/requirements.txt` (`dependency_integrity`).
+  - Worker and critic models share the same provider, violating critic independence (`config/models.yaml`).
+- Integrated fail-closed release admission into `batch_runner.py` (aborts run with exit code 75 and escalation log), `task_runner.py` (refuses worker dispatch), and `run_task.py` (aborts with exit code 5 before task queueing).
+- Created `tests/test_runtime_admission.py` with 10 model-free unit tests covering profile resolution, development profile admission/pause, release profile fail-closed behavior across all five prerequisite failure modes, successful release admission, and batch_runner/run_task CLI refusal.
+- Registered `test_runtime_admission` in `tests/tiers.json` (`unit` tier), advancing the test gate from 70/70 to 71/71 suites green.
+
+
 

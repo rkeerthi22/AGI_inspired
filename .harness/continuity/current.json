@@ -1,26 +1,26 @@
 {
   "schema_version": 2,
-  "brief_revision": 65,
-  "created_at": "2026-09-05T04:45:00Z",
+  "brief_revision": 66,
+  "created_at": "2026-09-05T09:20:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "f0beea06d00724ade63fab28e39f2ed8b0c3f1bc"
+    "based_on_head": "8d16b816aa69f4e0b6e1413bb47b9a5540c3ac9d"
   },
   "task": {
-    "id": "AUDIT-SERIALIZATION-2026-09-05",
-    "phase": "audit-serialization-complete",
+    "id": "RUNTIME-RELEASE-ADMISSION-2026-09-05",
+    "phase": "runtime-release-admission-complete",
     "status": "completed",
-    "next_action": "Read docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md. Verify 70/70 gate. Next options: runtime admission contract for release prerequisites, host deployment automation, or SQLite WAL mode."
+    "next_action": "Verify 71/71 gate. Next options: Windows host OS worker process fencing/firewall or isolated HMAC trajectory signer daemon."
   },
   "completed": [
-    "F119 full-history replica verification landed on master in f0beea0 (69/69 green)",
-    "F120 whole-transaction OS-backed sidecar locking (portalocker) landed in orchestrator/audit_replication.py",
-    "Historical verification reordered ahead of artifact copy to prevent silent replica recreation on retry",
-    "Integration test suite tests/test_audit_serialization.py (8/8) added to tiers.json, advancing model-free gate to 70/70 green"
+    "F121 fail-closed runtime release admission contract implemented in orchestrator/runtime_admission.py",
+    "Runtime admission directly wired into batch_runner.py, task_runner.py, and run_task.py before task dispatch",
+    "Comprehensive model-free unit tests tests/test_runtime_admission.py (10/10 green) registered in tests/tiers.json",
+    "Test gate advanced from 70/70 to 71/71 suites green (unit, containment, integration tiers all passing)"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -30,16 +30,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "70/70 suites green. ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "71/71 suites green. ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "2334ecafd5607ea9258f29d0911eaf36a23f9e2c484aba614ff86c5915e105d3"
+      "sha256": "240cee6963444bd2a489acee264db20b65affb1cf1e2dcf51df67b160cf060e6"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "b4edb7e5b5872d1c3e6ebf1ca89a62bb78b5318739b2a81d6b9c3298a5a5f571"
+      "sha256": "c39767183e998406c7f5d5cc3f312ab9a3eeee077f2aecc2fc58b1ca0ab094a9"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
@@ -63,7 +63,7 @@
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "2c57df31e17770b8193ab2c2664fc2a7c109c5bd07419e26a606ca6b0dd0658c"
+      "sha256": "b80732168df47efc6d39008ef5fa1ad8e8896c11271a35a762a119717397be1d"
     }
   ]
 }
