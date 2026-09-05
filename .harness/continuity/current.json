@@ -1,26 +1,27 @@
 {
   "schema_version": 2,
-  "brief_revision": 66,
-  "created_at": "2026-09-05T09:20:00Z",
+  "brief_revision": 67,
+  "created_at": "2026-09-05T09:35:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "8d16b816aa69f4e0b6e1413bb47b9a5540c3ac9d"
+    "based_on_head": "ed9828aa25257099bcaeeb1a3efe637b8d997711"
   },
   "task": {
     "id": "RUNTIME-RELEASE-ADMISSION-2026-09-05",
     "phase": "runtime-release-admission-complete",
     "status": "completed",
-    "next_action": "Verify 71/71 gate. Next options: Windows host OS worker process fencing/firewall or isolated HMAC trajectory signer daemon."
+    "next_action": "Read docs/GEMINI_HANDOFF_2026-09-05_RUNTIME_RELEASE_ADMISSION.md. Full gate 71/71 green. Next options: Windows host OS worker process fencing/firewall or isolated HMAC trajectory signer daemon."
   },
   "completed": [
     "F121 fail-closed runtime release admission contract implemented in orchestrator/runtime_admission.py",
     "Runtime admission directly wired into batch_runner.py, task_runner.py, and run_task.py before task dispatch",
     "Comprehensive model-free unit tests tests/test_runtime_admission.py (10/10 green) registered in tests/tiers.json",
-    "Test gate advanced from 70/70 to 71/71 suites green (unit, containment, integration tiers all passing)"
+    "Test gate advanced from 70/70 to 71/71 suites green (unit, containment, integration tiers all passing)",
+    "Handoff documented in docs/GEMINI_HANDOFF_2026-09-05_RUNTIME_RELEASE_ADMISSION.md"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -43,11 +44,11 @@
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
-      "sha256": "cde6b565660dd9a13b0a96d52c97ca3eba56d5c2be43b4b7c16c42f3a1902670"
+      "sha256": "3b4bcf0292e2221de75fd98eb55b246ae22b02fc1654a2578dde0d8c1748c586"
     },
     {
-      "path": "docs/CODEX_HANDOFF_2026-09-05_AUDIT_SERIALIZATION.md",
-      "sha256": "2baf5088c5e729b148c20953eece51e67c32cc36991cd42e814a96ee90887d09"
+      "path": "docs/GEMINI_HANDOFF_2026-09-05_RUNTIME_RELEASE_ADMISSION.md",
+      "sha256": "5ea05556f1a9f4ee4fa36f9b162b96176f85ae62aab8f8fe0959ee780c327e20"
     },
     {
       "path": "docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md",
