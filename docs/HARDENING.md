@@ -2605,3 +2605,30 @@ cross-provider transport eligibility without a provider call.
 
 Residual: provider separation does not replace a calibrated labeled corpus or
 an independent external reviewer.
+
+### F118 - HTTPS CONNECT egress broker aborted connections on TCP half-close (FIN) - P1 - fixed in repository
+
+`BrokerHandler.do_CONNECT` in `orchestrator/egress_broker.py` previously treated `source.recv() == b""`
+as an immediate hard disconnection: clearing `sockets = []`, breaking the relay loop, and
+closing the upstream socket in `finally:`. In streaming HTTP/1.1 or TLS sessions where the
+client or upstream issues a TCP `FIN` (`SHUT_WR`) after sending its payload, in-flight
+reverse-direction data was prematurely dropped and connections were abruptly aborted.
+Additionally, the repository lacked integration tests executing real TCP socket relays
+through the broker.
+
+Fixed:
+- Implemented asymmetric TCP half-close (`FIN`) propagation: when `source.recv() == b""`,
+  `source` is removed from the readable select set and `target.shutdown(socket.SHUT_WR)` is
+  issued, allowing the reverse flow to complete cleanly until both peers close.
+- Added non-blocking chunk forwarding (`_forward_chunk`) with `select.select` on writability,
+  guarding against `BlockingIOError` and socket exceptions.
+- Added pluggable `resolver` and `upstream_connector` kwargs to `EgressBroker` for offline,
+  loopback-contained testing.
+- Created `tests/test_egress_broker_integration.py` (15 checks covering HTTP 405 rejection
+  of non-CONNECT verbs, 403 denial of non-allowlisted hosts, 403 denial of non-allowlisted
+  ports, 403 denial of private IP addresses (anti-SSRF), bidirectional data echo, TCP
+  half-close `FIN` preservation, `max_connection_bytes` limit termination, and JSONL
+  audit verification).
+- Registered `test_egress_broker_integration` in `tests/tiers.json` (`integration` tier),
+  advancing the gate from 68/68 to 69/69 green.
+

@@ -15,17 +15,51 @@ import socketserver
 from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler
 from pathlib import Path
+from typing import Any, Callable
 
 import egress_policy
+
+
+def _forward_chunk(target: socket.socket, data: bytes, timeout: float) -> bool:
+    """Send all bytes of data to target socket using select for writability.
+
+    Returns True if completely sent, False if connection closed, timed out, or errored.
+    """
+    view = memoryview(data)
+    total_sent = 0
+    total_len = len(view)
+    while total_sent < total_len:
+        _, writable, exceptional = select.select([], [target], [target], timeout)
+        if exceptional or not writable:
+            return False
+        try:
+            sent = target.send(view[total_sent:])
+        except (BlockingIOError, InterruptedError):
+            continue
+        except OSError:
+            return False
+        if sent <= 0:
+            return False
+        total_sent += sent
+    return True
 
 
 class EgressBroker(socketserver.ThreadingTCPServer):
     allow_reuse_address = True
     daemon_threads = True
 
-    def __init__(self, policy: egress_policy.EgressPolicy, audit_path: Path | None):
+    def __init__(
+        self,
+        policy: egress_policy.EgressPolicy,
+        audit_path: Path | None = None,
+        *,
+        resolver: Callable[..., Any] | None = None,
+        upstream_connector: Callable[..., socket.socket] | None = None,
+    ):
         self.policy = policy
         self.audit_path = audit_path
+        self.resolver = resolver
+        self.upstream_connector = upstream_connector or socket.create_connection
         super().__init__((policy.host, policy.port), BrokerHandler)
 
     def audit(self, **record: object) -> None:
@@ -45,42 +79,75 @@ class BrokerHandler(BaseHTTPRequestHandler):
         return
 
     def do_CONNECT(self) -> None:  # noqa: N802 - HTTP verb naming is stdlib API
+        self.close_connection = True
         try:
             host, raw_port = self.path.rsplit(":", 1)
             port = int(raw_port)
+            resolver = getattr(self.server, "resolver", None)
+            kwargs = {"resolver": resolver} if resolver is not None else {}
             host, addresses = egress_policy.authorize_destination(
-                host, port, self.server.policy)  # type: ignore[attr-defined]
-            upstream = socket.create_connection((addresses[0], port), timeout=15)
+                host, port, self.server.policy, **kwargs)  # type: ignore[attr-defined]
+            connector = getattr(self.server, "upstream_connector", socket.create_connection)
+            upstream = connector((addresses[0], port), timeout=15)
         except (ValueError, OSError, egress_policy.EgressPolicyError) as exc:
             self.server.audit(decision="deny", reason=str(exc)[:120])  # type: ignore[attr-defined]
             self.send_error(403, "egress denied")
             return
+
         self.server.audit(decision="allow", host=host, addresses=list(addresses))  # type: ignore[attr-defined]
         self.send_response(200, "Connection Established")
         self.end_headers()
+        try:
+            self.wfile.flush()
+        except OSError:
+            upstream.close()
+            return
+
         self.connection.setblocking(False)
         upstream.setblocking(False)
+        timeout = float(self.server.policy.idle_timeout_seconds)  # type: ignore[attr-defined]
+        max_bytes = int(self.server.policy.max_connection_bytes)  # type: ignore[attr-defined]
         try:
-            sockets = [self.connection, upstream]
+            client = self.connection
+            readers = [client, upstream]
             forwarded_bytes = 0
-            while sockets:
-                readable, _, failed = select.select(
-                    sockets, [], sockets, self.server.policy.idle_timeout_seconds)  # type: ignore[attr-defined]
+            while readers:
+                readable, _, failed = select.select(readers, [], readers, timeout)
                 if failed or not readable:
                     break
                 for source in readable:
-                    data = source.recv(65536)
+                    try:
+                        data = source.recv(65536)
+                    except OSError:
+                        readers = []
+                        break
+
+                    target = upstream if source is client else client
+
                     if not data:
-                        sockets = []
-                        break
+                        # Peer sent FIN / closed write direction
+                        if source in readers:
+                            readers.remove(source)
+                        try:
+                            target.shutdown(socket.SHUT_WR)
+                        except OSError:
+                            pass
+                        continue
+
                     forwarded_bytes += len(data)
-                    if forwarded_bytes > self.server.policy.max_connection_bytes:  # type: ignore[attr-defined]
+                    if forwarded_bytes > max_bytes:
                         self.server.audit(decision="deny", reason="connection_bytes_exceeded")  # type: ignore[attr-defined]
-                        sockets = []
+                        readers = []
                         break
-                    target = upstream if source is self.connection else self.connection
-                    target.sendall(data)
+
+                    if not _forward_chunk(target, data, timeout):
+                        readers = []
+                        break
         finally:
+            try:
+                upstream.shutdown(socket.SHUT_RDWR)
+            except OSError:
+                pass
             upstream.close()
 
     def do_GET(self) -> None:  # noqa: N802

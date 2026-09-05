@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-04T00:15:00Z",
+  "last_updated": "2026-09-05T02:15:00Z",
   "active_agents": [
     {
       "agent": "claude-code",
@@ -108,17 +108,16 @@
     },
     {
       "agent": "gemini-cli",
-      "role": "Independent Principal Architect / Reviewer - REVIEWER ONLY (superseded by Claude Code review 2026-09-02)",
-      "task_id": "MUNDER-BOUNDARY-HARDENING-REVIEW",
-      "mode": "read-only-review",
+      "role": "Independent Principal Architect - Egress Broker FIN Half-Close & Integration Suite (F112)",
+      "task_id": "EGRESS-BROKER-RELAY-2026-09-05",
+      "mode": "completed",
       "owned_paths": [],
-      "read_only": true,
-      "started_at": "2026-08-31T01:21:00Z",
-      "last_update": "2026-09-02T10:00:00Z",
+      "started_at": "2026-09-05T01:15:00Z",
+      "last_update": "2026-09-05T02:15:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
-      "notes": "Historical review details remain in docs/HERMES_HANDOFF_2026-08-31_BOUNDARY_HARDENING.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
+      "handoff_path": "docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md",
+      "notes": "DONE. TCP half-close (FIN) handling and resilient non-blocking chunk forwarding implemented in orchestrator/egress_broker.py (F118). Comprehensive integration suite tests/test_egress_broker_integration.py added (15/15 checks green) and registered in tests/tiers.json (integration tier). Model-free test gate advanced from 68/68 to 69/69 green. Model-free only; ESTOP remains engaged."
     }
   ],
   "coordination_rules": [

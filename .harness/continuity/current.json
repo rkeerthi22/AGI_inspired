@@ -1,14 +1,14 @@
 {
   "schema_version": 2,
-  "brief_revision": 61,
-  "created_at": "2026-09-04T17:46:28+00:00",
+  "brief_revision": 62,
+  "created_at": "2026-09-05T02:15:00+00:00",
   "status": "in_progress",
   "repository": {
-    "branch": "master",
-    "upstream": "origin/master",
+    "branch": "claude-code/audit-failclosed-fixes-2026-09-05",
+    "upstream": "origin/claude-code/audit-failclosed-fixes-2026-09-05",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "87451438132e537c3b858aad256751308a163cf7"
+    "based_on_head": "7c1d19f629d488adbc38cc28aa9eeabc948a7fd3"
   },
   "task": {
     "id": "REDTEAM-BLUEPRINT-2026-09-04",
@@ -17,14 +17,12 @@
     "next_action": "Independent security review of aa5afaf against the deployment runbook, then operator-owned deployment: restricted worker identity + OS egress boundary, append-only UNC audit share + restore drill, clean-machine CI proof. Branch is ahead of origin; push is an operator release action, not proof. No live execution."
   },
   "completed": [
-    "RC-1/F110 committed as 0701dc5 and fully tested",
-    "A5 early-abort diagnostics committed as 8fb3efd and fully tested",
-    "A3 truthful failover reasons committed as 45d7846 and regression-tested",
-    "Local trajectory audit chain and release-preflight verification committed as b9d7499",
-    "P1 repository security controls (dependency hashes, fail-closed egress broker, signed audit replication, independent critic routing) committed as aa5afaf",
-    "Security blueprint and incident/current-state docs synchronized in 447346c",
-    "P1 documentation/ownership checkpoint + independent claude-code verification committed as 8745143 (gate 67/67, ESTOP engaged, both enforcement env vars unset)",
-    "67/67 model-free suites green; ESTOP engaged; no live execution authorized"
+    "RC-1/F110, A5, A3, and local trajectory audit chain committed and verified",
+    "P1 security controls (dependency hashes, egress broker, signed audit, critic routing) committed in aa5afaf",
+    "P1 documentation/ownership checkpoint + independent claude-code verification committed as 8745143",
+    "F111 fail-closed migrations and abnormal worker exit fs_integrity committed in 7c1d19f",
+    "F118 egress broker TCP FIN half-close propagation and integration test suite landed",
+    "69/69 model-free suites green; ESTOP engaged; no live execution authorized"
   ],
   "locked_constraints": [
     "ESTOP remains engaged",
@@ -34,18 +32,18 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "67/67 model-free suites green (own run, exit 0) after RC-1, A5, audit chain, and the P1 security batch; ARK_API_KEY vaulted; ESTOP engaged; HARNESS_EGRESS_ATTESTATION and HARNESS_AUDIT_ENFORCE both unset (deployment unprovisioned). No live execution."
+    "detail": "69/69 model-free suites green across unit, containment, and integration tiers; ARK_API_KEY vaulted; ESTOP engaged; HARNESS_EGRESS_ATTESTATION and HARNESS_AUDIT_ENFORCE unset. No live execution."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
       "purpose": "Canonical state",
-      "sha256": "06529b7a9b0c0071139f872bff688bf27a4b2758d177d5e2bde7d31f49821eeb"
+      "sha256": "806c82e835bbebba1e6c24109031075f1a9f72f67222ee71d87b51718508a112"
     },
     {
       "path": "docs/HARDENING.md",
       "purpose": "Incident and fix registry",
-      "sha256": "baf2c100dd557c584a1fd87180aede2938aea2679613c831fa21c9f616e958ac"
+      "sha256": "e2e4f2d589d8b55bd8e0aaa1ea647e59e5d9d6e30b0991289de0fae40418bdb4"
     },
     {
       "path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",

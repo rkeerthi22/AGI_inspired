@@ -5,10 +5,10 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-04T17:16:41Z
+**Last Updated:** 2026-09-05T02:10:00Z
 **Phase:** Immediate cohort actions complete through M7; repository-controlled P1 security implementation complete; deployment evidence and independent review pending
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Live Verification:** `python -B tests/run_all.py` -> `67/67` green (model-free, exit 0) | continuity refresh pending this documentation checkpoint | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
+**Live Verification:** `python -B tests/run_all.py` -> `69/69` green (model-free, exit 0) | continuity refresh pending this documentation checkpoint | supervised BytePlus canary succeeded on `2026-09-03T01:53:09Z`
 
 ---
 
@@ -24,7 +24,7 @@ What is now true in live state:
 | Task 110 recovery | VERIFIED LIVE | Supported recovery already completed on 2026-09-02; row is no longer stranded in `running` |
 | Hermes provider-id repair | VERIFIED | `14dbafe` changed Anthropic to native `anthropic`, OpenAI to `openai-api`, and aligned finalizer mapping |
 | Unavailable-rung failover hardening | VERIFIED | `5522926` teaches both research and synthesis failover loops to continue past missing optional provider credentials or unsupported provider rungs |
-| Full model-free gate | VERIFIED | `67/67` suites green after the dependency, egress, audit, and independent-critic security batch |
+| Full model-free gate | VERIFIED | `69/69` suites green after the dependency, egress, audit, and independent-critic security batch |
 | Supervised BytePlus canary | VERIFIED LIVE | `2026-09-03T01:53:09Z`, `ok=true`, provider `byteplus_coding`, model `ark-code-latest`, request id `02178840037366712014becacfaf8a37949eaec3c813975305d82` |
 | M3 / task 114 | FAILED | Real frozen-spec fail; deliverable did not explicitly account for all required blocked review platforms and attempts |
 | M4 / task 115 | PASSED | Clean synthesis pass |
