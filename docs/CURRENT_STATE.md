@@ -5,10 +5,10 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05 (local master integration checkpoint)
-**Phase:** F111/F118 integrated into local master; architecture remediation, deployment evidence, and independent review remain open
+**Last Updated:** 2026-09-05T03:25:00Z
+**Phase:** F111/F118/F119 landed on master; full-history audit verification complete; deployment evidence and independent review pending
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Feature baseline `1d822a8`: `python -B tests/run_all.py` -> `69/69` green, exit 0. Master verification is recorded in the integration handoff below; use continuity recovery for the active checkpoint. Last recorded supervised BytePlus canary: `2026-09-03T01:53:09Z` (historical, not rerun).
+**Verification:** Full model-free gate `python -B tests/run_all.py` -> `69/69` green, exit 0 (7/7 audit replication checks passing). ESTOP true, isolation restored.
 
 ## Current Integration Checkpoint
 
@@ -20,16 +20,17 @@ No push or live execution was performed. The current handoff is
 This is a model-free verified control prototype, not an enterprise release.
 The September 5 audit supersedes earlier claims that only operator deployment
 remains. Open code/design findings include cross-writer audit serialization,
-verification of historical replica artifacts, restricted worker identity and
-signer separation, and consistent runtime admission of release prerequisites.
-The research launcher already checks egress attestation; the narrower runtime
-admission must not be described as having no egress check at all.
+restricted worker identity and signer separation, and consistent runtime
+admission of release prerequisites. The research launcher already checks
+egress attestation; the narrower runtime admission must not be described as
+having no egress check at all.
 
-Next bounded code task: reproduce corruption/deletion of an older replicated
-artifact while the newest artifact remains intact, then make full-history audit
-verification fail closed. Deployment still requires actual OS denial evidence,
-UNC retention/restore proof, clean-machine CI, and independent security review.
-No current `safe_to_proceed=true` result is claimed.
+F119 completed: full-history replica verification implemented in `audit_state()`
+and `replicate_trajectory()` with hermetic regressions (`tests/test_audit_replication.py`),
+ensuring corruption or deletion of older historical replicas fails closed.
+Deployment still requires actual OS denial evidence, UNC retention/restore proof,
+clean-machine CI, and independent security review. No current `safe_to_proceed=true`
+result is claimed.
 
 ---
 

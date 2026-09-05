@@ -2632,3 +2632,28 @@ Fixed:
 - Registered `test_egress_broker_integration` in `tests/tiers.json` (`integration` tier),
   advancing the gate from 68/68 to 69/69 green.
 
+### F119 - Remote audit replication verified only the latest artifact, allowing historical corruption or deletion - P1 - fixed in repository
+
+`audit_state()` in `orchestrator/audit_replication.py` previously verified the on-disk existence
+and SHA-256 content-hash digest only for the latest checkpoint (`latest_checkpoint`).
+Older historical replica artifacts referenced by the signed checkpoint chain were never inspected
+for presence or digest integrity. If an attacker or disk corruption modified or deleted
+an older historical trajectory file on the UNC replica share, `audit_state()` returned `ok: True`.
+Furthermore, `replicate_trajectory()` would append new valid checkpoints on top of a corrupted
+or truncated historical replica store.
+
+Fixed:
+- Enhanced `verify_checkpoint_chain()` to accept `replica_root`. When provided, the function
+  iterates through every record in the checkpoint chain and verifies that each referenced
+  historical artifact file exists on the replica store, matches its `trajectory_sha256` digest,
+  and matches its `source_bytes` size.
+- Updated `audit_state()` to pass `replica_root=root` to `verify_checkpoint_chain()`, ensuring
+  `artifact_ok` and overall `ok` require all historical artifacts to be complete and untampered.
+- Updated `replicate_trajectory()` to verify the existing historical replica chain with
+  `replica_root=root` before appending new checkpoints, failing closed on corrupted or missing
+  prior replicas.
+- Added regression tests `test_corrupted_historical_artifact_fails_closed` and
+  `test_deleted_historical_artifact_fails_closed` in `tests/test_audit_replication.py`
+  (7/7 checks green).
+
+

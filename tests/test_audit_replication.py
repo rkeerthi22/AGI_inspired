@@ -98,6 +98,58 @@ minimum_retention_days: 365
         self.assertFalse(state["ok"])
         self.assertEqual(state["error"], "checkpoint_signature_invalid")
 
+    def test_corrupted_historical_artifact_fails_closed(self) -> None:
+        source1 = self._trajectory(1)
+        first = audit_replication.replicate_trajectory(
+            source1, self.config, self.environment, _sign, _verify)
+        source2 = self._trajectory(2)
+        second = audit_replication.replicate_trajectory(
+            source2, self.config, self.environment, _sign, _verify)
+
+        self.assertTrue(self._state()["ok"])
+
+        # Corrupt older replica artifact; newest replica remains valid
+        older_artifact = self.replica / first["artifact_relative_path"]
+        older_artifact.write_text("tampered historical trajectory bytes", encoding="utf-8")
+
+        state = self._state()
+        self.assertFalse(state["ok"])
+        self.assertFalse(state["artifact_ok"])
+        self.assertEqual(state["error"], "replica_artifact_tampered")
+
+        # Replicating further must also fail closed
+        source3 = self._trajectory(3)
+        with self.assertRaises(audit_replication.AuditReplicationError) as ctx:
+            audit_replication.replicate_trajectory(
+                source3, self.config, self.environment, _sign, _verify)
+        self.assertIn("replica_artifact_tampered", str(ctx.exception))
+
+    def test_deleted_historical_artifact_fails_closed(self) -> None:
+        source1 = self._trajectory(1)
+        first = audit_replication.replicate_trajectory(
+            source1, self.config, self.environment, _sign, _verify)
+        source2 = self._trajectory(2)
+        second = audit_replication.replicate_trajectory(
+            source2, self.config, self.environment, _sign, _verify)
+
+        self.assertTrue(self._state()["ok"])
+
+        # Delete older replica artifact; newest replica remains valid
+        older_artifact = self.replica / first["artifact_relative_path"]
+        older_artifact.unlink()
+
+        state = self._state()
+        self.assertFalse(state["ok"])
+        self.assertFalse(state["artifact_ok"])
+        self.assertEqual(state["error"], "replica_artifact_missing")
+
+        # Replicating further must also fail closed
+        source3 = self._trajectory(3)
+        with self.assertRaises(audit_replication.AuditReplicationError) as ctx:
+            audit_replication.replicate_trajectory(
+                source3, self.config, self.environment, _sign, _verify)
+        self.assertIn("replica_artifact_missing", str(ctx.exception))
+
     def test_missing_replica_root_fails_closed(self) -> None:
         state = audit_replication.audit_state(
             self.config, {"HARNESS_TEST_AUDIT_ENFORCE": "1"},

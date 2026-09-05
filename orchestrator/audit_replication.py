@@ -159,52 +159,73 @@ def verify_checkpoint_chain(
     checkpoint_path: Path,
     config: AuditRetentionConfig,
     verify_token: Callable[[str], dict[str, Any] | None],
+    *,
+    replica_root: Path | None = None,
 ) -> dict[str, Any]:
-    """Verify signed remote checkpoint history without touching it."""
+    """Verify signed remote checkpoint history without touching it.
+
+    If replica_root is provided, every referenced historical artifact is also
+    verified for existence, SHA-256 digest match, and byte size.
+    """
     if not checkpoint_path.is_file():
         return {"ok": True, "count": 0, "latest": None,
-                "latest_checkpoint": None, "error": None}
+                "latest_checkpoint": None, "checkpoints": [], "error": None}
     previous = GENESIS_HASH
     count = 0
     latest: dict[str, Any] | None = None
+    checkpoints: list[dict[str, Any]] = []
     try:
         lines = checkpoint_path.read_text(encoding="utf-8").splitlines()
     except OSError as exc:
-        return {"ok": False, "count": count, "error": type(exc).__name__}
+        return {"ok": False, "count": count, "checkpoints": [], "error": type(exc).__name__}
     for raw in lines:
         if not raw.strip():
             continue
         try:
             record = json.loads(raw)
         except json.JSONDecodeError:
-            return {"ok": False, "count": count, "error": "checkpoint_json_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_json_invalid"}
         if not isinstance(record, dict):
-            return {"ok": False, "count": count, "error": "checkpoint_record_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_record_invalid"}
         checkpoint = record.get("checkpoint")
         signature = record.get("signature")
         trusted = verify_token(signature) if isinstance(signature, str) else None
         if not isinstance(checkpoint, dict) or trusted != checkpoint:
-            return {"ok": False, "count": count, "error": "checkpoint_signature_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_signature_invalid"}
         if checkpoint.get("schema_version") != 1 or checkpoint.get("previous_checkpoint_hash") != previous:
-            return {"ok": False, "count": count, "error": "checkpoint_link_invalid"}
-        if _safe_artifact_relative(checkpoint.get("artifact_relative_path"), config) is None:
-            return {"ok": False, "count": count, "error": "checkpoint_artifact_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_link_invalid"}
+        relative = _safe_artifact_relative(checkpoint.get("artifact_relative_path"), config)
+        if relative is None:
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_artifact_invalid"}
         digest = checkpoint.get("trajectory_sha256")
         if not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest):
-            return {"ok": False, "count": count, "error": "checkpoint_digest_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_digest_invalid"}
         if not isinstance(checkpoint.get("source_bytes"), int) or checkpoint["source_bytes"] < 0:
-            return {"ok": False, "count": count, "error": "checkpoint_size_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_size_invalid"}
         if _parse_timestamp(checkpoint.get("replicated_at")) is None:
-            return {"ok": False, "count": count, "error": "checkpoint_time_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_time_invalid"}
         checkpoint_hash = checkpoint.get("checkpoint_hash")
         if not isinstance(checkpoint_hash, str) or checkpoint_hash != _checkpoint_hash(checkpoint):
-            return {"ok": False, "count": count, "error": "checkpoint_hash_invalid"}
+            return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "checkpoint_hash_invalid"}
+
+        if replica_root is not None:
+            artifact = replica_root / relative
+            if not artifact.is_file():
+                return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "replica_artifact_missing"}
+            if _sha256_file(artifact) != digest:
+                return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "replica_artifact_tampered"}
+            if artifact.stat().st_size != checkpoint["source_bytes"]:
+                return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "replica_artifact_size_mismatch"}
+
         previous = checkpoint_hash
         latest = checkpoint
+        checkpoints.append(checkpoint)
         count += 1
     return {"ok": True, "count": count,
             "latest": latest.get("replicated_at") if latest else None,
-            "latest_checkpoint": latest, "error": None}
+            "latest_checkpoint": latest,
+            "checkpoints": checkpoints,
+            "error": None}
 
 
 def _copy_immutable(source: Path, destination: Path, expected_digest: str) -> None:
@@ -259,7 +280,8 @@ def replicate_trajectory(
     if verify_checkpoint is None:
         import audit_signing
         verify_checkpoint = audit_signing.verify_checkpoint
-    chain = verify_checkpoint_chain(_checkpoint_path(root, config), config, verify_checkpoint)
+    chain = verify_checkpoint_chain(
+        _checkpoint_path(root, config), config, verify_checkpoint, replica_root=root)
     if chain.get("ok") is not True:
         raise AuditReplicationError(f"remote_checkpoint_invalid:{chain.get('error')}")
     checkpoint = {
@@ -313,25 +335,22 @@ def audit_state(
         if verify_checkpoint is None:
             import audit_signing
             verify_checkpoint = audit_signing.verify_checkpoint
-        chain = verify_checkpoint_chain(_checkpoint_path(root, config), config, verify_checkpoint)
+        chain = verify_checkpoint_chain(
+            _checkpoint_path(root, config), config, verify_checkpoint, replica_root=root)
         latest = chain.get("latest_checkpoint")
         timestamp = _parse_timestamp(chain.get("latest"))
         current = now or datetime.now(timezone.utc)
         fresh = timestamp is not None and timestamp <= current and \
             current - timestamp <= timedelta(hours=config.checkpoint_max_age_hours)
-        relative = _safe_artifact_relative(
-            latest.get("artifact_relative_path") if isinstance(latest, dict) else None, config)
-        artifact = root / relative if relative is not None else None
-        artifact_ok = bool(artifact and artifact.is_file() and latest and
-                           _sha256_file(artifact) == latest.get("trajectory_sha256"))
-        ok = chain.get("ok") is True and chain.get("count", 0) > 0 and fresh and artifact_ok
+        all_artifacts_ok = chain.get("ok") is True and chain.get("count", 0) > 0
+        ok = all_artifacts_ok and fresh
         return {
             "ok": ok,
             "replica_root": str(root),
             "checkpoints": chain.get("count", 0),
             "latest": chain.get("latest"),
             "fresh": fresh,
-            "artifact_ok": artifact_ok,
+            "artifact_ok": all_artifacts_ok,
             "minimum_retention_days": config.minimum_retention_days,
             "error": None if ok else (chain.get("error") or "checkpoint_missing_or_stale"),
         }

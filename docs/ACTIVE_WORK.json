@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-05T02:59:36Z",
+  "last_updated": "2026-09-05T03:30:00Z",
   "active_agents": [
     {
       "agent": "codex",
@@ -43,16 +43,16 @@
     },
     {
       "agent": "codex",
-      "role": "Forward implementer - ready to resume after Gemini F118 landing (69/69 green gate)",
+      "role": "Forward implementer - ready to resume after F119 landing (69/69 green gate)",
       "task_id": "REDTEAM-BLUEPRINT-2026-09-04",
       "mode": "completed",
       "owned_paths": [],
       "started_at": "2026-09-04T00:15:00Z",
-      "last_update": "2026-09-05T02:35:00Z",
+      "last_update": "2026-09-05T03:30:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_RESUMPTION_AND_NEXT_ACTIONS.md",
-      "notes": "Ready for Codex resumption. Gemini completed salvage of prior subagents, authored comprehensive 10-question audit (docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md), landed TCP half-close FIN handling in orchestrator/egress_broker.py, and created tests/test_egress_broker_integration.py (F118). Gate advanced to 69/69 green. ESTOP engaged. Next decisions detailed in docs/CODEX_HANDOFF_2026-09-05_RESUMPTION_AND_NEXT_ACTIONS.md."
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_HISTORICAL_AUDIT_FIX.md",
+      "notes": "F119 landed by Gemini: full-history audit verification complete (older replica corruption/deletion fails closed). Ready for Codex handover."
     },
     {
       "agent": "claude-code",
@@ -121,16 +121,16 @@
     },
     {
       "agent": "gemini-cli",
-      "role": "Independent Principal Architect - Egress Broker FIN Half-Close & Integration Suite (F112)",
-      "task_id": "EGRESS-BROKER-RELAY-2026-09-05",
+      "role": "Independent Principal Architect - Historical Audit Full-History Verification (F119)",
+      "task_id": "HISTORICAL-AUDIT-VERIFICATION-2026-09-05",
       "mode": "completed",
       "owned_paths": [],
-      "started_at": "2026-09-05T01:15:00Z",
-      "last_update": "2026-09-05T02:15:00Z",
+      "started_at": "2026-09-05T03:06:00Z",
+      "last_update": "2026-09-05T03:30:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/reviews/GEMINI_AUDIT_AND_REVIEW_2026-09-05.md",
-      "notes": "DONE. TCP half-close (FIN) handling and resilient non-blocking chunk forwarding implemented in orchestrator/egress_broker.py (F118). Comprehensive integration suite tests/test_egress_broker_integration.py added (15/15 checks green) and registered in tests/tiers.json (integration tier). Model-free test gate advanced from 68/68 to 69/69 green. Model-free only; ESTOP remains engaged."
+      "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_HISTORICAL_AUDIT_FIX.md",
+      "notes": "DONE. F119 completed: full-history replica artifact verification implemented in orchestrator/audit_replication.py (verify_checkpoint_chain and audit_state with replica_root). Hermetic regressions added to tests/test_audit_replication.py (7/7 green). Full gate 69/69 green. Ready for Codex handover."
     }
   ],
   "coordination_rules": [

@@ -1,25 +1,26 @@
 {
   "schema_version": 2,
-  "brief_revision": 63,
-  "created_at": "2026-09-05T03:00:08.600736+00:00",
+  "brief_revision": 64,
+  "created_at": "2026-09-05T03:30:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "7843b5d2821ca222f6dd5b079652383ea025417d"
+    "based_on_head": "e7f8dfd8bb7c80da8b0fe3e6a61a6da87b464cdc"
   },
   "task": {
-    "id": "MASTER-INTEGRATION-2026-09-05",
-    "phase": "local-master-integrated-architecture-and-deployment-open",
+    "id": "HISTORICAL-AUDIT-VERIFICATION-2026-09-05",
+    "phase": "historical-audit-verification-complete",
     "status": "completed",
-    "next_action": "Claim audit_replication.py and its tests; reproduce corruption/deletion of an older replica and implement full-history fail-closed verification. See the master integration handoff for remaining architecture and deployment blockers."
+    "next_action": "Codex handover from docs/CODEX_HANDOFF_2026-09-05_HISTORICAL_AUDIT_FIX.md. Verify 69/69 gate. Options: cross-writer serialization, host deployment runbook, or SQLite WAL mode."
   },
   "completed": [
     "F111 and F118 plus Gemini handoff fast-forwarded into local master through 53bb656",
     "Feature and master model-free gates each passed 69/69 with exit 0",
-    "Documentation reconciled in 7843b5d; ownership released; no push or live calls"
+    "Documentation reconciled in 7843b5d; ownership released; no push or live calls",
+    "F119 full-history replica artifact verification landed in orchestrator/audit_replication.py (7/7 tests green, gate 69/69)"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -29,16 +30,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "69/69 suites at master 53bb656; subsequent changes documentation/continuity only. ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "69/69 suites green. ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "df9bf2f6a997e59b60a1be411fa8992dff2744dc05ca5b1ab632335b4a4d4e14"
+      "sha256": "70828399f0ef94a6eecbe070a984f18dbca1e541ca70dda4a311a4f1684d7eff"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "1f3f58c450433b822c7763b3b77ef9cda035b4a7a02e99e6b354278528a4d45f"
+      "sha256": "51317af2559ebc390d99e271fe6eec960ea205b763fe313023c6a16e9d3651fd"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
@@ -62,7 +63,7 @@
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "605eb11ecef766c902f4f5760d98227360cebd18155dff3c560fecbe50c5c106"
+      "sha256": "3d97a81d730a633fd1abfdce42d500ada9350b7e9869fbc051b59609ff1a18ad"
     }
   ]
 }
