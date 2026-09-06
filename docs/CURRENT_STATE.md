@@ -5,13 +5,22 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-05 (F124 restricted worker launch)
-**Phase:** Restricted worker launch implemented; production runtime ACLs, three-identity deployment, egress/UNC evidence, and live pass rates remain open
+**Last Updated:** 2026-09-06 (F126 deliverable preflight & auto-repair)
+**Phase:** Deliverable preflight and auto-repair implemented (F126); model-free gate 74/74 green; production runtime ACLs, three-identity deployment, egress/UNC evidence, and live pass rates remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Full model-free gate: 73/73 suites green, exit 0 (16/16 worker sandbox, 19/19 audit signer). Final post-change gate verified by Gemini CLI after Codex quota limit. ESTOP remains engaged.
+**Verification:** Full model-free gate: 74/74 suites green, exit 0 (11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). Verified by Gemini CLI. ESTOP remains engaged.
 
-Current handoff: `docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md`.
-F124 research workers now use CreateRestrictedToken/CreateProcessAsUserW,
+Current handoff: `docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md` (and F126 preflight landing).
+F126 implements deliverable preflight and a mechanical auto-repair loop in
+`orchestrator/deliverable_preflight.py` and `orchestrator/task_runner.py`, directly
+targeting the 1/6 live cohort yield bottleneck. Incorporates multi-agent peer review
+consensus (Gemini + Claude): reuses `citecheck.py` directly without socket duplication,
+strictly preserving the RC-1 fix (HTTP 403 is BLOCKED, not DEAD), provides schema &
+disclaimer linting (M3 platform coverage and M7 'not publicly disclosed' tables), adheres
+to the F10 anti-injection floor (metadata only, no raw HTML), bounds repair to
+MAX_REPAIR_ATTEMPTS=2 with token budget checks, and accumulates token spend. OmniRoute
+is held decoupled from live routing to preserve the F124 restricted token boundary.
+F124 research workers use CreateRestrictedToken/CreateProcessAsUserW,
 a deny-only user SID, removed privileges, restricting SIDs, explicit pipe-only
 inheritance, private desktop and Job Object/UI restrictions. Real synthetic
 tests prove credential, signer-pipe and controller-resource denial, worker/child
@@ -31,7 +40,7 @@ contract, not against every same-session service or host configuration.
 F123 isolates F58's filesystem remediator after it quarantined a concurrent edit.
 F125 fixes a reproduced signer preconnected-pipe accept hang discovered during
 the F124 full gate. Two new regressions pass; signer suite is now 19/19 with
-20 consecutive suite runs green. Final full post-change gate passed 73/73 suites green.
+20 consecutive suite runs green. Full post-change gate passed 74/74 suites green.
 
 ## Current Integration Checkpoint
 

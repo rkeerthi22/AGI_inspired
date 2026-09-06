@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-05T20:25:00Z",
+  "last_updated": "2026-09-06T02:05:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Deliverable preflight and mechanical auto-repair loop (F126)",
+      "task_id": "DELIVERABLE-PREFLIGHT-2026-09-06",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-06T01:31:00Z",
+      "last_update": "2026-09-06T02:05:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETE: F126 deliverable preflight & mechanical auto-repair loop implemented in orchestrator/deliverable_preflight.py and task_runner.py. Reuses citecheck.verify (preserving RC-1 403-not-dead rule), schema & disclaimer linter, F10 anti-injection floor, bounded MAX_REPAIR_ATTEMPTS=2, token budget re-check and accumulation. OmniRoute held decoupled. Model-free gate 74/74 green (11/11 deliverable preflight tests)."
+    },
     {
       "agent": "codex / gemini-cli",
       "role": "Restricted worker launch and Windows token fencing (F124/F125)",

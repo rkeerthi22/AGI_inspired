@@ -11,7 +11,8 @@
     "test_pty_daemon",
     "test_migrations",
     "test_operator_auth",
-    "test_runtime_admission"
+    "test_runtime_admission",
+    "test_deliverable_preflight"
   ],
   "containment": [
     "test_worker_sandbox",

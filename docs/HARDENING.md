@@ -2803,5 +2803,27 @@ immediately on old behavior rather than hanging a test. Signer suite is now
 19 tests; 20 consecutive complete signer-suite runs passed after this repair.
 The initial failed full gate remains recorded, not relabeled as green.
 
+### F126 - Deliverable preflight and mechanical auto-repair loop - P1 - FIXED 2026-09-06
 
+Addresses the real-world yield bottleneck (live cohort 1/6 pass rate, where 5 of 6 missions
+failed mechanically on dead URLs, missing table structures, or missing mandatory disclaimers).
+Integrates an automated preflight check and auto-repair loop into `orchestrator/task_runner.py`
+before submitting deliverables to the authoritative critic and citecheck evaluators.
 
+Incorporates multi-agent peer review constraints (Gemini + Claude consensus):
+1. Reuses `citecheck.py` directly (`citecheck.verify()`): zero duplicate networking code,
+   preserving 8s timeout, SSRF protection (`_resolve_safety`), and the critical RC-1 rule
+   (HTTP 403 is BLOCKED, not DEAD; only 404/410 and DNS/connection failures are DEAD).
+2. Schema & Disclaimer Linter (`orchestrator/deliverable_preflight.py`): checks for required
+   comparison tables (M3), mandatory 'not publicly disclosed' disclaimers (M7), and unaddressed
+   platform subjects.
+3. F10 Indirect-Injection Floor: Worker repair prompt contains ONLY structured status metadata
+   and element names, never raw fetched web bodies or redirect targets.
+4. Bounded Execution & Token Guard: Capped at MAX_REPAIR_ATTEMPTS=2; repair calls bypass if
+   initial call was an infra failure (`infra_failed`, `chain_exhausted`), re-checks
+   `policy.token_budget_breached()` before attempt 2, and accumulates spend into `usage` (F32).
+5. OmniRoute separation: OmniRoute held separate and deferred from live path to avoid loopback
+   egress bypass of F124 restricted token boundary.
+
+Verified by `tests/test_deliverable_preflight.py` (11/11 tests passing), advancing the full
+model-free gate from 73/73 to 74/74 green (tiers: unit 60, containment 8, integration 6).

@@ -1,26 +1,26 @@
 {
   "schema_version": 2,
-  "brief_revision": 69,
-  "created_at": "2026-09-05T20:30:00Z",
+  "brief_revision": 70,
+  "created_at": "2026-09-06T02:05:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "3f455bce963da1abdc4e6d5b8f5733af731c99cb"
+    "based_on_head": "2dc405507721c173759a9b5884048a1072d6a0d1"
   },
   "task": {
-    "id": "WORKER-TOKEN-ISOLATION-2026-09-05",
-    "phase": "worker-token-isolation-and-signer-accept-complete",
+    "id": "DELIVERABLE-PREFLIGHT-2026-09-06",
+    "phase": "deliverable-preflight-auto-repair-complete",
     "status": "completed",
-    "next_action": "Read docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md. Model-free gate 73/73 green. Next options: deployment readiness diagnostic for worker runtime/home ACLs, or three-identity host provisioning."
+    "next_action": "Model-free gate 74/74 green. F126 deliverable preflight & auto-repair loop complete. Next options: supervisor canary for preflight testing or three-identity host deployment."
   },
   "completed": [
-    "F124 restricted worker launch: CreateRestrictedToken/CreateProcessAsUserW with deny-only user SID, restricting SIDs, Job Object UI restrictions, private desktop, no unrestricted research fallback",
-    "F125 audit signer pipe accept race repair: handled pywin32 preconnected 535 and synchronous 0 without event wait hang",
-    "Model-free tests: 16/16 native worker sandbox tests in tests/test_worker_sandbox.py, 19/19 audit signer tests",
-    "Final full model-free gate 73/73 suites green, exit 0, verified by Gemini CLI after Codex quota limit"
+    "F126 deliverable preflight & mechanical auto-repair loop: reusing citecheck.verify (preserving RC-1 403-not-dead), schema/disclaimer linter, bounded MAX_REPAIR_ATTEMPTS=2, token budget accumulation",
+    "F124/F125 restricted worker launch and signer pipe accept race repair",
+    "Model-free tests: 11/11 deliverable preflight tests in tests/test_deliverable_preflight.py",
+    "Final full model-free gate 74/74 suites green, exit 0, verified by Gemini CLI"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -30,16 +30,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "73/73 model-free suites green, exit 0 (16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "74/74 model-free suites green, exit 0 (11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "7c403e38d7b5be5f3984864b9bcdbe81f10dabed19fb559b2719b29743e7a02d"
+      "sha256": "3d109517a7f66a3a52785a88a39b492a9aeae5cb96124675de03662d774bcbce"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "dff848ccf014efaae7db8b05ce2a38201c1494581e7cc59e1db7768de62337f2"
+      "sha256": "f61d997e33ba0081654c10b30ec7ff6b1f51cd540a89e239651413d5ecbbea2b"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
@@ -55,7 +55,7 @@
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "c5c37624c2a96603de1e88328c561467b7f20227242c8e051d648b4f7d2f4370"
+      "sha256": "c53fd47ac1278fb826d862b031aea6df5837e8b65caa94066a9f7333350122fc"
     },
     {
       "path": "orchestrator/worker_sandbox.py",

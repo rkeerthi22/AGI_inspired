@@ -21,6 +21,10 @@ import scheduler
 import trajectory
 import workflow
 import citecheck
+try:
+    import deliverable_preflight
+except ImportError:
+    from orchestrator import deliverable_preflight
 from retrieval_progress import (DEFAULT_RETRIEVAL_PROFILE,
                                 DYNAMIC_BROWSER_PROFILE,
                                 retrieval_policy_for_profile)
@@ -488,6 +492,39 @@ def _run_research_task(context: _TaskContext) -> str:
             tw.task_failed("deny-list match", failure_stage="classification",
                            detail=str(deny_hits))
         return "failed"
+
+    # F126 (docs/HARDENING.md): Deliverable preflight & mechanical auto-repair loop.
+    # Catches dead URLs and spec/schema omissions before submitting to authoritative critic.
+    repair_attempt = 0
+    while repair_attempt < deliverable_preflight.MAX_REPAIR_ATTEMPTS:
+        preflight_report = deliverable_preflight.run_preflight(out, spec=context.row.get("spec", ""))
+        if preflight_report.passed:
+            break
+        if policy.token_budget_breached():
+            rc.log(f"task {tid}: preflight repair skipped (daily token budget breached)")
+            break
+        repair_attempt += 1
+        rc.log(f"task {tid}: preflight repair attempt {repair_attempt}/{deliverable_preflight.MAX_REPAIR_ATTEMPTS} triggered")
+        repair_prompt = deliverable_preflight.build_repair_prompt(prompt, out, preflight_report.repair_feedback)
+        repair_usage_path = rc.RUNS / f"task{tid}_worker_repair_{repair_attempt}.usage.json"
+        try:
+            with integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
+                r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
+                    repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
+                    **worker_options)
+        except Exception as exc:
+            rc.log(f"task {tid}: repair attempt {repair_attempt} failed with exception: {exc}")
+            break
+        if r_usage:
+            usage["tokens_in"] = usage.get("tokens_in", 0) + r_usage.get("tokens_in", 0)
+            usage["tokens_out"] = usage.get("tokens_out", 0) + r_usage.get("tokens_out", 0)
+        if r_exhausted or execution.worker_failed(r_out, r_usage):
+            rc.log(f"task {tid}: repair attempt {repair_attempt} failed or exhausted; retaining previous output")
+            break
+        r_clean = execution._strip_tool_chatter(r_out)
+        if len(r_clean) >= 200 and not policy.deny_list_scan(r_clean):
+            out = r_clean
+            write_worker_raw(rc.RUNS, tid, out, usage, "worker")
 
     return _record_outcome(context, out, usage, worker_cfg, scope_note,
                            out_dir, wk, baseline)
