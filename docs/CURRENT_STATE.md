@@ -5,20 +5,23 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-06 (Step 2 host hardening enforced & verified; egress broker active; DDGS search proxy adapter landed; model-free gate 74/74 green)
-**Phase:** Deliverable preflight (F126) + Host Hardening (Step 2 WFP firewall rules active & enforced); model-free gate 74/74 green; upstream provider quota block pauses live cohort execution
+**Last Updated:** 2026-09-06 (Step 2 host hardening enforced & verified; egress broker active; postmortem repairs complete; worker readiness diagnostic 6/6 pass; synthetic M5 dry run 2/2 pass; model-free gate 75/75 green)
+**Phase:** Deliverable preflight (F126) + Host Hardening (Step 2 WFP firewall rules active & enforced); postmortem repairs landed (HERMES_HOME worker home, async_delegation patch order, stdin close, -t web); worker readiness diagnostic verified; model-free gate 75/75 green; upstream provider quota block pauses live cohort execution
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active | Egress WFP deny-direct-egress rule active
-**Verification:** Full model-free gate: 74/74 suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). Verified by Gemini CLI. ESTOP strictly engaged.
+**Verification:** Full model-free gate: 75/75 suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun). Worker readiness diagnostic: 6/6 checks PASS (1.8s). Verified by Gemini CLI. ESTOP strictly engaged.
 
-Current handoff: `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md`, `scripts/enforce_worker_firewall.ps1`, and `orchestrator/controlled_hermes.py`.
+Current handoff: `docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md`, `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md`, `scripts/check_worker_readiness.py`, `scripts/enforce_worker_firewall.ps1`, and `orchestrator/controlled_hermes.py`.
 Step 2 host hardening (`scripts/enforce_worker_firewall.ps1`) is fully provisioned and enforced on this host:
 Windows Defender Firewall / WFP rules `AGI_Worker_Allow_Broker_Loopback` (allow 127.0.0.1:8787 TCP) and `AGI_Worker_Deny_Direct_Egress`
 (deny direct Internet for restricted worker SID S-1-5-12) are both verified [PASS] ENABLED. Signed attestation token
 at `.harness/egress_attestation.signed` is cryptographically valid and matches `config/egress_policy.yaml`.
 Search provider reliability fix landed: `orchestrator/controlled_hermes.py` patches DDGS web search to run in-process via
 egress broker proxy (127.0.0.1:8787), resolving DuckDuckGo HTML layout changes and eliminating the 30-minute metasearch / subprocess stripping hang.
-Live cohort M5 execution executed Task 130 under controlled window; stopped and recovered when upstream BytePlus coding provider
-quota reached 429 limit. ESTOP re-engaged (`True`). Ready for immediate resumption when quota resets.
+Postmortem for controlled-window failures completed (`docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md`):
+1. Task 130 SQLite lock resolved by pre-emptively monkey-patching `tools.async_delegation.restore_undelivered_completions` before `run_agent` import.
+2. Task 131 provider discovery failure resolved by pointing `HERMES_HOME` to dedicated worker home (`workspace/worker_home`) where `config.yaml` resides.
+3. Task 131 1800s hang resolved by explicitly closing non-interactive worker stdin pipes and trimming toolsets from `-t web,browser` to `-t web` avoiding Job Object UI restriction deadlocks.
+4. Model-free test gate verified at 74/74 green. ESTOP re-engaged (`True`). Ready for immediate resumption when upstream quota resets.
 F126 implements deliverable preflight and a mechanical auto-repair loop in
 `orchestrator/deliverable_preflight.py` and `orchestrator/task_runner.py`, directly
 targeting the 1/6 live cohort yield bottleneck. Incorporates multi-agent peer review

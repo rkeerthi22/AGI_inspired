@@ -411,6 +411,21 @@ class WorkerSandboxTests(unittest.TestCase):
                 sandbox.spawn_suspended([str(self.python)], self.root, {"KEY": "value\0INJECTED=1"})
             token.assert_not_called()
 
+    def test_restricted_worker_close_stdin_signals_immediate_eof(self):
+        code = "import sys; data = sys.stdin.read(); print(f'EOF:{len(data)}', flush=True)"
+        process, job, out, err = pty.create_contained_process(
+            [str(self.python), "-I", "-B", "-c", code],
+            cwd=self.root, env={"SystemRoot": os.environ["SystemRoot"]},
+            restricted_worker=True, close_stdin=True)
+        try:
+            process.wait(timeout=5)
+            out.wait(timeout=5)
+            self.assertEqual(process.returncode, 0)
+            self.assertIn("EOF:0", out.text)
+        finally:
+            pty.close_job(job)
+            process.close()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

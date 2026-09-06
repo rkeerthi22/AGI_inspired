@@ -402,10 +402,10 @@ def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dic
     its own api_calls + in/out tokens + total_tokens so the mission total
     reconciles exactly across the three roles.
     """
-    worker_in = int(worker_usage.get("input_tokens") or 0)
-    worker_out = int(worker_usage.get("output_tokens") or 0)
-    critic_in = int(critic_usage.get("input_tokens") or 0)
-    critic_out = int(critic_usage.get("output_tokens") or 0)
+    worker_in = int(worker_usage.get("input_tokens") or worker_usage.get("tokens_in") or 0)
+    worker_out = int(worker_usage.get("output_tokens") or worker_usage.get("tokens_out") or 0)
+    critic_in = int(critic_usage.get("input_tokens") or critic_usage.get("tokens_in") or 0)
+    critic_out = int(critic_usage.get("output_tokens") or critic_usage.get("tokens_out") or 0)
     executed_retrieval = 0
     rejected = 0
     audit_path = RUNS / f"task{tid}_worker.usage.retrieval.jsonl"

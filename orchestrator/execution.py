@@ -90,9 +90,14 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     hermes_provider = model_cfg.get("hermes_provider", model_cfg["provider"])
     cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", hermes_provider,
            "-m", model_cfg["model"], "--usage-file", str(usage_path),
-           "-t", "web,browser"]
+           "-t", "web"]
+    base_env = dict(os.environ)
+    if not base_env.get("HARNESS_WORKER_HOME"):
+        default_worker_home = ROOT / "workspace" / "worker_home"
+        default_worker_home.mkdir(parents=True, exist_ok=True)
+        base_env["HARNESS_WORKER_HOME"] = str(default_worker_home)
     env = worker_sandbox.worker_environment(
-        dict(os.environ), provider_transport.authentication_env_from_config(model_cfg))
+        base_env, provider_transport.authentication_env_from_config(model_cfg))
     # Proxy variables matter only with the separately attested OS boundary.
     # Refuse launch rather than allowing a child to bypass that boundary.
     try:
@@ -112,14 +117,33 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # attempt alone just as the usage file does, not append to the prior run.
     audit_path.unlink(missing_ok=True)
     env["HARNESS_RETRIEVAL_AUDIT"] = str(audit_path)
-    from execution_pause import estop_path
-    env["HERMES_HOME"] = str(estop_path().parent)
+    # Point HERMES_HOME at the dedicated worker home directory, ensuring
+    # custom provider configs (e.g. byteplus-coding) are discovered while
+    # preventing runtime pollution or SQLite lock failures in .harness.
+    worker_home = Path(env.get("USERPROFILE") or env.get("HOME") or (ROOT / "workspace" / "worker_home"))
+    env["HERMES_HOME"] = str(worker_home)
+    worker_config = worker_home / "config.yaml"
+    if not worker_config.is_file():
+        source_config = ROOT / "workspace" / "worker_home" / "config.yaml"
+        if not source_config.is_file():
+            try:
+                import hermes_cli.config as _hcfg
+                source_config = _hcfg.get_config_path()
+            except Exception:
+                source_config = None
+        if source_config and Path(source_config).is_file():
+            shutil.copy2(source_config, worker_config)
 
     # Spawn the worker inside a Windows Job Object for process containment.
     try:
         import pty_daemon as _pty
         proc, h_job, sout, serr = _pty.create_contained_process(
             cmd, cwd=str(ROOT), env=env, restricted_worker=True)
+        if hasattr(proc, "stdin") and proc.stdin is not None:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
     except Exception as exc:
         raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
 

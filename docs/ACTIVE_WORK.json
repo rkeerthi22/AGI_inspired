@@ -4,16 +4,41 @@
   "active_agents": [
     {
       "agent": "gemini-cli",
+      "role": "Model-free postmortem & code repair of M5 controlled-window failures (Task 130 & Task 131)",
+      "task_id": "POSTMORTEM-M5-FAILURES-2026-09-06",
+      "mode": "completed",
+      "owned_paths": [
+        "orchestrator/controlled_hermes.py",
+        "orchestrator/evaluation.py",
+        "orchestrator/execution.py",
+        "orchestrator/pty_daemon.py",
+        "orchestrator/task_runner.py",
+        "scripts/check_worker_readiness.py",
+        "tests/test_hermes_contract.py",
+        "tests/test_m5_dryrun.py",
+        "tests/test_pty_daemon.py",
+        "tests/test_worker_sandbox.py",
+        "tests/tiers.json"
+      ],
+      "started_at": "2026-09-06T20:00:00Z",
+      "last_update": "2026-09-06T22:30:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md",
+      "notes": "COMPLETE: Diagnosed and repaired 3 root causes: (1) SQLite lock in Task 130 resolved by pre-emptively monkey-patching tools.async_delegation before run_agent import; (2) Provider discovery failure in Task 131 resolved by redirecting HERMES_HOME from .harness to dedicated worker home (workspace/worker_home) where config.yaml resides; (3) Worker hang/timeout resolved by immediately closing worker stdin pipe and trimming toolset from 'web,browser' to 'web' avoiding UI restriction deadlocks; (4) Added worker readiness diagnostic (scripts/check_worker_readiness.py, 6/6 pass); (5) Added model-free synthetic M5 dry run (tests/test_m5_dryrun.py, 2/2 pass) with token accounting fixes in evaluation.py & task_runner.py. Verified 75/75 green model-free test gate."
+    },
+    {
+      "agent": "gemini-cli",
       "role": "Live cohort M5 execution under controlled window (F126 citecheck yield test)",
       "task_id": "LIVE-VALIDATION-M5-2026-09-06",
-      "mode": "paused",
+      "mode": "blocked",
       "owned_paths": [],
       "started_at": "2026-09-06T06:05:00Z",
-      "last_update": "2026-09-06T18:15:00Z",
-      "status": "quota_paused",
-      "blocked_by": "upstream_byteplus_quota_reset",
-      "handoff_path": null,
-      "notes": "PAUSED FOR QUOTA: WFP firewall enforced and verified; signed egress attestation active; in-process DDGS proxy adapter landed in controlled_hermes.py (resolving search hangs). Task 130 executed under controlled window; stopped and recovered when upstream BytePlus coding provider quota reached 429 limit. ESTOP re-engaged (True). Zero running worker processes. Gate 74/74 green. Ready for immediate resumption when quota resets."
+      "last_update": "2026-09-06T21:00:00Z",
+      "status": "blocked",
+      "blocked_by": "upstream_quota_and_operator_authorization",
+      "handoff_path": "docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md",
+      "notes": "BLOCKED: Model-free postmortem and code repairs complete (74/74 green). Task 130 and 131 failure mechanisms resolved. ESTOP strictly re-engaged (True). Awaiting upstream quota reset and explicit operator authorization before opening next controlled live window."
     },
     {
       "agent": "gemini-cli",

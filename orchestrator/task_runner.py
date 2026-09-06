@@ -521,8 +521,18 @@ def _run_research_task(context: _TaskContext) -> str:
             rc.log(f"task {tid}: repair attempt {repair_attempt} failed with exception: {exc}")
             break
         if r_usage:
-            usage["tokens_in"] = usage.get("tokens_in", 0) + r_usage.get("tokens_in", 0)
-            usage["tokens_out"] = usage.get("tokens_out", 0) + r_usage.get("tokens_out", 0)
+            r_in = int(r_usage.get("input_tokens") or r_usage.get("tokens_in") or 0)
+            r_out_tok = int(r_usage.get("output_tokens") or r_usage.get("tokens_out") or 0)
+            cur_in = int(usage.get("input_tokens") or usage.get("tokens_in") or 0)
+            cur_out = int(usage.get("output_tokens") or usage.get("tokens_out") or 0)
+            usage["input_tokens"] = cur_in + r_in
+            usage["output_tokens"] = cur_out + r_out_tok
+            usage["tokens_in"] = usage["input_tokens"]
+            usage["tokens_out"] = usage["output_tokens"]
+            if "total_tokens" in usage or "total_tokens" in r_usage:
+                usage["total_tokens"] = int(usage.get("total_tokens") or 0) + int(r_usage.get("total_tokens") or (r_in + r_out_tok))
+            if "api_calls" in usage or "api_calls" in r_usage:
+                usage["api_calls"] = int(usage.get("api_calls") or 0) + int(r_usage.get("api_calls") or 0)
         if r_exhausted or execution.worker_failed(r_out, r_usage) or deliverable_preflight.is_infra_error(r_out):
             rc.log(f"task {tid}: repair attempt {repair_attempt} failed, exhausted, or infra error; retaining previous output")
             break

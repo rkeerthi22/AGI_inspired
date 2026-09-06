@@ -94,7 +94,17 @@ def main(argv: list[str] | None = None) -> int:
         if value is not None:
             original_args.extend((flag, value))
     sys.argv = ["hermes", *original_args]
-    from hermes_cli.oneshot import run_oneshot
+    # Pre-emptively patch async_delegation before any tools or agent modules are imported.
+    # When run_agent is imported, it transitively loads tools.process_registry which
+    # initializes a module-level ProcessRegistry and attempts to restore undelivered
+    # completions from SQLite. Under restricted worker tokens or read-only environments,
+    # accessing state.db fails with "unable to open database file".
+    try:
+        import tools.async_delegation as _ad
+        _ad.restore_undelivered_completions = lambda *a, **kw: 0
+    except Exception:
+        pass
+
     # Research workers run under restricted OS tokens (BUILTIN\Users) without write
     # access to the host's ~/.hermes/state.db. Furthermore, one-shot research
     # turns must never leak ephemeral scratch turns into the host's interactive
@@ -103,20 +113,17 @@ def main(argv: list[str] | None = None) -> int:
     import hermes_cli.oneshot as _oneshot_mod
     if hasattr(_oneshot_mod, "_create_session_db_for_oneshot"):
         _oneshot_mod._create_session_db_for_oneshot = lambda: None
-        try:
-            import run_agent
-            _orig_agent_init = run_agent.AIAgent.__init__
-            def _safe_agent_init(self, *a, **kw):
-                _orig_agent_init(self, *a, **kw)
-                self._persist_disabled = True
-            run_agent.AIAgent.__init__ = _safe_agent_init
-        except Exception:
-            pass
-        try:
-            import tools.async_delegation as _ad
-            _ad.restore_undelivered_completions = lambda *a, **kw: 0
-        except Exception:
-            pass
+    try:
+        import run_agent
+        _orig_agent_init = run_agent.AIAgent.__init__
+        def _safe_agent_init(self, *a, **kw):
+            _orig_agent_init(self, *a, **kw)
+            self._persist_disabled = True
+        run_agent.AIAgent.__init__ = _safe_agent_init
+    except Exception:
+        pass
+
+    from hermes_cli.oneshot import run_oneshot
 
     # Patch Hermes DDGS search provider to execute directly in-process via egress broker proxy
     try:

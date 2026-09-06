@@ -202,6 +202,7 @@ def create_contained_process(
     cwd: str | Path | None = None,
     env: dict[str, str] | None = None,
     *, restricted_worker: bool = False,
+    close_stdin: bool = False,
 ) -> tuple[subprocess.Popen | RestrictedProcess, int, PipeDrain, PipeDrain]:
     """Create a contained process tree via Windows Job Objects.
 
@@ -222,6 +223,9 @@ def create_contained_process(
     restricted_worker : bool
         Required for research workers. Uses a deny-only user token, explicit
         pipe inheritance, private desktop and UI limits. Never falls back.
+    close_stdin : bool
+        Close the write end of the child's stdin pipe immediately after resume,
+        preventing deadlocks in non-interactive batch/worker execution.
 
     Returns
     -------
@@ -265,6 +269,12 @@ def create_contained_process(
 
         _assign_process_to_job(h_job, proc._handle)
         _resume_process(proc._handle)
+
+        if close_stdin and hasattr(proc, "stdin") and proc.stdin is not None:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
 
         stdout_drain = PipeDrain(proc.stdout, "stdout")
         drains.append(stdout_drain)

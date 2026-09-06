@@ -115,6 +115,16 @@ with patch("pty_daemon._kernel32", _mock_kernel32), \
     except pty_daemon.PtyDaemonError:
         check("empty command raises", True)
 
+    # 3. close_stdin flag closes proc.stdin if requested
+    mock_instance = _mock_popen.Popen.return_value
+    mock_instance.stdin = MagicMock()
+    pty_daemon.create_contained_process(
+        [sys.executable, "-c", "print('hello')"],
+        cwd=str(ROOT),
+        close_stdin=True,
+    )
+    check("close_stdin invokes stdin.close", mock_instance.stdin.close.called)
+
 
 # ── Test: terminate_job / close_job ─────────────────────────────────────────
 

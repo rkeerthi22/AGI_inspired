@@ -1,30 +1,33 @@
 {
   "schema_version": 2,
-  "brief_revision": 73,
-  "created_at": "2026-09-06T18:15:00Z",
+  "brief_revision": 75,
+  "created_at": "2026-09-06T22:30:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "78e3f993d56fe7cb27a20c1840e4f2aaaebe1d58"
+    "based_on_head": "cd3464bfe55b9f66a9b9fac811a8ee528d545dab"
   },
   "task": {
-    "id": "HOST-HARDENING-FIREWALL-2026-09-06",
-    "phase": "decoupled-hardening-and-egress-broker-complete",
+    "id": "POSTMORTEM-M5-FAILURES-2026-09-06",
+    "phase": "postmortem-and-deterministic-repairs-complete",
     "status": "completed",
-    "next_action": "Execute single-use canary connectivity probe (orchestrator/byteplus_connectivity_canary.py --authorize-single-estop-bypass) upon operator authorization and quota reset. Run M5 (task 116) first."
+    "next_action": "Execute canaries upon upstream quota reset (Ollama Cloud / BytePlus), then run M5 (task 116) under authorized controlled window."
   },
   "completed": [
-    "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned and verified (Verify, Apply, Remove, Test, Attest modes) with test_egress_policy regression assertions (11/11)",
-    "In-process DuckDuckGo proxy search adapter implemented in orchestrator/controlled_hermes.py (eliminating 30-minute metasearch / subprocess stripping hang; verified 10.44s execution)",
-    "Egress policy updated with search and FlowGPT subdomains, token signed and verified at .harness/egress_attestation.signed",
+    "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned & verified with test_egress_policy assertions (11/11)",
+    "In-process DuckDuckGo proxy search adapter in controlled_hermes.py (eliminating 30m search hang; verified 10.4s execution)",
+    "Egress policy updated with search & FlowGPT domains, signed token verified at .harness/egress_attestation.signed",
     "Upstream BytePlus quota lockout handled safely; isolation recovered and ESTOP strictly re-engaged (True)",
     "Shared multi-agent launch brief recorded in docs/SHARED_LAUNCH_BRIEF_2026-09-06.md for Gemini, Codex, Hermes, Operator",
-    "F126 deliverable preflight & mechanical auto-repair loop: reusing citecheck.verify (preserving RC-1 403-not-dead), schema/disclaimer linter, bounded MAX_REPAIR_ATTEMPTS=2, token budget accumulation",
+    "F126 deliverable preflight & auto-repair loop: reusing citecheck.verify (RC-1 403-not-dead), linting, bounded attempts=2",
     "F124/F125 restricted worker launch and signer pipe accept race repair",
-    "Model-free gate 74/74 suites green, exit 0, verified across tiers"
+    "Postmortem Tasks 130 & 131: reordered async_delegation patch, isolated HERMES_HOME to worker home, closed stdin pipe, -t web",
+    "Worker readiness diagnostic scripts/check_worker_readiness.py (6/6 PASS in 1.8s) verifying ESTOP, WFP, attestation, broker, config, ACLs",
+    "Synthetic M5 dry run tests/test_m5_dryrun.py (2/2 PASS) verifying preflight interception, auto-repair, and token accumulation",
+    "Model-free gate 75/75 suites green, exit 0, verified across tiers"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -34,20 +37,24 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "74/74 model-free suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "75/75 model-free suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun). Worker readiness 6/6 pass. ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "0012095785527d9effd9819fd7fe92ccdce946d5d54a6f40d9b6c812ef7f425a"
+      "sha256": "8e4783d4783fdc544bbfb6965fb9adc4dcb1c086fa1ec88f9980695aedbbf43b"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "91f005f2a4cd389c2dd9050dcf8609655489cf7df9b75f7dbc0e2de754b636f3"
+      "sha256": "04195b8099db87a673d73055dd9080d946f8c1c8c3d70e6ab0f517a6605f5c65"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
       "sha256": "c4f2be2998b3993f97e8ff6e9d76519b73346f46eab385343577c3c33bd0db86"
+    },
+    {
+      "path": "docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md",
+      "sha256": "1074055fd5908e4d5bf54f0bbc9158ec153960bc355eda572f59512163928ce4"
     },
     {
       "path": "docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md",
@@ -67,7 +74,7 @@
     },
     {
       "path": "tests/test_worker_sandbox.py",
-      "sha256": "f0430bb976e4738403e21bae6ed3b4f44e2bde01aca5c8ca8b420d29646ba389"
+      "sha256": "233181f8ce3f8e61ba86394429e2f1bb97ca7d77e8c293aefdc7bd21d501bfb8"
     }
   ]
 }

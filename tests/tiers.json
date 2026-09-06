@@ -18,6 +18,6 @@
     "test_worker_sandbox",
     "test_db_mutation_guard_red", "test_f36", "test_f42", "test_f47", "test_f52", "test_h7_gate", "test_f107"
   ],
-  "integration": ["test_audit_signer", "test_audit_serialization", "test_egress_broker_integration", "test_f66", "test_hermes_contract", "test_prediction_interface"],
+  "integration": ["test_audit_signer", "test_audit_serialization", "test_egress_broker_integration", "test_f66", "test_hermes_contract", "test_m5_dryrun", "test_prediction_interface"],
   "live": ["test_baseline"]
 }
