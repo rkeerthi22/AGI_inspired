@@ -4,6 +4,19 @@
   "active_agents": [
     {
       "agent": "gemini-cli",
+      "role": "Live cohort M5 execution under controlled window (F126 citecheck yield test)",
+      "task_id": "LIVE-VALIDATION-M5-2026-09-06",
+      "mode": "paused",
+      "owned_paths": [],
+      "started_at": "2026-09-06T06:05:00Z",
+      "last_update": "2026-09-06T18:15:00Z",
+      "status": "quota_paused",
+      "blocked_by": "upstream_byteplus_quota_reset",
+      "handoff_path": null,
+      "notes": "PAUSED FOR QUOTA: WFP firewall enforced and verified; signed egress attestation active; in-process DDGS proxy adapter landed in controlled_hermes.py (resolving search hangs). Task 130 executed under controlled window; stopped and recovered when upstream BytePlus coding provider quota reached 429 limit. ESTOP re-engaged (True). Zero running worker processes. Gate 74/74 green. Ready for immediate resumption when quota resets."
+    },
+    {
+      "agent": "gemini-cli",
       "role": "Host hardening script for worker WFP / firewall deny-direct-egress boundary (Step 2)",
       "task_id": "HOST-HARDENING-FIREWALL-2026-09-06",
       "mode": "completed",

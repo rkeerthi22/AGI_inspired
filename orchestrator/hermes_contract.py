@@ -9,6 +9,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 from typing import Protocol, runtime_checkable
 import uuid
 
@@ -120,8 +121,7 @@ def validate_harness_adapter() -> None:
             f"RetrievalProgressController does not satisfy contract v{CONTRACT_VERSION}"
         )
 
-    audit = (Path(__file__).resolve().parents[1] / "workspace" /
-             f"contract_{uuid.uuid4().hex}.jsonl")
+    audit = Path(tempfile.gettempdir()) / f"contract_{uuid.uuid4().hex}.jsonl"
     try:
         controller = RetrievalProgressController(audit_path=audit)
         controller.state.stage = 3

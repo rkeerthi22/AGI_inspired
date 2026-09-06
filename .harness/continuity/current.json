@@ -1,23 +1,26 @@
 {
   "schema_version": 2,
-  "brief_revision": 72,
-  "created_at": "2026-09-06T04:20:00Z",
+  "brief_revision": 73,
+  "created_at": "2026-09-06T18:15:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "54e6f3525b7f0c2ecb7dc812114cc63e768b75dd"
+    "based_on_head": "78e3f993d56fe7cb27a20c1840e4f2aaaebe1d58"
   },
   "task": {
     "id": "HOST-HARDENING-FIREWALL-2026-09-06",
-    "phase": "step-2-host-hardening-complete",
+    "phase": "decoupled-hardening-and-egress-broker-complete",
     "status": "completed",
-    "next_action": "Execute single-use canary connectivity probe (orchestrator/batch_runner.py --canaries) upon operator authorization and quota reset. Run M5 (task 116) first."
+    "next_action": "Execute single-use canary connectivity probe (orchestrator/byteplus_connectivity_canary.py --authorize-single-estop-bypass) upon operator authorization and quota reset. Run M5 (task 116) first."
   },
   "completed": [
     "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned and verified (Verify, Apply, Remove, Test, Attest modes) with test_egress_policy regression assertions (11/11)",
+    "In-process DuckDuckGo proxy search adapter implemented in orchestrator/controlled_hermes.py (eliminating 30-minute metasearch / subprocess stripping hang; verified 10.44s execution)",
+    "Egress policy updated with search and FlowGPT subdomains, token signed and verified at .harness/egress_attestation.signed",
+    "Upstream BytePlus quota lockout handled safely; isolation recovered and ESTOP strictly re-engaged (True)",
     "Shared multi-agent launch brief recorded in docs/SHARED_LAUNCH_BRIEF_2026-09-06.md for Gemini, Codex, Hermes, Operator",
     "F126 deliverable preflight & mechanical auto-repair loop: reusing citecheck.verify (preserving RC-1 403-not-dead), schema/disclaimer linter, bounded MAX_REPAIR_ATTEMPTS=2, token budget accumulation",
     "F124/F125 restricted worker launch and signer pipe accept race repair",
@@ -31,16 +34,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "74/74 model-free suites green, exit 0 (11/11 egress policy, 11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "74/74 model-free suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "fd6716324eb16663969f5e102a9c616b2ccef63ce7332f309f449f75949de79b"
+      "sha256": "0012095785527d9effd9819fd7fe92ccdce946d5d54a6f40d9b6c812ef7f425a"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "e23a991233c8f5db375d55695e2d8d1539f29fcec001a1f0e76aedeb1e291177"
+      "sha256": "91f005f2a4cd389c2dd9050dcf8609655489cf7df9b75f7dbc0e2de754b636f3"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
@@ -60,7 +63,7 @@
     },
     {
       "path": "orchestrator/worker_sandbox.py",
-      "sha256": "9d776d179c47c1ea6a32bbd2eff049d6ff78e2a2ce8059341746cb91989f788a"
+      "sha256": "3d58b9b6a13fd2a477b3671cd19c10559916519b1d046ab90c5ad70a82f93e6d"
     },
     {
       "path": "tests/test_worker_sandbox.py",

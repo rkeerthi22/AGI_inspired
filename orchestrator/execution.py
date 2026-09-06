@@ -89,7 +89,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # their own canonical selector (Hermes named custom providers use custom:<slug>).
     hermes_provider = model_cfg.get("hermes_provider", model_cfg["provider"])
     cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", hermes_provider,
-           "-m", model_cfg["model"], "--usage-file", str(usage_path)]
+           "-m", model_cfg["model"], "--usage-file", str(usage_path),
+           "-t", "web,browser"]
     env = worker_sandbox.worker_environment(
         dict(os.environ), provider_transport.authentication_env_from_config(model_cfg))
     # Proxy variables matter only with the separately attested OS boundary.
@@ -111,6 +112,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # attempt alone just as the usage file does, not append to the prior run.
     audit_path.unlink(missing_ok=True)
     env["HARNESS_RETRIEVAL_AUDIT"] = str(audit_path)
+    from execution_pause import estop_path
+    env["HERMES_HOME"] = str(estop_path().parent)
 
     # Spawn the worker inside a Windows Job Object for process containment.
     try:
@@ -130,14 +133,26 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
         while True:
             if _pause_engaged():
                 _pty.terminate_job(h_job)
-                proc.kill()
-                proc.wait()
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
                 raise RuntimeError("worker killed by ESTOP")
             remaining = _deadline - monotonic()
             if remaining <= 0:
                 _pty.terminate_job(h_job)
-                proc.kill()
-                proc.wait()
+                try:
+                    proc.kill()
+                except Exception:
+                    pass
+                try:
+                    proc.wait(timeout=5)
+                except Exception:
+                    pass
                 raise subprocess.TimeoutExpired(cmd, timeout)
             try:
                 proc.wait(timeout=min(_WATCHDOG_POLL_S, remaining))

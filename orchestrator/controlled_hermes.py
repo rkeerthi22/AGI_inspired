@@ -95,6 +95,102 @@ def main(argv: list[str] | None = None) -> int:
             original_args.extend((flag, value))
     sys.argv = ["hermes", *original_args]
     from hermes_cli.oneshot import run_oneshot
+    # Research workers run under restricted OS tokens (BUILTIN\Users) without write
+    # access to the host's ~/.hermes/state.db. Furthermore, one-shot research
+    # turns must never leak ephemeral scratch turns into the host's interactive
+    # session history. Disable session DB creation and incremental persistence
+    # so the agent runs purely in memory during research.
+    import hermes_cli.oneshot as _oneshot_mod
+    if hasattr(_oneshot_mod, "_create_session_db_for_oneshot"):
+        _oneshot_mod._create_session_db_for_oneshot = lambda: None
+        try:
+            import run_agent
+            _orig_agent_init = run_agent.AIAgent.__init__
+            def _safe_agent_init(self, *a, **kw):
+                _orig_agent_init(self, *a, **kw)
+                self._persist_disabled = True
+            run_agent.AIAgent.__init__ = _safe_agent_init
+        except Exception:
+            pass
+        try:
+            import tools.async_delegation as _ad
+            _ad.restore_undelivered_completions = lambda *a, **kw: 0
+        except Exception:
+            pass
+
+    # Patch Hermes DDGS search provider to execute directly in-process via egress broker proxy
+    try:
+        import urllib.request
+        import urllib.parse
+        import lxml.html
+        import plugins.web.ddgs.provider as _ddgs_provider
+
+        def _direct_ddgs_search(query: str, safe_limit: int = 5) -> list[dict]:
+            proxy_url = (
+                os.environ.get("HTTPS_PROXY")
+                or os.environ.get("HTTP_PROXY")
+                or os.environ.get("DDGS_PROXY")
+                or "http://127.0.0.1:8787"
+            )
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({"https": proxy_url, "http": proxy_url})
+            )
+            data = urllib.parse.urlencode({"q": query}).encode("utf-8")
+            req = urllib.request.Request(
+                "https://html.duckduckgo.com/html/",
+                data=data,
+                headers={
+                    "User-Agent": (
+                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                        "AppleWebKit/537.36 (KHTML, like Gecko) "
+                        "Chrome/120.0.0.0 Safari/537.36"
+                    ),
+                    "Content-Type": "application/x-www-form-urlencoded",
+                },
+            )
+            try:
+                with opener.open(req, timeout=15) as res:
+                    html = res.read().decode("utf-8", errors="replace")
+            except Exception as req_err:
+                sys.stderr.write(f"Direct DDG search request error: {req_err}\n")
+                return []
+
+            try:
+                tree = lxml.html.fromstring(html)
+            except Exception as parse_err:
+                sys.stderr.write(f"Direct DDG search parse error: {parse_err}\n")
+                return []
+
+            results = []
+            body_nodes = tree.xpath("//div[contains(@class, 'result__body')]")
+            for i, node in enumerate(body_nodes):
+                if i >= safe_limit:
+                    break
+                title_nodes = node.xpath(".//h2//text()")
+                href_nodes = node.xpath(".//a[contains(@class, 'result__a')]/@href")
+                snippet_nodes = node.xpath(".//a[contains(@class, 'result__snippet')]//text()")
+                title = "".join(title_nodes).strip()
+                url = href_nodes[0].strip() if href_nodes else ""
+                snippet = "".join(snippet_nodes).strip()
+                if url:
+                    if "/l/?uddg=" in url:
+                        parsed = urllib.parse.urlparse(url)
+                        params = urllib.parse.parse_qs(parsed.query)
+                        if "uddg" in params:
+                            url = params["uddg"][0]
+                    results.append({
+                        "title": title,
+                        "url": url,
+                        "description": snippet,
+                        "position": len(results) + 1,
+                    })
+            return results
+
+        _ddgs_provider._run_ddgs_search_bounded = _direct_ddgs_search
+        _ddgs_provider._run_ddgs_search = _direct_ddgs_search
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to patch Hermes DDGS provider: {e}\n")
+
     # One-shot research output is deliberately withheld: the only user-visible
     # result is the dedicated evidence-only finalization below.
     captured = io.StringIO()

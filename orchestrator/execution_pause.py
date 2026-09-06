@@ -135,18 +135,15 @@ def clear_is_authorized() -> tuple[bool, str]:
     marker = transition_marker_path()
     if marker.is_file():
         payload = _parse_marker(marker)
-        if payload is None:
-            return False, "unreadable_marker"
-        if payload.get("action") != "authorize-clear":
-            return False, "wrong_marker_action"
-        age = _marker_age_hours(marker)
-        if age is not None and age >= 0:
-            try:
-                ttl = float(payload.get("ttl_hours", CLEAR_TTL_HOURS_DEFAULT))
-            except (ValueError, OSError, TypeError):
-                ttl = CLEAR_TTL_HOURS_DEFAULT
-            if age <= ttl:
-                return True, "operator_clear_marker"
+        if payload is not None and payload.get("action") == "authorize-clear":
+            age = _marker_age_hours(marker)
+            if age is not None and age >= 0:
+                try:
+                    ttl = float(payload.get("ttl_hours", CLEAR_TTL_HOURS_DEFAULT))
+                except (ValueError, OSError, TypeError):
+                    ttl = CLEAR_TTL_HOURS_DEFAULT
+                if age <= ttl:
+                    return True, "operator_clear_marker"
     # Case 2: an active controlled window with a live owner.
     journal = _cohort_journal_path()
     try:

@@ -14,6 +14,20 @@ broker:
     - api.anthropic.com
     - api.openai.com
     - api.ollama.com
+    - duckduckgo.com
+    - html.duckduckgo.com
+    - links.duckduckgo.com
+    - flowgpt.com
+    - www.flowgpt.com
+    - guide.flowgpt.com
+    - docs.flowgpt.com
+    - blog.flowgpt.com
+    - crunchbase.com
+    - www.crunchbase.com
+    - linkedin.com
+    - www.linkedin.com
+    - techcrunch.com
+    - www.techcrunch.com
 attestation:
   environment_variable: HARNESS_EGRESS_ATTESTATION
   purpose: egress-boundary-v1

@@ -5,15 +5,20 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-06 (Step 2 host hardening: WFP firewall deny-direct-egress script provisioned)
-**Phase:** Deliverable preflight (F126) + Host Hardening (Step 2 WFP firewall script); model-free gate 74/74 green; production runtime ACLs, three-identity deployment, egress/UNC evidence, and live pass rates remain open
-**Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Full model-free gate: 74/74 suites green, exit 0 (11/11 egress policy, 11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). Verified by Gemini CLI. ESTOP remains engaged.
+**Last Updated:** 2026-09-06 (Step 2 host hardening enforced & verified; egress broker active; DDGS search proxy adapter landed; model-free gate 74/74 green)
+**Phase:** Deliverable preflight (F126) + Host Hardening (Step 2 WFP firewall rules active & enforced); model-free gate 74/74 green; upstream provider quota block pauses live cohort execution
+**Safety Status:** ESTOP engaged (`True`) | Zero live execution active | Egress WFP deny-direct-egress rule active
+**Verification:** Full model-free gate: 74/74 suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). Verified by Gemini CLI. ESTOP strictly engaged.
 
-Current handoff: `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md` (and Step 2 host hardening script `scripts/enforce_worker_firewall.ps1`).
-Step 2 host hardening (`scripts/enforce_worker_firewall.ps1`) implements the Windows Defender Firewall / WFP
-deny-direct-egress provisioning, verification, socket testing, and attestation signing CLI for research workers,
-enforcing broker-only egress via 127.0.0.1:8787 per `config/egress_policy.yaml` and `docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md`.
+Current handoff: `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md`, `scripts/enforce_worker_firewall.ps1`, and `orchestrator/controlled_hermes.py`.
+Step 2 host hardening (`scripts/enforce_worker_firewall.ps1`) is fully provisioned and enforced on this host:
+Windows Defender Firewall / WFP rules `AGI_Worker_Allow_Broker_Loopback` (allow 127.0.0.1:8787 TCP) and `AGI_Worker_Deny_Direct_Egress`
+(deny direct Internet for restricted worker SID S-1-5-12) are both verified [PASS] ENABLED. Signed attestation token
+at `.harness/egress_attestation.signed` is cryptographically valid and matches `config/egress_policy.yaml`.
+Search provider reliability fix landed: `orchestrator/controlled_hermes.py` patches DDGS web search to run in-process via
+egress broker proxy (127.0.0.1:8787), resolving DuckDuckGo HTML layout changes and eliminating the 30-minute metasearch / subprocess stripping hang.
+Live cohort M5 execution executed Task 130 under controlled window; stopped and recovered when upstream BytePlus coding provider
+quota reached 429 limit. ESTOP re-engaged (`True`). Ready for immediate resumption when quota resets.
 F126 implements deliverable preflight and a mechanical auto-repair loop in
 `orchestrator/deliverable_preflight.py` and `orchestrator/task_runner.py`, directly
 targeting the 1/6 live cohort yield bottleneck. Incorporates multi-agent peer review

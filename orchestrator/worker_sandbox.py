@@ -187,7 +187,10 @@ class RestrictedProcess:
     def kill(self):
         kernel, _, _ = _api()
         if self.poll() is None:
-            _check(kernel.TerminateProcess(self._handle, 75))
+            try:
+                _check(kernel.TerminateProcess(self._handle, 75))
+            except OSError:
+                pass
 
     def close(self):
         kernel, _, user = _api()
