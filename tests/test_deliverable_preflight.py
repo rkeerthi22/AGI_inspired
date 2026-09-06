@@ -205,6 +205,41 @@ def test_perpetually_broken_worker_caps_at_two_attempts():
     assert deliverable_preflight.MAX_REPAIR_ATTEMPTS == 2
 
 
+def test_no_direct_sockets_or_urllib():
+    """Assert deliverable_preflight has zero direct socket or urllib dependencies."""
+    import inspect
+    source = inspect.getsource(deliverable_preflight)
+    assert "import urllib" not in source, "deliverable_preflight must not import urllib directly"
+    assert "from urllib" not in source, "deliverable_preflight must not import urllib directly"
+    assert "import socket" not in source, "deliverable_preflight must not import socket directly"
+    assert "import requests" not in source, "deliverable_preflight must not import requests directly"
+    assert "http.client" not in source, "deliverable_preflight must not import http.client directly"
+
+    # Runtime assertion: raising mocks on socket and urllib to ensure run_preflight opens no socket
+    import socket
+    import urllib.request
+    text = "# Test\n\n| Platform | Metric |\n| :--- | :--- |\n| A | 100 |\n\n[Link](https://example.com) verified.\n" * 4
+    with patch.object(socket, "socket", side_effect=RuntimeError("Direct socket call forbidden")), \
+         patch.object(urllib.request, "urlopen", side_effect=RuntimeError("Direct urlopen forbidden")), \
+         patch.object(deliverable_preflight.citecheck, "verify", return_value=[]):
+        report = run_preflight(text, spec="")
+        assert report.passed is True
+
+
+def test_is_infra_error_suppresses_repair():
+    """Verify is_infra_error identifies failure modes and suppresses auto-repair feedback."""
+    assert deliverable_preflight.is_infra_error("worker API failure (full text in runs/task1_worker_raw.txt)") is True
+    assert deliverable_preflight.is_infra_error("task 1: infra_failed (worker timeout)") is True
+    assert deliverable_preflight.is_infra_error("chain_exhausted: quota on all models") is True
+    assert deliverable_preflight.is_infra_error("Valid clean output with normal content") is False
+
+    # Calling run_preflight on infra error returns repair_feedback=None so repair loop aborts
+    infra_text = "worker API failure: upstream HTTP 500 error connecting to provider" * 3
+    report = run_preflight(infra_text, spec="Some task spec")
+    assert report.passed is False
+    assert report.repair_feedback is None, "Infra error must have repair_feedback=None to prevent repair calls"
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -217,4 +252,6 @@ if __name__ == "__main__":
     test_short_deliverable_rejected()
     test_token_budget_breached_stops_repair()
     test_perpetually_broken_worker_caps_at_two_attempts()
-    print("ALL 11 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_no_direct_sockets_or_urllib()
+    test_is_infra_error_suppresses_repair()
+    print("ALL 13 DELIVERABLE PREFLIGHT TESTS PASSED!")

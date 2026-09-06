@@ -90,6 +90,19 @@ def check_schema(text: str, spec: str = "") -> list[str]:
     return issues
 
 
+def is_infra_error(text: str) -> bool:
+    """Trap 2 guard: Check if output represents an infrastructure failure,
+    quota exhaustion, or process abort that should never trigger an auto-repair call."""
+    if not text:
+        return True
+    low = text.lower()
+    return any(sig in low for sig in [
+        "infra_failed", "worker api failure", "quota_wait",
+        "chain_exhausted", "worker launch failure", "worker timeout",
+        "database containment violation"
+    ])
+
+
 def run_preflight(text: str, spec: str = "") -> PreflightReport:
     """Run mechanical preflight checks on deliverable text.
     
@@ -101,6 +114,13 @@ def run_preflight(text: str, spec: str = "") -> PreflightReport:
             passed=False,
             schema_issues=["Deliverable is empty or too short (under 100 characters)."],
             repair_feedback="Deliverable is empty or too short. Provide the complete final deliverable."
+        )
+
+    if is_infra_error(text):
+        return PreflightReport(
+            passed=False,
+            schema_issues=["Output indicates infrastructure failure; auto-repair suppressed."],
+            repair_feedback=None
         )
 
     # 1. URL Liveness via authoritative citecheck.verify (reusing existing RC-1 logic)

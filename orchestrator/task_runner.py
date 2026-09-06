@@ -495,10 +495,15 @@ def _run_research_task(context: _TaskContext) -> str:
 
     # F126 (docs/HARDENING.md): Deliverable preflight & mechanical auto-repair loop.
     # Catches dead URLs and spec/schema omissions before submitting to authoritative critic.
+    # Trap 2: Never fire repair loop on infra failures, chain exhaustion, or error outputs.
+    if exhausted or execution.worker_failed(out, usage) or deliverable_preflight.is_infra_error(out):
+        return _record_outcome(context, out, usage, worker_cfg, scope_note,
+                               out_dir, wk, baseline)
+
     repair_attempt = 0
     while repair_attempt < deliverable_preflight.MAX_REPAIR_ATTEMPTS:
         preflight_report = deliverable_preflight.run_preflight(out, spec=context.row.get("spec", ""))
-        if preflight_report.passed:
+        if preflight_report.passed or not preflight_report.repair_feedback:
             break
         if policy.token_budget_breached():
             rc.log(f"task {tid}: preflight repair skipped (daily token budget breached)")
@@ -518,8 +523,8 @@ def _run_research_task(context: _TaskContext) -> str:
         if r_usage:
             usage["tokens_in"] = usage.get("tokens_in", 0) + r_usage.get("tokens_in", 0)
             usage["tokens_out"] = usage.get("tokens_out", 0) + r_usage.get("tokens_out", 0)
-        if r_exhausted or execution.worker_failed(r_out, r_usage):
-            rc.log(f"task {tid}: repair attempt {repair_attempt} failed or exhausted; retaining previous output")
+        if r_exhausted or execution.worker_failed(r_out, r_usage) or deliverable_preflight.is_infra_error(r_out):
+            rc.log(f"task {tid}: repair attempt {repair_attempt} failed, exhausted, or infra error; retaining previous output")
             break
         r_clean = execution._strip_tool_chatter(r_out)
         if len(r_clean) >= 200 and not policy.deny_list_scan(r_clean):
