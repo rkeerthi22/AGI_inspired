@@ -5,12 +5,15 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-06 (F126 deliverable preflight & auto-repair)
-**Phase:** Deliverable preflight and auto-repair implemented (F126); model-free gate 74/74 green; production runtime ACLs, three-identity deployment, egress/UNC evidence, and live pass rates remain open
+**Last Updated:** 2026-09-06 (Step 2 host hardening: WFP firewall deny-direct-egress script provisioned)
+**Phase:** Deliverable preflight (F126) + Host Hardening (Step 2 WFP firewall script); model-free gate 74/74 green; production runtime ACLs, three-identity deployment, egress/UNC evidence, and live pass rates remain open
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active
-**Verification:** Full model-free gate: 74/74 suites green, exit 0 (11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). Verified by Gemini CLI. ESTOP remains engaged.
+**Verification:** Full model-free gate: 74/74 suites green, exit 0 (11/11 egress policy, 11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). Verified by Gemini CLI. ESTOP remains engaged.
 
-Current handoff: `docs/CODEX_HANDOFF_2026-09-05_WORKER_SANDBOX.md` (and F126 preflight landing).
+Current handoff: `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md` (and Step 2 host hardening script `scripts/enforce_worker_firewall.ps1`).
+Step 2 host hardening (`scripts/enforce_worker_firewall.ps1`) implements the Windows Defender Firewall / WFP
+deny-direct-egress provisioning, verification, socket testing, and attestation signing CLI for research workers,
+enforcing broker-only egress via 127.0.0.1:8787 per `config/egress_policy.yaml` and `docs/EGRESS_AND_AUDIT_DEPLOYMENT_RUNBOOK_2026-09-04.md`.
 F126 implements deliverable preflight and a mechanical auto-repair loop in
 `orchestrator/deliverable_preflight.py` and `orchestrator/task_runner.py`, directly
 targeting the 1/6 live cohort yield bottleneck. Incorporates multi-agent peer review

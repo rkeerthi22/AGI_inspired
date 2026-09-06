@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-06T02:45:00Z",
+  "last_updated": "2026-09-06T03:45:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Host hardening script for worker WFP / firewall deny-direct-egress boundary (Step 2)",
+      "task_id": "HOST-HARDENING-FIREWALL-2026-09-06",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-06T03:45:00Z",
+      "last_update": "2026-09-06T04:20:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETE: scripts/enforce_worker_firewall.ps1 authored and verified. Supports Verify (non-elevated read-only), Apply (creates AGI_Worker_Allow_Broker_Loopback and AGI_Worker_Deny_Direct_Egress), Remove, Test (socket probes), and Attest (signs HARNESS_EGRESS_ATTESTATION via operator Ed25519 key). test_egress_policy regression checks added (11/11). Model-free gate 74/74 suites green."
+    },
     {
       "agent": "claude-code",
       "role": "Shared launch brief author (documentation only) — COMPLETED",

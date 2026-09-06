@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import socket
+import subprocess
 import sys
 import tempfile
 from datetime import datetime, timezone
@@ -118,6 +119,21 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace", ignore_cleanup_errors=T
           child["HTTPS_PROXY"] == "http://127.0.0.1:8787" and
           child["HTTP_PROXY"] == "http://127.0.0.1:8787")
     check("untrusted inherited proxy is not retained", "attacker.invalid" not in child.values())
+
+ps_script = ROOT / "scripts" / "enforce_worker_firewall.ps1"
+check("enforce_worker_firewall.ps1 exists", ps_script.is_file())
+if ps_script.is_file() and sys.platform == "win32":
+    res = subprocess.run(
+        ["powershell", "-ExecutionPolicy", "Bypass", "-File", str(ps_script), "-Action", "Verify", "-Json"],
+        cwd=str(ROOT), capture_output=True, text=True, timeout=15,
+    )
+    check("enforce_worker_firewall Verify exits cleanly", res.returncode == 0)
+    try:
+        parsed = json.loads(res.stdout)
+        has_keys = "rules" in parsed and "attestation" in parsed and "administrator" in parsed
+    except Exception:
+        has_keys = False
+    check("enforce_worker_firewall returns expected schema", has_keys)
 
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:

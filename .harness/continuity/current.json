@@ -1,22 +1,23 @@
 {
   "schema_version": 2,
-  "brief_revision": 71,
-  "created_at": "2026-09-06T02:45:00Z",
+  "brief_revision": 72,
+  "created_at": "2026-09-06T04:20:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "e88133f7211c7c0ae4ed82ac54c4b629da0bae72"
+    "based_on_head": "5a360638784e3b5d403a9993ed14077394943b0b"
   },
   "task": {
-    "id": "SHARED-LAUNCH-BRIEF-2026-09-06",
-    "phase": "shared-multi-agent-brief-complete",
+    "id": "HOST-HARDENING-FIREWALL-2026-09-06",
+    "phase": "step-2-host-hardening-complete",
     "status": "completed",
-    "next_action": "Read docs/SHARED_LAUNCH_BRIEF_2026-09-06.md. Model-free gate 74/74 green. Live cohort runs M5 (task 116) first once quota resets and WFP rule is active."
+    "next_action": "Execute single-use canary connectivity probe (orchestrator/batch_runner.py --canaries) upon operator authorization and quota reset. Run M5 (task 116) first."
   },
   "completed": [
+    "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned and verified (Verify, Apply, Remove, Test, Attest modes) with test_egress_policy regression assertions (11/11)",
     "Shared multi-agent launch brief recorded in docs/SHARED_LAUNCH_BRIEF_2026-09-06.md for Gemini, Codex, Hermes, Operator",
     "F126 deliverable preflight & mechanical auto-repair loop: reusing citecheck.verify (preserving RC-1 403-not-dead), schema/disclaimer linter, bounded MAX_REPAIR_ATTEMPTS=2, token budget accumulation",
     "F124/F125 restricted worker launch and signer pipe accept race repair",
@@ -30,16 +31,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "74/74 model-free suites green, exit 0 (13/13 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "74/74 model-free suites green, exit 0 (11/11 egress policy, 11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "3d109517a7f66a3a52785a88a39b492a9aeae5cb96124675de03662d774bcbce"
+      "sha256": "fd6716324eb16663969f5e102a9c616b2ccef63ce7332f309f449f75949de79b"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "3c5ab118ce82105d8b318a496f6f66b171e5b6bc591cb22e5141da72cf001007"
+      "sha256": "e23a991233c8f5db375d55695e2d8d1539f29fcec001a1f0e76aedeb1e291177"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
