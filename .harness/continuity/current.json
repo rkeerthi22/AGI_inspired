@@ -1,26 +1,26 @@
 {
   "schema_version": 2,
-  "brief_revision": 70,
-  "created_at": "2026-09-06T02:05:00Z",
+  "brief_revision": 71,
+  "created_at": "2026-09-06T02:45:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "2dc405507721c173759a9b5884048a1072d6a0d1"
+    "based_on_head": "e88133f7211c7c0ae4ed82ac54c4b629da0bae72"
   },
   "task": {
-    "id": "DELIVERABLE-PREFLIGHT-2026-09-06",
-    "phase": "deliverable-preflight-auto-repair-complete",
+    "id": "SHARED-LAUNCH-BRIEF-2026-09-06",
+    "phase": "shared-multi-agent-brief-complete",
     "status": "completed",
-    "next_action": "Model-free gate 74/74 green. F126 deliverable preflight & auto-repair loop complete. Next options: supervisor canary for preflight testing or three-identity host deployment."
+    "next_action": "Read docs/SHARED_LAUNCH_BRIEF_2026-09-06.md. Model-free gate 74/74 green. Live cohort runs M5 (task 116) first once quota resets and WFP rule is active."
   },
   "completed": [
+    "Shared multi-agent launch brief recorded in docs/SHARED_LAUNCH_BRIEF_2026-09-06.md for Gemini, Codex, Hermes, Operator",
     "F126 deliverable preflight & mechanical auto-repair loop: reusing citecheck.verify (preserving RC-1 403-not-dead), schema/disclaimer linter, bounded MAX_REPAIR_ATTEMPTS=2, token budget accumulation",
     "F124/F125 restricted worker launch and signer pipe accept race repair",
-    "Model-free tests: 11/11 deliverable preflight tests in tests/test_deliverable_preflight.py",
-    "Final full model-free gate 74/74 suites green, exit 0, verified by Gemini CLI"
+    "Model-free gate 74/74 suites green, exit 0, verified across tiers"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no providers or live cohorts",
@@ -30,7 +30,7 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "74/74 model-free suites green, exit 0 (11/11 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
+    "detail": "74/74 model-free suites green, exit 0 (13/13 deliverable preflight, 16/16 worker sandbox, 19/19 audit signer). ESTOP true, isolation restored, no batch lock or canary marker."
   },
   "references": [
     {
@@ -39,7 +39,7 @@
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "802139cef566b06772a17e2e8dec3d3a98713c0a8e671a627bc38bb3175132c6"
+      "sha256": "3c5ab118ce82105d8b318a496f6f66b171e5b6bc591cb22e5141da72cf001007"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
