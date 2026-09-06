@@ -8,7 +8,7 @@
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "5a360638784e3b5d403a9993ed14077394943b0b"
+    "based_on_head": "54e6f3525b7f0c2ecb7dc812114cc63e768b75dd"
   },
   "task": {
     "id": "HOST-HARDENING-FIREWALL-2026-09-06",
