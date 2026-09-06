@@ -8,7 +8,7 @@
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "cd3464bfe55b9f66a9b9fac811a8ee528d545dab"
+    "based_on_head": "34891662f35902c3b7158db079bf2ac7f3180abc"
   },
   "task": {
     "id": "POSTMORTEM-M5-FAILURES-2026-09-06",
