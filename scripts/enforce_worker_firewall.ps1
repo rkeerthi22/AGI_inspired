@@ -105,6 +105,26 @@ function Test-IsAdministrator {
     return $principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
 }
 
+function ConvertTo-LocalUserSddl {
+    param([string]$UserOrSid)
+    if ([string]::IsNullOrWhiteSpace($UserOrSid)) {
+        return $null
+    }
+    if ($UserOrSid.StartsWith("D:")) {
+        return $UserOrSid
+    }
+    if ($UserOrSid -match '^S-1-\d+') {
+        return "D:(A;;CC;;;$UserOrSid)"
+    }
+    try {
+        $account = New-Object System.Security.Principal.NTAccount($UserOrSid)
+        $sid = $account.Translate([System.Security.Principal.SecurityIdentifier]).Value
+        return "D:(A;;CC;;;$sid)"
+    } catch {
+        return "D:(A;;CC;;;$UserOrSid)"
+    }
+}
+
 function Assert-Administrator {
     param([string]$OperationName)
     if (-not (Test-IsAdministrator)) {
@@ -273,7 +293,7 @@ function Invoke-Apply {
     New-NetFirewallRule @allowParams | Out-Null
 
     # 2. Create Deny Direct Egress Block Rule
-    Write-Host "Creating rule: $denyRuleName (Block Outbound -> Internet for $WorkerSid)..."
+    Write-Host "Creating rule: $denyRuleName (Block Outbound -> Internet)..."
     $denyParams = @{
         Name = $denyRuleName
         DisplayName = "AGI Like - Worker Deny Direct Egress"
@@ -283,14 +303,25 @@ function Invoke-Apply {
         RemoteAddress = "Internet"
         Enabled = "True"
     }
-    if (-not [string]::IsNullOrWhiteSpace($WorkerSid)) {
-        $denyParams["LocalUser"] = $WorkerSid
-    }
     if (-not [string]::IsNullOrWhiteSpace($WorkerProgram)) {
         $denyParams["Program"] = $WorkerProgram
     }
 
-    New-NetFirewallRule @denyParams | Out-Null
+    $sddl = ConvertTo-LocalUserSddl $WorkerSid
+    $ruleCreated = $false
+    if (-not [string]::IsNullOrWhiteSpace($sddl)) {
+        try {
+            $denyWithUser = $denyParams.Clone()
+            $denyWithUser["LocalUser"] = $sddl
+            New-NetFirewallRule @denyWithUser | Out-Null
+            $ruleCreated = $true
+        } catch {
+            Write-Warning "Could not bind LocalUser SDDL ($sddl) to outbound block rule: $($_.Exception.Message)"
+        }
+    }
+    if (-not $ruleCreated) {
+        New-NetFirewallRule @denyParams | Out-Null
+    }
 
     # Verify creation
     $status = Get-RuleStatus
