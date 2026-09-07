@@ -2827,3 +2827,56 @@ Incorporates multi-agent peer review constraints (Gemini + Claude consensus):
 
 Verified by `tests/test_deliverable_preflight.py` (11/11 tests passing), advancing the full
 model-free gate from 73/73 to 74/74 green (tiers: unit 60, containment 8, integration 6).
+
+### F127 - Multi-engine search adapter & egress broker parity - P1 - FIXED 2026-09-07
+
+During real-world cohort execution under Windows Restricted Token containment (`S-1-5-12`),
+two issues caused premature research task aborts and evaluation skew:
+1. Anti-bot/CAPTCHA blocks on DuckDuckGo: `html.duckduckgo.com` endpoints began serving
+   CAPTCHA interstitial challenges, causing the default worker search tool to hang or fail
+   to retrieve live research citations.
+2. Verification Asymmetry: Research workers running with restricted network privileges
+   route all HTTP/HTTPS traffic through the egress broker proxy (`127.0.0.1:8787`). When
+   the worker attempted to query search engines or targets not explicitly allowlisted in
+   `config/egress_policy.yaml`, the broker returned `HTTP 403 egress denied`. When the
+   worker accurately reported these targets as blocked, the unconstrained host critic
+   (which runs outside the broker) saw HTTP 200 responses and penalized the deliverable
+   for false failure reporting.
+3. Premature Low-Novelty Termination: In tasks where blocked endpoints were expected
+   (e.g., Cloudflare 403 on PromptBase or Hacker News direct 429), encountering two blocked
+   pages hit `low_novelty_limit=2` in `orchestrator/retrieval_progress.py`, terminating
+   the research loop before fallback web search results could be retrieved.
+
+Fix:
+1. Multi-backend in-process search adapter (`orchestrator/controlled_hermes.py`): Injects an
+   adapter supporting multi-engine fallbacks (`yahoo`, `brave`, `auto`), executing search
+   queries directly through the egress broker proxy and parsing HTML results in-process.
+2. Egress Policy Synchronization: Updated `config/egress_policy.yaml` to include Yahoo search
+   endpoints (`search.yahoo.com`, `r.search.yahoo.com`), search APIs, and research intelligence
+   sources, cryptographically re-signing the attestation (`.harness/egress_attestation.signed`).
+3. Retrieval streak tuning: Raised `low_novelty_limit=4` in `orchestrator/controlled_hermes.py`
+   to give research workers sufficient retrieval headroom to bypass blocked resources and gather
+   independent corroborating sources.
+
+Verified live across cohort missions M3 (Task 140), M5 (Task 137), M6 (Task 145), and M7 (Task 150),
+achieving 100% pass yield under independent critic review (`glm-5.2:cloud`).
+
+### F128 - Transactional isolation NTFS journal atomic replace contention - P2 - FIXED 2026-09-07
+
+On Windows NTFS filesystems, background file scanners (such as Windows Defender and search
+indexers) frequently hold transient read handles on newly modified files. In
+`workspace/validation/cohort_isolation.py`, `CohortIsolation._write_journal()` performed
+`os.replace(tmp_path, self.journal_path)` to ensure atomic journal updates. During rapid
+lifecycle transitions, this triggered `PermissionError: [WinError 5] Access is denied`
+when attempting to replace the journal file while an indexer held a handle, terminating
+the controlled validation window prematurely (observed in diagnostic Tasks 146 and 147).
+
+Fix:
+Wrapped `_write_journal()` in `workspace/validation/cohort_isolation.py` with an exponential
+backoff retry loop (5 attempts, base delay 50ms, exponential multiplier 1.5 with random jitter).
+If transient handle contention occurs, the writer backs off and retries, succeeding cleanly
+without crashing the transaction.
+
+Verified across all subsequent cohort runs and unit test suite `tests/test_cohort_isolation.py`
+(11/11 tests passing).
+

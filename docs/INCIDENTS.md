@@ -1,5 +1,42 @@
 # Incidents
 
+## 2026-09-07 - Windows NTFS journal file lock contention during live cohort isolation
+
+**What happened:** Tasks 146 and 147 in the validation cohort failed with
+`infra_failed` when `CohortIsolation._write_journal` raised `PermissionError: [WinError 5] Access is denied`
+during `os.replace` on Windows NTFS. On Windows, antivirus scanners and search indexers
+briefly open read handles on recently written temporary files, which causes atomic replacement
+to fail if attempted before the handle closes.
+
+**Fix:** Wrapped `_write_journal()` in `workspace/validation/cohort_isolation.py` with an
+exponential backoff retry loop (up to 5 attempts with 50ms initial delay, exponential backoff,
+and random jitter). Subsequent validation tasks ran without any file lock contention.
+
+**Lesson:** On Windows NTFS, atomic file replacements via `os.replace` must always account
+for transient opportunistic locks held by OS-level background services.
+
+## 2026-09-07 - Worker-critic verification asymmetry under restricted token egress broker
+
+**What happened:** In Task 146, a research worker executing under Windows Restricted Token
+containment (`S-1-5-12`) attempted to fetch research references that were not present in the
+egress broker allowlist. The local broker (`127.0.0.1:8787`) correctly returned `HTTP 403 egress denied`.
+The worker documented the 403 block in its deliverable. However, the host-level critic, running
+with unrestricted network access, attempted to verify the URLs and received HTTP 200, concluding
+that the worker had reported false data and assigning a failing verdict. In addition,
+DuckDuckGo search endpoints began serving bot-detection CAPTCHAs, preventing web search resolution.
+
+**Fix:** (1) Synchronized all external intelligence sources and search engine domains in
+`config/egress_policy.yaml` and re-signed the attestation (`.harness/egress_attestation.signed`).
+(2) Implemented an in-process multi-engine search adapter in `orchestrator/controlled_hermes.py`
+with Yahoo search fallback (`search.yahoo.com`), bypassing DDG CAPTCHAs and routing queries directly
+through the broker proxy.
+(3) Adjusted `low_novelty_limit=4` in `orchestrator/retrieval_progress.py` so that workers encountering
+expected 403 blocks do not cut off the research loop prematurely.
+
+**Lesson:** In dual-process architectures where workers run under strict network containment
+but critics run on the host, network policy must maintain complete symmetry with evaluation
+targets to prevent false discrepancy penalties.
+
 ## 2026-09-04 - RC-1 false negatives on bot-protected citations
 
 **What happened:** the cohort citecheck treated every non-2xx response as an

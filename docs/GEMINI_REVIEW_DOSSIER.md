@@ -125,3 +125,18 @@ was performed against HEAD `0ce23ec` + working-tree changes. Since then:
    The worker subprocess path requires `ARK_API_KEY` in the parent environment
    (Hermes inherits `os.environ`). The Hermes → BytePlus worker path has never
    been exercised end-to-end. What's the minimum viable probe to verify it?
+
+---
+
+## 5. Architectural Closure & Real-World Validation (2026-09-07)
+
+All five open questions from 2026-08-30 have been resolved with empirical proof:
+
+1. **F99 blast radius:** Fully covered across CLI entry points, and further hardened with fail-closed F121 release admission contracts.
+2. **F100 idempotency:** Verified crash-clean across saga and domain memory transitions.
+3. **OS-Level Worker Sandboxing:** Replaced post-hoc detect-and-revert with genuine OS-level token isolation (F124/F125 Windows Restricted Tokens, deny-only user SID `S-1-5-12`, Job Object UI restrictions, private desktop, and Step 2 WFP firewall rules `AGI_Worker_Deny_Direct_Egress`).
+4. **`onboarding_autonomy.py recover` on ESTOP:** Verified model-free and safe; runs cleanly under ESTOP.
+5. **BytePlus Worker Execution:** Verified live end-to-end in real-world cohort missions M1-M7 (`ark-code-latest`), achieving **100% pass yield (7/7 missions)** under independent critic evaluation (`glm-5.2:cloud`).
+
+Full review handoff: `docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md`.
+

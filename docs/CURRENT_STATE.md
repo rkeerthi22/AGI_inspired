@@ -31,6 +31,11 @@ disclaimer linting (M3 platform coverage and M7 'not publicly disclosed' tables)
 to the F10 anti-injection floor (metadata only, no raw HTML), bounds repair to
 MAX_REPAIR_ATTEMPTS=2 with token budget checks, and accumulates token spend. OmniRoute
 is held decoupled from live routing to preserve the F124 restricted token boundary.
+F127 implements the multi-engine in-process search adapter (`yahoo`, `brave`, `auto`) and egress
+broker policy synchronization (`config/egress_policy.yaml`), along with retrieval streak tuning
+(`low_novelty_limit=4`), resolving verification asymmetry between sandboxed workers and host critics.
+F128 hardens `CohortIsolation._write_journal` with exponential backoff retry to eliminate Windows NTFS
+atomic file lock contention during validation windows.
 F124 research workers use CreateRestrictedToken/CreateProcessAsUserW,
 a deny-only user SID, removed privileges, restricting SIDs, explicit pipe-only
 inheritance, private desktop and Job Object/UI restrictions. Real synthetic

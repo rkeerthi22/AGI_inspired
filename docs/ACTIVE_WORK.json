@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-06T03:45:00Z",
+  "last_updated": "2026-09-07T03:35:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Canonical documentation & hardening/incidents registry synchronization (F127/F128)",
+      "task_id": "DOCS-REGISTRY-SYNC-2026-09-07",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-07T03:35:00Z",
+      "last_update": "2026-09-07T03:45:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md",
+      "notes": "COMPLETE: Synchronized F127 (Multi-engine search adapter & egress parity) and F128 (NTFS atomic journal backoff) into docs/HARDENING.md; added Task 146/147 incidents to docs/INCIDENTS.md; cleaned line artifacts in docs/GEMINI_REVIEW_DOSSIER.md; updated docs/CURRENT_STATE.md; model-free gate verified 75/75 green."
+    },
     {
       "agent": "gemini-cli",
       "role": "Model-free postmortem & code repair of M5 controlled-window failures (Task 130 & Task 131)",
