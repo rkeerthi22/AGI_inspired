@@ -90,7 +90,7 @@ def main(argv: list[str] | None = None) -> int:
         try:
             from retrieval_progress import RetrievalPolicy
             if args.toolsets and "browser" not in args.toolsets:
-                install_hermes_adapter(Path(audit) if audit else None, RetrievalPolicy(max_calls=(3, 5, 0)))
+                install_hermes_adapter(Path(audit) if audit else None, RetrievalPolicy(max_calls=(3, 5, 0), low_novelty_limit=4))
             else:
                 install_hermes_adapter(Path(audit) if audit else None)
         except (ImportError, AttributeError):
@@ -146,6 +146,30 @@ def main(argv: list[str] | None = None) -> int:
                 or os.environ.get("DDGS_PROXY")
                 or "http://127.0.0.1:8787"
             )
+            # Try ddgs with brave/yahoo engines via egress proxy first
+            try:
+                from ddgs import DDGS
+                with DDGS(proxy=proxy_url, timeout=12) as client:
+                    for backend in ["yahoo", "brave", "auto"]:
+                        try:
+                            hits = list(client.text(query, backend=backend, max_results=safe_limit))
+                            if hits:
+                                results = []
+                                for i, hit in enumerate(hits[:safe_limit]):
+                                    url = str(hit.get("href") or hit.get("url") or "")
+                                    results.append({
+                                        "title": str(hit.get("title", "")),
+                                        "url": url,
+                                        "description": str(hit.get("body", "")),
+                                        "position": i + 1,
+                                    })
+                                return results
+                        except Exception:
+                            continue
+            except Exception as ddgs_err:
+                sys.stderr.write(f"ddgs package search error: {ddgs_err}\n")
+
+            # Fallback to direct HTML scraper
             opener = urllib.request.build_opener(
                 urllib.request.ProxyHandler({"https": proxy_url, "http": proxy_url})
             )

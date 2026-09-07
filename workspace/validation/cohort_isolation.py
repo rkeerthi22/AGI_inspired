@@ -161,7 +161,14 @@ def _write_journal(path: Path, state: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(json.dumps(state, indent=2) + "\n", encoding="utf-8")
-    os.replace(tmp, path)
+    for attempt in range(5):
+        try:
+            os.replace(tmp, path)
+            break
+        except (PermissionError, OSError):
+            if attempt == 4:
+                raise
+            time.sleep(0.05 * (2 ** attempt))
 
 
 def _owner_is_current(state: dict) -> bool:

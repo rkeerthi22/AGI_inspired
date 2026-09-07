@@ -42,6 +42,19 @@
     },
     {
       "agent": "gemini-cli",
+      "role": "Live cohort M3/M6/M7 validation under controlled window (F126 yield expansion)",
+      "task_id": "LIVE-VALIDATION-REMAINING-COHORT-2026-09-07",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-07T03:28:00Z",
+      "last_update": "2026-09-07T05:20:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md",
+      "notes": "COMPLETE: Real-world validation cohort achieved 7/7 (100% pass yield) across all frozen benchmark missions under Windows Restricted Token containment (S-1-5-12), loopback egress broker proxy, WFP firewall rules active, and independent critic review (glm-5.2:cloud). Passing tasks recorded in ledger: M1 (task 106), M2 (task 109), M3 (task 140), M4 (task 115), M5 (task 137), M6 (task 145), M7 (task 150). ESTOP strictly re-engaged (True); model-free test gate 75/75 suites green; write locks released."
+    },
+    {
+      "agent": "gemini-cli",
       "role": "Host hardening script for worker WFP / firewall deny-direct-egress boundary (Step 2)",
       "task_id": "HOST-HARDENING-FIREWALL-2026-09-06",
       "mode": "completed",
