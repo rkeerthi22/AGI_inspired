@@ -1,32 +1,30 @@
 {
   "schema_version": 2,
-  "brief_revision": 75,
-  "created_at": "2026-09-06T22:30:00Z",
+  "brief_revision": 76,
+  "created_at": "2026-09-07T03:20:00Z",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "34891662f35902c3b7158db079bf2ac7f3180abc"
+    "based_on_head": "d9e1c91ea14198c6bcfd5318df360c1afd56cdbd"
   },
   "task": {
-    "id": "POSTMORTEM-M5-FAILURES-2026-09-06",
-    "phase": "postmortem-and-deterministic-repairs-complete",
+    "id": "LIVE-VALIDATION-M5-2026-09-06",
+    "phase": "live-validation-m5-completed",
     "status": "completed",
-    "next_action": "Execute canaries upon upstream quota reset (Ollama Cloud / BytePlus), then run M5 (task 116) under authorized controlled window."
+    "next_action": "Execute canaries and proceed with M3 live validation (task 114) under authorized controlled window."
   },
   "completed": [
-    "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned & verified with test_egress_policy assertions (11/11)",
-    "In-process DuckDuckGo proxy search adapter in controlled_hermes.py (eliminating 30m search hang; verified 10.4s execution)",
-    "Egress policy updated with search & FlowGPT domains, signed token verified at .harness/egress_attestation.signed",
-    "Upstream BytePlus quota lockout handled safely; isolation recovered and ESTOP strictly re-engaged (True)",
-    "Shared multi-agent launch brief recorded in docs/SHARED_LAUNCH_BRIEF_2026-09-06.md for Gemini, Codex, Hermes, Operator",
+    "Mission M5 live validation PASS in Task 137 (77.4s, in=11767, out=4192, status=done, verdict=pass) under token containment (S-1-5-12), broker (127.0.0.1:8787), WFP rules, critic (glm-5.2:cloud)",
+    "In-process web extraction adapter in controlled_hermes.py and idle timeout 120s in config/egress_policy.yaml",
+    "Canonical https:// URL sourcing and HTTP 403 block declaration rules in retrieval_progress.py",
+    "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned & verified (11/11)",
+    "Egress policy updated with research & FlowGPT domains, signed token verified at .harness/egress_attestation.signed",
     "F126 deliverable preflight & auto-repair loop: reusing citecheck.verify (RC-1 403-not-dead), linting, bounded attempts=2",
     "F124/F125 restricted worker launch and signer pipe accept race repair",
-    "Postmortem Tasks 130 & 131: reordered async_delegation patch, isolated HERMES_HOME to worker home, closed stdin pipe, -t web",
-    "Worker readiness diagnostic scripts/check_worker_readiness.py (6/6 PASS in 1.8s) verifying ESTOP, WFP, attestation, broker, config, ACLs",
-    "Synthetic M5 dry run tests/test_m5_dryrun.py (2/2 PASS) verifying preflight interception, auto-repair, and token accumulation",
+    "Worker readiness diagnostic scripts/check_worker_readiness.py (6/6 PASS in 1.8s)",
     "Model-free gate 75/75 suites green, exit 0, verified across tiers"
   ],
   "locked_constraints": [
@@ -42,11 +40,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "8e4783d4783fdc544bbfb6965fb9adc4dcb1c086fa1ec88f9980695aedbbf43b"
+      "sha256": "cb9df61b679eb5d21ccdc8baf728b251f16cac9f634f2858774f41132eaf59e6"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "04195b8099db87a673d73055dd9080d946f8c1c8c3d70e6ab0f517a6605f5c65"
+      "sha256": "c8c377d4741e3b56960ad36b8f92cb0270966b5358e7748bfc5cbc507383deb6"
+    },
+    {
+      "path": "docs/reviews/GEMINI_M5_LIVE_VALIDATION_2026-09-07.md",
+      "sha256": "edb776ea3fa218a4ec59356ea54cc35f8f611b3ee4c44979ef0ff0a9a1fa65ec"
     },
     {
       "path": "docs/HANDOFF_PROTOCOL.md",
