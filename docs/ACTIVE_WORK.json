@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T09:30:00Z",
+  "last_updated": "2026-09-07T17:20:00Z",
   "active_agents": [
+    {
+      "agent": "claude-code",
+      "role": "G5 final greenlight + architecture-completion plan author (documentation only) — COMPLETED",
+      "task_id": "G5-FINAL-GREENLIGHT-2026-09-07",
+      "mode": "completed",
+      "owned_paths": ["docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md"],
+      "started_at": "2026-09-07T17:00:00Z",
+      "last_update": "2026-09-07T17:20:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
+      "notes": "COMPLETED. Verified G5 Rev 2.0 against disk: all 3 adversarial conditions baked in (Gap 1 attestation-digest time-of-check; Gap 2 empirical broker audit CONFIRMED egress_broker.py:93 deny path omits host= field — real gap; Gap 3 25% abuse bound + min 2 OK + fabrication guard). Gate 76/76 green measured. Issued GREENLIGHT for G5 Phase 1 (broker logging hardening) with the prerequisite sequence: Phase 1 broker host= logging + per-attempt correlation + hermetic tests FIRST, then Phase 2 citecheck schema, then Phase 3 abuse bounds. Hermes H1 (prediction_machine, 3rd turn outstanding) and H2 (broker audit-log review) still NOT delivered as separate docs — Gemini's code audit partially covered H2 but Hermes owes the independent confirmation and H1. Authored master architecture-completion plan for Gemini/Codex/Hermes. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
+    },
     {
       "agent": "claude-code",
       "role": "G5 asymmetry proposal adversarial review + next-action brief author (documentation only) — COMPLETED",
