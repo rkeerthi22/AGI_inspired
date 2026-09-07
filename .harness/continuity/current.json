@@ -1,28 +1,29 @@
 {
   "schema_version": 2,
-  "brief_revision": 84,
-  "created_at": "2026-09-07T18:34:42.420524+00:00",
+  "brief_revision": 87,
+  "created_at": "2026-09-07T19:42:33.894761+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "6395459a410dc9885d698030657085f39daf6d4e"
+    "based_on_head": "8e01833cda17dacebe3cb73cd05d340ca1f37682"
   },
   "task": {
-    "id": "G5-PHASE1-BROKER-LOGGING-F132",
-    "phase": "phase1-broker-logging-completed",
+    "id": "G5-PHASE2-ATTESTATION-CITECHECK-F133",
+    "phase": "phase2-attestation-citecheck-completed",
     "status": "completed",
-    "next_action": "Phase 1 verified (38/38 checks green, gate 76/76 green). Ready for Claude/Hermes verification review before claiming Phase 2 (F133)."
+    "next_action": "Phase 2 verified (46/46 checks green in test_citecheck, full gate 76/76 green). Ready for Claude/Hermes verification review before Phase 3 (F134 abuse bounds & preflight integration)."
   },
   "completed": [
-    "F132: Added host= deny logging across all broker rejection paths in orchestrator/egress_broker.py",
-    "F132: Added ActiveBrokerCorrelation context manager and per-attempt correlation logging (runs/task{tid}_a{attempt}_broker.audit.jsonl)",
-    "F132: Wired orchestrator/execution.py hermes_worker with ActiveBrokerCorrelation and env correlation",
-    "F132: Added sections 8-11 to tests/test_egress_broker_integration.py verifying host deny logging, attempt correlation, and kill-assumption (38/38 checks green)",
+    "F133: Added get_attestation_policy_digest and snapshot_egress_policy to orchestrator/egress_policy.py ensuring policy_digest reads from signed attestation token (Gap 1 invariant)",
+    "F133: Recorded active policy_digest and allowlisted_hosts into runs/task{tid}_a{attempt}_worker.usage.json at dispatch in orchestrator/task_runner.py",
+    "F133: Implemented immutable CitationCheckResult dataclass schema in orchestrator/citecheck.py (Section 4.1) evaluating worker_policy_permitted from frozen snapshot and broker_attempt_verified from runs/task{tid}_a{attempt}_broker.audit.jsonl",
+    "F133: Updated orchestrator/evaluation.py to pass task/attempt to citecheck.verify",
+    "F133: Expanded tests/test_citecheck.py with Sections 4-6 covering schema, Gap 1 invariant, and kill-assumption cross-check (46/46 checks green)",
     "Model-free test gate 76/76 suites green across unit, containment, and integration tiers",
-    "docs/HARDENING.md (F132), docs/CURRENT_STATE.md, and docs/ACTIVE_WORK.json updated"
+    "docs/HARDENING.md (F133), docs/CURRENT_STATE.md, and docs/ACTIVE_WORK.json updated"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -32,20 +33,20 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "76/76 model-free suites green, exit 0. Egress broker integration 38/38 checks green. ESTOP strictly engaged (True)."
+    "detail": "76/76 model-free suites green, exit 0. Citecheck 46/46 checks green. Egress broker integration 38/38 checks green. ESTOP strictly engaged (True)."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "3702cf145c69a39fd9cba8fb4594a48df75fd29b96842c6283b79f0d95605b49"
+      "sha256": "9231c27f57076093675217243d628a25443e88729e6be13acbec82757e21e932"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "ed4319696abce3412fb36dd3671d48ee9d78450e8d375173077b4214e8e314ef"
+      "sha256": "07ba8d5d852403e0a93c58ad963982cb79cd05323bf48bd72597a8934783d28c"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "ed6a624b0f9677ff0786a415bd0adf055488ffa13e48d53762e86a33669984ec"
+      "sha256": "1e9b9b8e5369ebae9251c5b726eb652bfff75974b820e8c082bd8847063f6a33"
     },
     {
       "path": "docs/INCIDENTS.md",
@@ -66,6 +67,10 @@
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
       "sha256": "fee9caa8a5418dda5ed181973174e32d776d89c88b7493b99c94c8b545f8d193"
+    },
+    {
+      "path": "tests/test_citecheck.py",
+      "sha256": "877b4f96720af74515f05cc6d360222d1ca64c71e3e5b9b67186aa132b7e2876"
     },
     {
       "path": "tests/test_egress_broker_integration.py",

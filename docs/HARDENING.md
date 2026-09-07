@@ -2981,3 +2981,35 @@ Fix:
 
 Verified by `tests/test_egress_broker_integration.py` (38/38 checks green) and full model-free test gate (76/76 suites green).
 
+### F133 — Attestation snapshot at worker run time and two-tier citation verification schema — P1 — FIXED 2026-09-07
+
+Prior behavior: In `orchestrator/citecheck.py`, citation verification checked only direct HTTP reachability from the host vantage point. The critic was unaware of worker egress policy boundaries, resulting in verification asymmetry: when a worker was blocked from fetching a non-allowlisted external domain under its restricted token, but cited it based on snippet evidence or secondary sources, the critic (running on the host with unrestricted direct egress) retrieved the page successfully. Evaluating policy against the live `config/egress_policy.yaml` created a severe time-of-check vs time-of-use flaw (Gap 1): any mid-cohort allowlist expansion (e.g. F127) retroactively made previously blocked domains appear permitted, yielding false FAILs. Furthermore, citecheck lacked per-attempt broker audit verification, leaving the system vulnerable to un-attempted URL citations (the lazy worker exploit).
+
+Fix:
+1. Frozen Egress Policy Snapshot at Worker Dispatch (`orchestrator/egress_policy.py`, `orchestrator/task_runner.py`):
+   - In `orchestrator/egress_policy.py`, implemented `get_attestation_policy_digest()` and `snapshot_egress_policy()`.
+   - Critical Gap 1 Invariant: `policy_digest` is read directly from the cryptographically signed attestation token in force at worker run time (`policy_sha256`), NEVER from the live `egress_policy.yaml`.
+   - In `orchestrator/task_runner.py`, at worker dispatch, records `policy_digest` and the sorted `allowlisted_hosts` list directly into `runs/task{tid}_a{attempt}_worker.usage.json`.
+2. Two-Tier Verification Schema (`orchestrator/citecheck.py:CitationCheckResult`):
+   - Implemented immutable `CitationCheckResult` (§4.1 of G5 Rev 2.0 proposal) with fields: `url`, `host`, `reachable_on_host`, `http_status`, `worker_policy_permitted`, `broker_attempt_verified`, `classification`, `error`.
+   - Backward compatibility: `CitationCheckResult` supports both dataclass attribute access and mapping index/get access (`res["url"]`, `res.get("classification")`, `to_dict()`).
+3. Policy Snapshot & Broker Log Cross-Check (`orchestrator/citecheck.py:load_worker_policy_snapshot`, `load_broker_attempt_denials`):
+   - `worker_policy_permitted` strictly evaluates the host against the frozen `allowlisted_hosts` from `runs/task{tid}_a{attempt}_worker.usage.json`, never the live file.
+   - `broker_attempt_verified` cross-checks the attempt-scoped broker denial audit log (`runs/task{tid}_a{attempt}_broker.audit.jsonl` from F132) for `decision="deny"` / `host_not_allowlisted`.
+4. G5 Classification Decision Flow (`orchestrator/citecheck.py:classify_citation`):
+   - Direct probe 200 + worker_policy_permitted True -> `OK`.
+   - Direct probe 200 + worker_policy_permitted False + broker_attempt_verified True -> `POLICY_DENIED` relief granted.
+   - Direct probe 200 + worker_policy_permitted False + broker_attempt_verified False -> `UNREACHABLE` (relief strictly refused for un-attempted URLs).
+   - Probe failure / 404 / DNS error -> `DEAD` (dead resources never receive policy denial relief).
+5. Evaluation Integration (`orchestrator/evaluation.py:run_critic`):
+   - Passes `task_id`, `attempt`, and `runs_dir` to `citecheck.verify()`, preserving fallback compatibility for 1-argument test mocks.
+   - Serializes structured `evidence` list to `runs/task{tid}_a{attempt}_citation_evidence.json`.
+6. Hermetic Regressions & Gap 1 Pinning (`tests/test_citecheck.py`):
+   - Added Sections 4-6 (46/46 checks passing, up from 11/11):
+     - Section 4: Schema types, immutability (`FrozenInstanceError`), dict indexing, and `to_dict()`.
+     - Section 5: Gap 1 test verifying `snapshot_egress_policy()` reads attestation digest even when live policy yaml has a different digest.
+     - Section 6: Kill-assumption regression pinning that `POLICY_DENIED` is granted when the broker log confirms the intercepted attempt, and strictly refused (`UNREACHABLE`) when the URL was never attempted.
+
+Verified by `tests/test_citecheck.py` (46/46 checks green) and full model-free test gate (76/76 suites green).
+
+

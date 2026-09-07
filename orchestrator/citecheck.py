@@ -21,7 +21,77 @@ import socket
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, urlparse
+
+CLASSIFICATION_OK = "OK"
+CLASSIFICATION_DEAD = "DEAD"
+CLASSIFICATION_POLICY_DENIED = "POLICY_DENIED"
+CLASSIFICATION_UNREACHABLE = "UNREACHABLE"
+VALID_CLASSIFICATIONS = frozenset({
+    CLASSIFICATION_OK,
+    CLASSIFICATION_DEAD,
+    CLASSIFICATION_POLICY_DENIED,
+    CLASSIFICATION_UNREACHABLE,
+})
+
+
+@dataclass(frozen=True)
+class CitationCheckResult:
+    """Two-tier citation check result schema (G5 Revision 2.0, F133)."""
+    url: str
+    host: str
+    reachable_on_host: bool
+    http_status: int | None
+    worker_policy_permitted: bool      # Evaluated against worker-run attestation digest
+    broker_attempt_verified: bool      # Verified in per-attempt broker audit log
+    classification: str                # 'OK' | 'DEAD' | 'POLICY_DENIED' | 'UNREACHABLE'
+    error: str | None = None
+    line: str = ""
+    literal: str | None = None
+    literal_found: bool | None = None
+    final_url: str = ""
+    redirects_followed: int = 0
+
+    @property
+    def reachable(self) -> bool:
+        return self.reachable_on_host
+
+    def __getitem__(self, item: str) -> Any:
+        if item == "reachable":
+            return self.reachable_on_host
+        return getattr(self, item)
+
+    def get(self, item: str, default: Any = None) -> Any:
+        if item == "reachable":
+            return self.reachable_on_host
+        return getattr(self, item, default)
+
+    def __contains__(self, item: str) -> bool:
+        if item == "reachable":
+            return True
+        return hasattr(self, item)
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "url": self.url,
+            "host": self.host,
+            "reachable": self.reachable_on_host,
+            "reachable_on_host": self.reachable_on_host,
+            "http_status": self.http_status,
+            "worker_policy_permitted": self.worker_policy_permitted,
+            "broker_attempt_verified": self.broker_attempt_verified,
+            "classification": self.classification,
+            "error": self.error,
+            "line": self.line,
+            "literal": self.literal,
+            "literal_found": self.literal_found,
+            "final_url": self.final_url,
+            "redirects_followed": self.redirects_followed,
+        }
+
 
 MAX_CITATIONS = 15
 FETCH_TIMEOUT_S = 8
@@ -247,7 +317,126 @@ def _resolve_safety(hostname: str) -> str | None:
     return None
 
 
-def _fetch_one(cite: dict) -> dict:
+def _normal_host(host: str) -> str:
+    """Normalize hostname for policy and denial cross-checking."""
+    try:
+        value = host.strip().rstrip(".").encode("idna").decode("ascii").lower()
+    except (UnicodeError, AttributeError):
+        return host.strip().rstrip(".").lower()
+    return value
+
+
+def load_broker_attempt_denials(
+    task_id: int | None,
+    attempt: int | None = 1,
+    runs_dir: Path | None = None,
+) -> set[str]:
+    """Return set of normalized hosts denied by the egress broker for a task attempt (F132/F133)."""
+    if task_id is None:
+        return set()
+    runs = runs_dir or Path("runs")
+    paths = []
+    if attempt is not None:
+        paths.append(runs / f"task{task_id}_a{attempt}_broker.audit.jsonl")
+    paths.append(runs / f"task{task_id}_broker.audit.jsonl")
+
+    denied = set()
+    for p in paths:
+        if p.is_file():
+            try:
+                for line in p.read_text(encoding="utf-8").splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    rec = json.loads(line)
+                    if rec.get("decision") == "deny" or rec.get("reason") == "host_not_allowlisted":
+                        host = rec.get("host")
+                        if host:
+                            cleaned = _normal_host(str(host).split(":")[0])
+                            denied.add(cleaned)
+                            if cleaned.startswith("www."):
+                                denied.add(cleaned[4:])
+            except Exception:
+                pass
+            if denied:
+                break
+    return denied
+
+
+def load_worker_policy_snapshot(
+    task_id: int | None,
+    attempt: int | None = 1,
+    runs_dir: Path | None = None,
+) -> dict[str, Any]:
+    """Load the frozen egress policy snapshot recorded at worker dispatch time (F133).
+
+    Reads policy_digest and allowlisted_hosts from task{tid}_a{attempt}_worker.usage.json.
+    Never checks the live config/egress_policy.yaml (Gap 1).
+    """
+    if task_id is None:
+        return {"policy_digest": None, "allowlisted_hosts": []}
+    runs = runs_dir or Path("runs")
+    paths = []
+    if attempt is not None:
+        paths.append(runs / f"task{task_id}_a{attempt}_worker.usage.json")
+    paths.append(runs / f"task{task_id}_worker.usage.json")
+
+    for p in paths:
+        if p.is_file():
+            try:
+                data = json.loads(p.read_text(encoding="utf-8"))
+                if "allowlisted_hosts" in data or "policy_digest" in data:
+                    raw_hosts = data.get("allowlisted_hosts") or []
+                    cleaned = []
+                    for h in raw_hosts:
+                        norm = _normal_host(str(h))
+                        cleaned.append(norm)
+                        if norm.startswith("www."):
+                            cleaned.append(norm[4:])
+                    return {
+                        "policy_digest": data.get("policy_digest"),
+                        "allowlisted_hosts": sorted(list(set(cleaned))),
+                    }
+            except Exception:
+                pass
+    return {"policy_digest": None, "allowlisted_hosts": []}
+
+
+def classify_citation(
+    reachable_on_host: bool,
+    http_status: int | None,
+    is_dead_resource: bool,
+    worker_policy_permitted: bool,
+    broker_attempt_verified: bool,
+) -> str:
+    """Determine classification according to G5 Rev 2.0 two-tier verification model (§4.2).
+
+    1. Reachable on host (e.g. HTTP 200 on direct probe):
+       - If worker_policy_permitted -> OK
+       - If not worker_policy_permitted:
+         - If broker_attempt_verified -> POLICY_DENIED
+         - Else -> UNREACHABLE (un-attempted URL on blocked host receives no relief)
+    2. Unreachable / Error on host (404, 5xx, NXDOMAIN, timeout, etc.):
+       - If dead/fabricated (404/410/DNS failure) -> DEAD
+       - Else -> UNREACHABLE
+    """
+    if reachable_on_host:
+        if worker_policy_permitted:
+            return CLASSIFICATION_OK
+        if broker_attempt_verified:
+            return CLASSIFICATION_POLICY_DENIED
+        return CLASSIFICATION_UNREACHABLE
+    else:
+        if is_dead_resource:
+            return CLASSIFICATION_DEAD
+        return CLASSIFICATION_UNREACHABLE
+
+
+def _fetch_one(
+    cite: dict,
+    policy_snapshot: dict | None = None,
+    broker_denied_hosts: set[str] | None = None,
+) -> CitationCheckResult:
     result = {**cite, "reachable": False, "http_status": None, "literal_found": None,
               "final_url": cite["url"], "redirects_followed": 0}
 
@@ -263,93 +452,171 @@ def _fetch_one(cite: dict) -> dict:
     current_url, error = _validated_target(cite["url"])
     if error:
         result["error"] = error
-        return result
+    else:
+        try:
+            for _ in range(MAX_REDIRECTS + 1):
+                req = urllib.request.Request(
+                    current_url,
+                    headers={"User-Agent": "Mozilla/5.0 (compatible; AGI-harness-citecheck/1.0)"},
+                )
+                try:
+                    resp = _NO_REDIRECT_OPENER.open(req, timeout=FETCH_TIMEOUT_S)
+                    break
+                except urllib.error.HTTPError as e:
+                    if 300 <= e.code < 400:
+                        location = e.headers.get("Location")
+                        if not location:
+                            result["error"] = "redirect missing location"
+                            break
+                        next_url, error = _validated_target(urljoin(current_url, location))
+                        if error:
+                            result["error"] = f"blocked redirect target: {error}"
+                            break
+                        current_url = next_url
+                        result["redirects_followed"] += 1
+                        continue
+                    raise
+            else:
+                result["error"] = f"too many redirects (>{MAX_REDIRECTS})"
 
-    try:
-        for _ in range(MAX_REDIRECTS + 1):
-            req = urllib.request.Request(
-                current_url,
-                headers={"User-Agent": "Mozilla/5.0 (compatible; AGI-harness-citecheck/1.0)"},
-            )
-            try:
-                resp = _NO_REDIRECT_OPENER.open(req, timeout=FETCH_TIMEOUT_S)
-                break
-            except urllib.error.HTTPError as e:
-                if 300 <= e.code < 400:
-                    location = e.headers.get("Location")
-                    if not location:
-                        result["error"] = "redirect missing location"
-                        return result
-                    next_url, error = _validated_target(urljoin(current_url, location))
+            if not result.get("error") and "resp" in locals():
+                with resp:
+                    result["final_url"] = getattr(resp, "geturl", lambda: current_url)()
+                    final_url, error = _validated_target(result["final_url"])
                     if error:
-                        result["error"] = f"blocked redirect target: {error}"
-                        return result
-                    current_url = next_url
-                    result["redirects_followed"] += 1
-                    continue
-                raise
-        else:
-            result["error"] = f"too many redirects (>{MAX_REDIRECTS})"
-            return result
+                        result["error"] = f"blocked final target: {error}"
+                    else:
+                        result["final_url"] = final_url
+                        result["http_status"] = resp.status
+                        result["reachable"] = 200 <= resp.status < 400
+                        if cite["literal"] and result["reachable"]:
+                            body = resp.read(MAX_BYTES).decode("utf-8", errors="replace")
+                            result["literal_found"] = _literal_present(
+                                cite["literal"], body + " " + _jsonld_text(body))
+        except urllib.error.HTTPError as e:
+            result["http_status"] = e.code
+            result["reachable"] = False
+        except Exception as e:
+            result["error"] = str(e)[:100]
 
-        with resp:
-            result["final_url"] = getattr(resp, "geturl", lambda: current_url)()
-            final_url, error = _validated_target(result["final_url"])
-            if error:
-                result["error"] = f"blocked final target: {error}"
-                return result
-            result["final_url"] = final_url
-            result["http_status"] = resp.status
-            result["reachable"] = 200 <= resp.status < 400
-            if cite["literal"] and result["reachable"]:
-                body = resp.read(MAX_BYTES).decode("utf-8", errors="replace")
-                # F26: search visible/raw text AND structured JSON-LD data together, so
-                # a value that only exists in a page's <script type="application/ld+json">
-                # block (client-rendered, never in the HTML text) still counts as support.
-                result["literal_found"] = _literal_present(
-                    cite["literal"], body + " " + _jsonld_text(body))
-    except urllib.error.HTTPError as e:
-        result["http_status"] = e.code
-        result["reachable"] = False
-    except Exception as e:
-        result["error"] = str(e)[:100]
-    return result
+    final_host = urlparse(result.get("final_url") or cite["url"]).hostname or ""
+    host = _normal_host(final_host)
+    stripped = host[4:] if host.startswith("www.") else host
+
+    # Determine worker_policy_permitted against the frozen snapshot (Gap 1)
+    if policy_snapshot and "allowlisted_hosts" in policy_snapshot:
+        allowed = set(policy_snapshot.get("allowlisted_hosts") or [])
+        worker_policy_permitted = (host in allowed or stripped in allowed)
+    else:
+        # Fallback when no snapshot provided: default permitted
+        worker_policy_permitted = True
+
+    # Determine broker_attempt_verified against per-attempt broker denials (Gap 2)
+    if broker_denied_hosts is not None:
+        broker_attempt_verified = (host in broker_denied_hosts or stripped in broker_denied_hosts)
+    else:
+        broker_attempt_verified = False
+
+    reachable_on_host = bool(result.get("reachable", False))
+    http_status = result.get("http_status")
+    is_dead_resource = is_dead(result)
+    classification = classify_citation(
+        reachable_on_host=reachable_on_host,
+        http_status=http_status,
+        is_dead_resource=is_dead_resource,
+        worker_policy_permitted=worker_policy_permitted,
+        broker_attempt_verified=broker_attempt_verified,
+    )
+
+    return CitationCheckResult(
+        url=cite["url"],
+        host=host,
+        reachable_on_host=reachable_on_host,
+        http_status=http_status,
+        worker_policy_permitted=worker_policy_permitted,
+        broker_attempt_verified=broker_attempt_verified,
+        classification=classification,
+        error=result.get("error"),
+        line=cite.get("line", ""),
+        literal=cite.get("literal"),
+        literal_found=result.get("literal_found"),
+        final_url=result.get("final_url", cite["url"]),
+        redirects_followed=result.get("redirects_followed", 0),
+    )
 
 
-def verify(text: str) -> list[dict]:
-    """Fetch+verify every citation in `text` (bounded). Returns the evidence
-    table — never raises; a total failure surfaces as reachable=False rows."""
+def verify(
+    text: str,
+    task_id: int | None = None,
+    attempt: int | None = 1,
+    runs_dir: Path | None = None,
+    policy_snapshot: dict | None = None,
+    broker_denied_hosts: set[str] | None = None,
+) -> list[CitationCheckResult]:
+    """Fetch+verify every citation in `text` (bounded). Returns CitationCheckResult list."""
     cites = extract_citations(text)
     if not cites:
         return []
+
+    if policy_snapshot is None and task_id is not None:
+        policy_snapshot = load_worker_policy_snapshot(task_id, attempt, runs_dir)
+
+    if broker_denied_hosts is None and task_id is not None:
+        broker_denied_hosts = load_broker_attempt_denials(task_id, attempt, runs_dir)
+
     results = []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
-        futs = {ex.submit(_fetch_one, c): c for c in cites}
+        futs = {
+            ex.submit(_fetch_one, c, policy_snapshot, broker_denied_hosts): c
+            for c in cites
+        }
         for fut in as_completed(futs):
             try:
                 results.append(fut.result())
             except Exception as e:
                 cite = futs[fut]
-                results.append({**cite, "reachable": False, "http_status": None,
-                               "literal_found": None, "error": str(e)[:100]})
+                raw_host = urlparse(cite.get("url", "")).hostname or ""
+                host = _normal_host(raw_host)
+                results.append(CitationCheckResult(
+                    url=cite.get("url", ""),
+                    host=host,
+                    reachable_on_host=False,
+                    http_status=None,
+                    worker_policy_permitted=True,
+                    broker_attempt_verified=False,
+                    classification=CLASSIFICATION_DEAD,
+                    error=str(e)[:100],
+                    line=cite.get("line", ""),
+                    literal=cite.get("literal"),
+                    literal_found=None,
+                    final_url=cite.get("url", ""),
+                    redirects_followed=0,
+                ))
     return results
 
 
-def is_dead(e: dict) -> bool:
-    """RC-1 (2026-09-04): True only when a citation is fabricated or the resource is
-    genuinely gone -- NOT when a live page merely refused the bot.
-
-    A server that RESPONDED with 4xx/5xx (403 WAF-block, 429 rate-limit, 5xx) means the
-    page EXISTS and the citation is real; the bot was just refused. Counting those as
-    'dead' inflated dead_frac and mechanically hard-failed tasks whose citations were to
-    live, bot-protected sites: M5/task116 had flowgpt.com return 403 (the mission's OWN
-    subject site) and counted it dead -- true dead_frac 0.125 vs the gate's 0.50, a false
-    negative that flipped a passing deliverable to fail. Only 404/410 and host-doesn't-
-    exist connection errors (DNS failure, timeout, connection refused) are dead.
-
-    Safety refusals (SSRF private-net guard, unsupported scheme, redirect problems) are
-    NOT dead: the harness refused the fetch; the URL may still point at a real page.
+def is_dead(e: dict | CitationCheckResult) -> bool:
+    """RC-1 (2026-09-04) + G5 (2026-09-07): True only when a citation is fabricated
+    or the resource is genuinely gone -- NOT when a live page was blocked by policy.
     """
+    if isinstance(e, CitationCheckResult):
+        if e.classification == CLASSIFICATION_DEAD:
+            return True
+        if e.classification in (CLASSIFICATION_OK, CLASSIFICATION_POLICY_DENIED):
+            return False
+        if e.reachable_on_host:
+            return False
+        if e.http_status is not None:
+            return e.http_status in DEAD_HTTP_STATUSES
+        err = e.error or ""
+        if err.startswith("blocked") or err == "unsupported scheme" or "redirect" in err:
+            return False
+        return True
+
+    if e.get("classification") == CLASSIFICATION_DEAD:
+        return True
+    if e.get("classification") in (CLASSIFICATION_OK, CLASSIFICATION_POLICY_DENIED):
+        return False
     if e.get("reachable"):
         return False
     status = e.get("http_status")
@@ -363,14 +630,25 @@ def is_dead(e: dict) -> bool:
     return True
 
 
-def summarize(evidence: list[dict]) -> dict:
+def summarize(evidence: list[dict | CitationCheckResult]) -> dict:
     checked = len(evidence)
     dead = sum(1 for e in evidence if is_dead(e))
-    lit_checked = [e for e in evidence if e["literal"] and e["reachable"]]
-    lit_missing = sum(1 for e in lit_checked if e["literal_found"] is False)
-    return {"checked": checked, "dead": dead,
-            "dead_frac": round(dead / checked, 2) if checked else 0.0,
-            "literal_checked": len(lit_checked), "literal_missing": lit_missing}
+    ok = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_OK)
+    policy_denied = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_POLICY_DENIED)
+    unreachable = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_UNREACHABLE)
+    lit_checked = [e for e in evidence if e.get("literal") and e.get("reachable")]
+    lit_missing = sum(1 for e in lit_checked if e.get("literal_found") is False)
+    return {
+        "checked": checked,
+        "ok": ok,
+        "dead": dead,
+        "policy_denied": policy_denied,
+        "unreachable": unreachable,
+        "dead_frac": round(dead / checked, 2) if checked else 0.0,
+        "policy_denied_frac": round(policy_denied / checked, 2) if checked else 0.0,
+        "literal_checked": len(lit_checked),
+        "literal_missing": lit_missing,
+    }
 
 
 def is_hard_fail(summary: dict) -> bool:
@@ -378,24 +656,24 @@ def is_hard_fail(summary: dict) -> bool:
             and summary["dead_frac"] > DEAD_FRAC_HARD_FAIL)
 
 
-def evidence_block(evidence: list[dict]) -> str:
+def evidence_block(evidence: list[dict | CitationCheckResult]) -> str:
     """Compact text for the critic prompt — structured facts only, never raw
     fetched page content (see module docstring / F10)."""
     if not evidence:
         return "(no citations found to verify)"
     lines = []
     for e in evidence[:MAX_CITATIONS]:
-        if e["reachable"]:
+        classification = e.get("classification")
+        if classification == CLASSIFICATION_POLICY_DENIED:
+            status = "POLICY_DENIED (verified live on host; blocked by worker egress policy)"
+        elif e.get("reachable"):
             status = "OK"
         elif is_dead(e):
             status = f"DEAD ({e.get('http_status') or e.get('error')})"
         else:
-            # RC-1: server responded (403/429/5xx) but the bot was refused -- the page
-            # likely EXISTS, so this is "blocked", not "dead"/fabricated. Telling the
-            # critic a blocked page is "UNREACHABLE" made a true claim look like a lie
-            # (M7/task119: model said FlowGPT "loads", gate said UNREACHABLE 403).
             status = f"BLOCKED ({e.get('http_status') or e.get('error')})"
-        lit = f", claimed value '{e['literal']}' found on page: {e['literal_found']}" \
-            if e["literal"] and e["reachable"] else ""
-        lines.append(f"- {e['url']}: {status}{lit}")
+        lit = f", claimed value '{e.get('literal')}' found on page: {e.get('literal_found')}" \
+            if e.get("literal") and e.get("reachable") else ""
+        lines.append(f"- {e.get('url')}: {status}{lit}")
     return "\n".join(lines)
+

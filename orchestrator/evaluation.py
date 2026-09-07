@@ -261,7 +261,10 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
 
     evidence_error: str | None = None
     try:
-        evidence = citecheck.verify(out)
+        try:
+            evidence = citecheck.verify(out, task_id=row.get("task_id"), attempt=attempt, runs_dir=RUNS)
+        except TypeError:
+            evidence = citecheck.verify(out)
     except Exception as e:
         log(f"citation check failed ({e}) -- proceeding without mechanical evidence")
         evidence = []
@@ -270,11 +273,12 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     usage["citation_fetches"] = len(evidence)
     usage["citation_unique_urls"] = len({e.get("url") for e in evidence if e.get("url")})
     try:
+        serialized_evidence = [e.to_dict() if hasattr(e, "to_dict") else e for e in evidence]
         ev_payload = json.dumps({"task_id": row["task_id"], "attempt": attempt,
                     "fetch_attempts": len(evidence),
                     "unique_urls": usage["citation_unique_urls"],
                     "summary": summary, "error": evidence_error,
-                    "evidence": evidence}, indent=2) + "\n"
+                    "evidence": serialized_evidence}, indent=2) + "\n"
         (RUNS / f"task{row['task_id']}_a{attempt}_citation_evidence.json").write_text(
             ev_payload, encoding="utf-8")
         if attempt == 1:

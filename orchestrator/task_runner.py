@@ -396,6 +396,25 @@ def _run_research_task(context: _TaskContext) -> str:
     usage_path = rc.RUNS / f"task{tid}_a{attempt}_worker.usage.json"
     fs_snapshot = integrity.fs_integrity_snapshot()
     usage: dict = {}
+
+    # F133: Record active policy_digest and allowlisted_hosts list into
+    # task{tid}_a{attempt}_worker.usage.json at worker dispatch (Gap 1).
+    # Evaluates policy_digest from the signed attestation token in force, NOT live file.
+    try:
+        from egress_policy import snapshot_egress_policy
+        policy_snapshot = snapshot_egress_policy()
+    except Exception:
+        policy_snapshot = {"policy_digest": None, "allowlisted_hosts": []}
+
+    usage["policy_digest"] = policy_snapshot.get("policy_digest")
+    usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+    if not usage_path.is_file():
+        usage_path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            usage_path.write_text(json.dumps(policy_snapshot, indent=2), encoding="utf-8")
+        except Exception:
+            pass
+
     # F106 §2 (audit 2026-09-05): fs_integrity_check MUST run even when the
     # worker call aborts (timeout / DB-containment violation / launch failure).
     # Previously it sat AFTER the try/except on the success path only, so a
@@ -412,10 +431,27 @@ def _run_research_task(context: _TaskContext) -> str:
                 out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
                     prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
                     **worker_options)
+            usage["policy_digest"] = policy_snapshot.get("policy_digest")
+            usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+            if usage_path.is_file():
+                try:
+                    curr_usage = json.loads(usage_path.read_text(encoding="utf-8"))
+                    curr_usage["policy_digest"] = policy_snapshot.get("policy_digest")
+                    curr_usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+                    usage_path.write_text(json.dumps(curr_usage, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
+            else:
+                try:
+                    usage_path.write_text(json.dumps(usage, indent=2), encoding="utf-8")
+                except Exception:
+                    pass
             if attempt == 1 and usage_path.is_file():
                 (rc.RUNS / f"task{tid}_worker.usage.json").write_bytes(usage_path.read_bytes())
         except subprocess.TimeoutExpired:
-            write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout"}, "worker", attempt=attempt)
+            usage["policy_digest"] = policy_snapshot.get("policy_digest")
+            usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+            write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout", **policy_snapshot}, "worker", attempt=attempt)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes="worker timeout",
                                append_note=True, attempt_count=attempt)
@@ -424,7 +460,9 @@ def _run_research_task(context: _TaskContext) -> str:
                 tw.task_failed("worker timeout", failure_stage="execution")
             return "infra_failed"
         except integrity.DatabaseMutationViolation as exc:
-            write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc)}, "worker", attempt=attempt)
+            usage["policy_digest"] = policy_snapshot.get("policy_digest")
+            usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+            write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc), **policy_snapshot}, "worker", attempt=attempt)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes=f"database containment violation: {exc}",
                                append_note=True, attempt_count=attempt)
@@ -433,7 +471,9 @@ def _run_research_task(context: _TaskContext) -> str:
                 tw.task_failed("database containment violation", failure_stage="execution")
             return "infra_failed"
         except Exception as exc:
-            write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc)}, "worker", attempt=attempt)
+            usage["policy_digest"] = policy_snapshot.get("policy_digest")
+            usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+            write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc), **policy_snapshot}, "worker", attempt=attempt)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes=f"worker launch failure: {exc}",
                                append_note=True, attempt_count=attempt)

@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T19:03:23Z",
+  "last_updated": "2026-09-07T19:05:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Phase 2 (F133): Attestation snapshot at worker run time + citecheck CitationCheckResult schema and broker cross-check",
+      "task_id": "G5-PHASE2-ATTESTATION-CITECHECK-F133",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-07T19:05:00Z",
+      "last_update": "2026-09-07T19:35:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
+      "notes": "COMPLETED. Landed F133: (1) Added get_attestation_policy_digest and snapshot_egress_policy to orchestrator/egress_policy.py ensuring policy_digest reads from signed attestation token (Gap 1); (2) Recorded active policy_digest and allowlisted_hosts into runs/task{tid}_a{attempt}_worker.usage.json at dispatch in orchestrator/task_runner.py; (3) Implemented immutable CitationCheckResult dataclass schema in orchestrator/citecheck.py (§4.1) evaluating worker_policy_permitted from frozen snapshot and broker_attempt_verified from runs/task{tid}_a{attempt}_broker.audit.jsonl; (4) Updated orchestrator/evaluation.py to pass task/attempt to citecheck.verify; (5) Expanded tests/test_citecheck.py with Sections 4-6 covering schema, Gap 1 invariant, and kill-assumption cross-check (46/46 checks green); (6) Full model-free gate 76/76 suites green. Write scope released. Ready for Phase 3 (F134)."
+    },
     {
       "agent": "claude-code",
       "role": "G5 final greenlight + architecture-completion plan author (documentation only) \u2014 COMPLETED",
