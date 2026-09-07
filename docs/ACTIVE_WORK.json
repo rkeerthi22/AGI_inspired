@@ -1,26 +1,30 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T17:20:00Z",
+  "last_updated": "2026-09-07T19:03:23Z",
   "active_agents": [
     {
       "agent": "claude-code",
-      "role": "G5 final greenlight + architecture-completion plan author (documentation only) — COMPLETED",
+      "role": "G5 final greenlight + architecture-completion plan author (documentation only) \u2014 COMPLETED",
       "task_id": "G5-FINAL-GREENLIGHT-2026-09-07",
       "mode": "completed",
-      "owned_paths": ["docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md"],
+      "owned_paths": [
+        "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md"
+      ],
       "started_at": "2026-09-07T17:00:00Z",
       "last_update": "2026-09-07T17:20:00Z",
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
-      "notes": "COMPLETED. Verified G5 Rev 2.0 against disk: all 3 adversarial conditions baked in (Gap 1 attestation-digest time-of-check; Gap 2 empirical broker audit CONFIRMED egress_broker.py:93 deny path omits host= field — real gap; Gap 3 25% abuse bound + min 2 OK + fabrication guard). Gate 76/76 green measured. Issued GREENLIGHT for G5 Phase 1 (broker logging hardening) with the prerequisite sequence: Phase 1 broker host= logging + per-attempt correlation + hermetic tests FIRST, then Phase 2 citecheck schema, then Phase 3 abuse bounds. Hermes H1 (prediction_machine, 3rd turn outstanding) and H2 (broker audit-log review) still NOT delivered as separate docs — Gemini's code audit partially covered H2 but Hermes owes the independent confirmation and H1. Authored master architecture-completion plan for Gemini/Codex/Hermes. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
+      "notes": "COMPLETED. Verified G5 Rev 2.0 against disk: all 3 adversarial conditions baked in (Gap 1 attestation-digest time-of-check; Gap 2 empirical broker audit CONFIRMED egress_broker.py:93 deny path omits host= field \u2014 real gap; Gap 3 25% abuse bound + min 2 OK + fabrication guard). Gate 76/76 green measured. Issued GREENLIGHT for G5 Phase 1 (broker logging hardening) with the prerequisite sequence: Phase 1 broker host= logging + per-attempt correlation + hermetic tests FIRST, then Phase 2 citecheck schema, then Phase 3 abuse bounds. Hermes H1 (prediction_machine, 3rd turn outstanding) and H2 (broker audit-log review) still NOT delivered as separate docs \u2014 Gemini's code audit partially covered H2 but Hermes owes the independent confirmation and H1. Authored master architecture-completion plan for Gemini/Codex/Hermes. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
     },
     {
       "agent": "claude-code",
-      "role": "G5 asymmetry proposal adversarial review + next-action brief author (documentation only) — COMPLETED",
+      "role": "G5 asymmetry proposal adversarial review + next-action brief author (documentation only) \u2014 COMPLETED",
       "task_id": "G5-ADVERSARIAL-REVIEW-2026-09-07",
       "mode": "completed",
-      "owned_paths": ["docs/G5_ASYMMETRY_REVIEW_AND_NEXT_ACTIONS_2026-09-07.md"],
+      "owned_paths": [
+        "docs/G5_ASYMMETRY_REVIEW_AND_NEXT_ACTIONS_2026-09-07.md"
+      ],
       "started_at": "2026-09-07T09:10:00Z",
       "last_update": "2026-09-07T09:30:00Z",
       "status": "completed",
@@ -56,16 +60,18 @@
     },
     {
       "agent": "claude-code",
-      "role": "Post-cohort evidence-integrity task brief author (documentation only) — COMPLETED",
+      "role": "Post-cohort evidence-integrity task brief author (documentation only) \u2014 COMPLETED",
       "task_id": "EVIDENCE-INTEGRITY-BRIEF-2026-09-07",
       "mode": "completed",
-      "owned_paths": ["docs/EVIDENCE_INTEGRITY_TASKS_2026-09-07.md"],
+      "owned_paths": [
+        "docs/EVIDENCE_INTEGRITY_TASKS_2026-09-07.md"
+      ],
       "started_at": "2026-09-07T06:05:00Z",
       "last_update": "2026-09-07T06:20:00Z",
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/EVIDENCE_INTEGRITY_TASKS_2026-09-07.md",
-      "notes": "COMPLETED. Independently verified 7/7 cohort PASS against real ledger (tasks 106/109/140/115/137/145/150 all critic_verdict=pass, status=done); gate 75/75 green; WFP rules provisioned; OmniRoute still correctly held. Authored post-cohort task brief assigning Gemini (code fixes: HIGH-1 retry-artifact collision, MEDIUM-2 gate-during-window race, MEDIUM-1 multi-attempt accounting, LOW-2 test residue) + verification-asymmetry STRUCTURAL design proposal; Hermes (diagnostic: LOW-1 prediction_machine import restore-or-remove; independent verification of fixes). Surfaced honest caveat: Gemini's validation doc token table mismatches ledger on 3/7 rows (M1/M2/M4) — live evidence of MEDIUM-1. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
+      "notes": "COMPLETED. Independently verified 7/7 cohort PASS against real ledger (tasks 106/109/140/115/137/145/150 all critic_verdict=pass, status=done); gate 75/75 green; WFP rules provisioned; OmniRoute still correctly held. Authored post-cohort task brief assigning Gemini (code fixes: HIGH-1 retry-artifact collision, MEDIUM-2 gate-during-window race, MEDIUM-1 multi-attempt accounting, LOW-2 test residue) + verification-asymmetry STRUCTURAL design proposal; Hermes (diagnostic: LOW-1 prediction_machine import restore-or-remove; independent verification of fixes). Surfaced honest caveat: Gemini's validation doc token table mismatches ledger on 3/7 rows (M1/M2/M4) \u2014 live evidence of MEDIUM-1. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
     },
     {
       "agent": "gemini-cli",
@@ -146,10 +152,12 @@
     },
     {
       "agent": "claude-code",
-      "role": "Shared launch brief author (documentation only) — COMPLETED",
+      "role": "Shared launch brief author (documentation only) \u2014 COMPLETED",
       "task_id": "SHARED-LAUNCH-BRIEF-2026-09-06",
       "mode": "completed",
-      "owned_paths": ["docs/SHARED_LAUNCH_BRIEF_2026-09-06.md"],
+      "owned_paths": [
+        "docs/SHARED_LAUNCH_BRIEF_2026-09-06.md"
+      ],
       "started_at": "2026-09-06T02:35:00Z",
       "last_update": "2026-09-06T02:45:00Z",
       "status": "completed",
@@ -237,7 +245,7 @@
     },
     {
       "agent": "claude-code",
-      "role": "Branch integration + canonical doc sync (model-free) — COMPLETED; master pushed",
+      "role": "Branch integration + canonical doc sync (model-free) \u2014 COMPLETED; master pushed",
       "task_id": "BRANCH-INTEGRATION-2026-09-04",
       "mode": "completed",
       "owned_paths": [],
@@ -246,11 +254,11 @@
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md",
-      "notes": "DONE. Independently verified Codex's uncommitted batch (351104e + d8037f3) from repo state — 5 operator-auth trust properties, 61/61 gate, no tracked secrets, ESTOP engaged, ARK vaulted. FF-merged to master (f9a07fe), bumped continuity to rev 56 (recover-clean at 170161b), pushed master. Findings + open-items tracker in docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md. Forward work (red-team blueprint for Codex) in docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md. MODEL-FREE — nothing cleared for live execution."
+      "notes": "DONE. Independently verified Codex's uncommitted batch (351104e + d8037f3) from repo state \u2014 5 operator-auth trust properties, 61/61 gate, no tracked secrets, ESTOP engaged, ARK vaulted. FF-merged to master (f9a07fe), bumped continuity to rev 56 (recover-clean at 170161b), pushed master. Findings + open-items tracker in docs/AGENT_HANDOFF_2026-09-03_SECURITY_PREFLIGHT_INTEGRATION.md. Forward work (red-team blueprint for Codex) in docs/CODEX_HANDOFF_2026-09-04_REDTEAM_AND_BLUEPRINT.md. MODEL-FREE \u2014 nothing cleared for live execution."
     },
     {
       "agent": "codex",
-      "role": "Security repair, release preflight, branch integration — COMPLETED (code landed 351104e/d8037f3, independently verified + merged to master by claude-code)",
+      "role": "Security repair, release preflight, branch integration \u2014 COMPLETED (code landed 351104e/d8037f3, independently verified + merged to master by claude-code)",
       "task_id": "SECURITY-PREFLIGHT-INTEGRATION-2026-09-03",
       "mode": "completed",
       "owned_paths": [],
@@ -276,7 +284,7 @@
     },
     {
       "agent": "claude-code",
-      "role": "Multi-Provider Wiring + Phase 4 Job Objects + SQLite Migrations + Operator Identity — COMPLETED",
+      "role": "Multi-Provider Wiring + Phase 4 Job Objects + SQLite Migrations + Operator Identity \u2014 COMPLETED",
       "task_id": "MULTI-PROVIDER-BUILD-2026-09-02",
       "mode": "completed",
       "owned_paths": [],
@@ -289,16 +297,19 @@
     },
     {
       "agent": "hermes",
-      "role": "Pre-validation closeout owner (documentation/operational only) - COMPLETED; review passed",
-      "task_id": "PRE-VALIDATION-CLOSEOUT",
+      "role": "Hygiene fix owner: prediction_machine hook path (H1/LOW-1) - completed",
+      "task_id": "H1-PREDICTION-HOOK-PATH",
       "mode": "completed",
-      "owned_paths": [],
+      "owned_paths": [
+        "orchestrator/task_runner.py",
+        "tests/test_critical_path_regressions.py"
+      ],
       "started_at": "2026-09-01T02:55:00Z",
-      "last_update": "2026-09-02T10:00:00Z",
+      "last_update": "2026-09-07T19:03:23Z",
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/AGENT_HANDOFF_2026-09-03_M3_M7_AND_FAILOVER_CLOSEOUT.md",
-      "notes": "Historical implementation details remain in docs/HERMES_HANDOFF_2026-08-31_OPERATOR_CLI.md. Current shared runtime truth is the 2026-09-03 cross-agent handoff."
+      "notes": "Fixed task_runner.py:120 (rc.ROOT.parent -> rc.ROOT); hook import proven in fresh interpreter; 2 regression checks added; full gate 76/76 green. No window open, no live calls, model-free."
     },
     {
       "agent": "codex",
@@ -328,7 +339,7 @@
     },
     {
       "agent": "claude-code",
-      "role": "Independent Reviewer — Operator CLI & Boundary Hardening",
+      "role": "Independent Reviewer \u2014 Operator CLI & Boundary Hardening",
       "task_id": "INDEPENDENT-REVIEW-2026-09-02",
       "mode": "completed",
       "owned_paths": [],
@@ -359,7 +370,7 @@
     "3. Multi-agent concurrent implementations require ephemeral git worktrees.",
     "4. All agents must inspect ACTIVE_WORK.json and AGENTS.md before modifying any file.",
     "5. An agent must update its handoff when stopping, being quota-blocked, or transferring ownership.",
-    "6. Completion requires evidence: files exist, full model-free gate green (the suite count is dynamic — read it from tests/run_all.py output, never trust a hardcoded number), continuity validates, handoff updated.",
-    "7. Hive agent edits to S:/AGI_like are gated at window-open time by cohort_hive_quiesce.py's process/fleet inventory; per-edit ownership is convention-based per rules 1-4 (no enforce.js file exists — verified absent 2026-09-03)."
+    "6. Completion requires evidence: files exist, full model-free gate green (the suite count is dynamic \u2014 read it from tests/run_all.py output, never trust a hardcoded number), continuity validates, handoff updated.",
+    "7. Hive agent edits to S:/AGI_like are gated at window-open time by cohort_hive_quiesce.py's process/fleet inventory; per-edit ownership is convention-based per rules 1-4 (no enforce.js file exists \u2014 verified absent 2026-09-03)."
   ]
 }

@@ -1,5 +1,6 @@
 """Model-free regressions for controlled retrieval and outcome classification."""
 import contextlib
+import subprocess
 import io
 import sys
 import types
@@ -370,6 +371,28 @@ checks.update({
     "synthesis finish_task received merged tokens":
         _last_finish.get("tokens_in") == 3400 and _last_finish.get("tokens_out") == 820,
     "synthesis finish_task status done": _last_finish.get("status") == "done",
+})
+
+# --- prediction hook resolves under production path setup (H1/LOW-1) ----------
+# 2026-09-07: task_runner.py:120 inserted rc.ROOT.parent (S:\\) into sys.path
+# instead of rc.ROOT, making prediction_machine invisible and firing a fail_soft
+# ModuleNotFoundError on EVERY task since at least task 83. The regression proves
+# the hook import resolves with the production path setup, in a fresh
+# interpreter, and that the buggy parent-path setup no longer appears in source.
+
+_h1_src = (ROOT / "orchestrator" / "task_runner.py").read_text(encoding="utf-8")
+_h1_fresh = subprocess.run(
+    [sys.executable, "-B", "-c",
+     "import sys; sys.path.insert(0, 'orchestrator'); "
+     "import runtime_context as rc; sys.path.insert(0, str(rc.ROOT)); "
+     "from prediction_machine.integrations.batch_runner_hook import before_task_runs, after_task_completes; print('ok')"],
+    capture_output=True, text=True, cwd=ROOT, timeout=60)
+checks.update({
+    "task_runner no longer inserts rc.ROOT.parent for the prediction hook":
+        "sys.path.insert(0, str(rc.ROOT.parent))" not in _h1_src
+        and "sys.path.insert(0, str(rc.ROOT))" in _h1_src,
+    "prediction hook import resolves under production path setup":
+        _h1_fresh.returncode == 0 and _h1_fresh.stdout.strip().endswith("ok"),
 })
 
 failed = []

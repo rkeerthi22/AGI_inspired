@@ -117,7 +117,12 @@ def _run_research_task(context: _TaskContext) -> str:
     # still runs the harness normally, and `after_task_completes` at the bottom of run_task
     # already returns None cleanly when no matching prediction exists.)
     try:
-        sys.path.insert(0, str(rc.ROOT.parent))
+        # prediction_machine/ lives INSIDE the repo (its own paths.py defines
+        # REPO_ROOT = PACKAGE_ROOT.parent = S:\AGI_like). Inserting ROOT.parent
+        # (S:\) made the package invisible and fired a fail_soft
+        # ModuleNotFoundError on every task since at least task 83. ROOT itself
+        # is the correct search path. (H1/LOW-1, 2026-09-07.)
+        sys.path.insert(0, str(rc.ROOT))
         from prediction_machine.integrations.batch_runner_hook import before_task_runs
         before_task_runs(tid, row["spec"], mission["id"])
     except Exception as e:
