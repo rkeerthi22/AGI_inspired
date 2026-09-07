@@ -2950,3 +2950,34 @@ Fix:
 Verified by running `test_m5_dryrun.py` (2/2), `test_f50.py` (15/15), and `test_f66.py` (39/39)
 with zero residue left in `runs/`.
 
+### F132 — Egress broker per-host denial logging and attempt-scoped audit correlation — P1 — FIXED 2026-09-07
+
+Prior behavior: In `orchestrator/egress_broker.py`, `BrokerHandler.do_CONNECT` caught authorization
+and policy exceptions and recorded `self.server.audit(decision="deny", reason=str(exc)[:120])` without
+a `host=` field, whereas the allow path recorded `host=host`. Consequently, when a sandboxed worker
+was denied an external target, no machine-readable record of the denied host existed. Furthermore,
+the broker logged only to a global daemon file (`--audit`), with no correlation to the running
+task ID or attempt count. This lack of per-attempt, per-host denial records created a critical
+kill-assumption block for the G5 Option B+ verification-asymmetry architecture (Phase 1).
+
+Fix:
+1. Deny Audit Host Field (`orchestrator/egress_broker.py:BrokerHandler.do_CONNECT`):
+   Always extracts destination host prior to authorization and includes `host=extracted_host` in all
+   denial audit records (`decision="deny", host=extracted_host, reason=...`), including policy denials,
+   byte limit exceeded, and unsupported HTTP verbs.
+2. Per-Attempt Correlation & Audit Log (`orchestrator/egress_broker.py:EgressBroker`, `ActiveBrokerCorrelation`):
+   Added `ActiveBrokerCorrelation` context manager and request header correlation (`X-Task-Id`, `X-Attempt`)
+   so that broker requests during a worker turn are automatically attributed and logged directly to
+   `runs/task{tid}_a{attempt}_broker.audit.jsonl`.
+3. Worker Execution Integration (`orchestrator/execution.py:hermes_worker`):
+   Wired `ActiveBrokerCorrelation` into worker process execution, passing `HARNESS_TASK_ID`,
+   `HARNESS_ATTEMPT`, and `HARNESS_BROKER_AUDIT` in the worker environment.
+4. Hermetic Integration Tests (`tests/test_egress_broker_integration.py`):
+   Added 4 new test sections (38/38 checks passing) verifying:
+   - Deny audit records strictly include `host` field specifically naming the requested host.
+   - Header-correlated requests generate attempt-scoped `task{tid}_a{attempt}_broker.audit.jsonl`.
+   - `ActiveBrokerCorrelation` context manager generates attempt-scoped audit records and cleans up the active marker on exit.
+   - Kill-assumption test: denied `CONNECT example.com:443` produces exact record with `decision="deny"`, `host="example.com"`, `task_id=9112`, `attempt=3`.
+
+Verified by `tests/test_egress_broker_integration.py` (38/38 checks green) and full model-free test gate (76/76 suites green).
+

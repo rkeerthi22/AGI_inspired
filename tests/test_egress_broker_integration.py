@@ -141,6 +141,7 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace", ignore_cleanup_errors=T
         audit_path=audit_file,
         resolver=global_resolver,
         upstream_connector=upstream_connector,
+        runs_dir=root,
     )
     broker_port = broker.server_address[1]
     broker_thread = threading.Thread(target=broker.serve_forever, daemon=True)
@@ -319,7 +320,82 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace", ignore_cleanup_errors=T
               any(rec.get("reason") == "connection_bytes_exceeded" for rec in audit_records))
         check("audit entries include valid ISO timestamps",
               all("timestamp" in rec for rec in audit_records))
+        # F132: Verify deny records contain host field and specifically name requested host
+        check("deny audit records contain host field",
+              all(bool(rec.get("host")) for rec in audit_records if rec.get("decision") == "deny"))
+        check("unauthorized host deny specifically names requested host",
+              any(rec.get("host") == "unauthorized.example.com" and rec.get("decision") == "deny" for rec in audit_records))
 
+        # 9. Header-correlated attempt audit logging (F132)
+        header_target = "denied-by-policy.header.test"
+        with local_connect(broker_port) as s:
+            s.sendall(
+                f"CONNECT {header_target}:443 HTTP/1.1\r\n"
+                f"Host: {header_target}:443\r\n"
+                "X-Task-Id: 9110\r\n"
+                "X-Attempt: 2\r\n\r\n".encode("latin1")
+            )
+            code, reason, _ = read_http_response(s)
+            check("header-correlated CONNECT returns 403", code == 403)
+
+        task_audit_file = root / "task9110_a2_broker.audit.jsonl"
+        check("header-correlated attempt broker audit file exists", task_audit_file.is_file())
+        if task_audit_file.is_file():
+            lines = [json.loads(line) for line in task_audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            check("header attempt audit file has at least 1 record", len(lines) >= 1)
+            rec = lines[-1]
+            check("header attempt audit record decision is deny", rec.get("decision") == "deny")
+            check("header attempt audit record host matches target", rec.get("host") == header_target)
+            check("header attempt audit record task_id matches", rec.get("task_id") == 9110)
+            check("header attempt audit record attempt matches", rec.get("attempt") == 2)
+            check("header attempt audit record reason is host_not_allowlisted", rec.get("reason") == "host_not_allowlisted")
+
+        # 10. ActiveBrokerCorrelation context manager correlation (F132)
+        active_target = "blocked-by-policy.active.test"
+        with egress_broker.ActiveBrokerCorrelation(root, task_id=9111, attempt=1):
+            marker = root / "task_active_broker_correlation.json"
+            check("ActiveBrokerCorrelation marker exists during context", marker.is_file())
+            with local_connect(broker_port) as s:
+                s.sendall(
+                    f"CONNECT {active_target}:443 HTTP/1.1\r\n"
+                    f"Host: {active_target}:443\r\n\r\n".encode("latin1")
+                )
+                code, reason, _ = read_http_response(s)
+                check("active-correlated CONNECT returns 403", code == 403)
+
+        check("ActiveBrokerCorrelation marker cleaned up on context exit", not marker.is_file())
+        active_audit_file = root / "task9111_a1_broker.audit.jsonl"
+        check("active-correlated attempt broker audit file exists", active_audit_file.is_file())
+        if active_audit_file.is_file():
+            lines = [json.loads(line) for line in active_audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            check("active attempt audit file has record", len(lines) >= 1)
+            rec = lines[-1]
+            check("active attempt audit record decision is deny", rec.get("decision") == "deny")
+            check("active attempt audit record host matches target", rec.get("host") == active_target)
+            check("active attempt audit record task_id matches", rec.get("task_id") == 9111)
+            check("active attempt audit record attempt matches", rec.get("attempt") == 1)
+            check("active attempt audit record reason is host_not_allowlisted", rec.get("reason") == "host_not_allowlisted")
+
+        # 11. Kill-Assumption Test: Denied https://example.com produces exact record
+        kill_target = "example.com"
+        with egress_broker.ActiveBrokerCorrelation(root, task_id=9112, attempt=3):
+            with local_connect(broker_port) as s:
+                s.sendall(
+                    f"CONNECT {kill_target}:443 HTTP/1.1\r\n"
+                    f"Host: {kill_target}:443\r\n\r\n".encode("latin1")
+                )
+                code, reason, _ = read_http_response(s)
+                check("kill-assumption CONNECT returns 403", code == 403)
+
+        kill_audit_file = root / "task9112_a3_broker.audit.jsonl"
+        check("kill-assumption broker audit file exists", kill_audit_file.is_file())
+        if kill_audit_file.is_file():
+            records = [json.loads(line) for line in kill_audit_file.read_text(encoding="utf-8").splitlines() if line.strip()]
+            match = any(
+                r.get("decision") == "deny" and r.get("host") == kill_target and r.get("task_id") == 9112 and r.get("attempt") == 3
+                for r in records
+            )
+            check("kill-assumption record contains decision=deny, host=example.com, task_id=9112, attempt=3", match)
     finally:
         broker.shutdown()
         broker.server_close()

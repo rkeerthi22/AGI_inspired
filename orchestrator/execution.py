@@ -122,6 +122,22 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # attempt alone just as the usage file does, not append to the prior run.
     audit_path.unlink(missing_ok=True)
     env["HARNESS_RETRIEVAL_AUDIT"] = str(audit_path)
+
+    # F132: Attempt-scoped broker audit log and active correlation context
+    import re
+    from egress_broker import ActiveBrokerCorrelation
+    m = re.match(r"^task(\d+)(?:_a(\d+))?_", usage_path.name)
+    tid = int(m.group(1)) if m else None
+    attempt = int(m.group(2)) if m and m.group(2) else 1
+    broker_audit_path = usage_path.parent / (
+        f"task{tid}_a{attempt}_broker.audit.jsonl" if tid else f"{usage_path.stem}_broker.audit.jsonl"
+    )
+    broker_audit_path.unlink(missing_ok=True)
+    env["HARNESS_BROKER_AUDIT"] = str(broker_audit_path)
+    if tid is not None:
+        env["HARNESS_TASK_ID"] = str(tid)
+        env["HARNESS_ATTEMPT"] = str(attempt)
+
     # Point HERMES_HOME at the dedicated worker home directory, ensuring
     # custom provider configs (e.g. byteplus-coding) are discovered while
     # preventing runtime pollution or SQLite lock failures in .harness.
@@ -139,84 +155,85 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
         if source_config and Path(source_config).is_file():
             shutil.copy2(source_config, worker_config)
 
-    # Spawn the worker inside a Windows Job Object for process containment.
-    try:
-        import pty_daemon as _pty
-        proc, h_job, sout, serr = _pty.create_contained_process(
-            cmd, cwd=str(ROOT), env=env, restricted_worker=True)
-        if hasattr(proc, "stdin") and proc.stdin is not None:
+    with ActiveBrokerCorrelation(usage_path.parent, tid, attempt, broker_audit_path):
+        # Spawn the worker inside a Windows Job Object for process containment.
+        try:
+            import pty_daemon as _pty
+            proc, h_job, sout, serr = _pty.create_contained_process(
+                cmd, cwd=str(ROOT), env=env, restricted_worker=True)
+            if hasattr(proc, "stdin") and proc.stdin is not None:
+                try:
+                    proc.stdin.close()
+                except Exception:
+                    pass
+        except Exception as exc:
+            raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
+
+        # ESTOP watchdog: poll pause_engaged() during the worker's lifetime so
+        # engaging ESTOP terminates the in-flight process tree immediately
+        # instead of only gating the next task.
+        from execution_pause import pause_engaged as _pause_engaged
+        _WATCHDOG_POLL_S = 5
+        try:
+            _deadline = monotonic() + timeout
+            while True:
+                if _pause_engaged():
+                    _pty.terminate_job(h_job)
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    try:
+                        proc.wait(timeout=5)
+                    except Exception:
+                        pass
+                    raise RuntimeError("worker killed by ESTOP")
+                remaining = _deadline - monotonic()
+                if remaining <= 0:
+                    _pty.terminate_job(h_job)
+                    try:
+                        proc.kill()
+                    except Exception:
+                        pass
+                    try:
+                        proc.wait(timeout=5)
+                    except Exception:
+                        pass
+                    raise subprocess.TimeoutExpired(cmd, timeout)
+                try:
+                    proc.wait(timeout=min(_WATCHDOG_POLL_S, remaining))
+                    break  # process finished normally
+                except subprocess.TimeoutExpired:
+                    continue  # check ESTOP again
+        finally:
+            # KILL_ON_JOB_CLOSE: the job handle must stay open until the process
+            # finishes; closing it early would terminate the worker prematurely.
             try:
-                proc.stdin.close()
+                _pty.close_job(h_job)
             except Exception:
                 pass
-    except Exception as exc:
-        raise RuntimeError(f"failed to create contained worker process: {exc}") from exc
+            # Drain final pipe bytes before collecting output or releasing streams.
+            sout.wait(timeout=5)
+            serr.wait(timeout=5)
+            if isinstance(proc, worker_sandbox.RestrictedProcess):
+                proc.close()
 
-    # ESTOP watchdog: poll pause_engaged() during the worker's lifetime so
-    # engaging ESTOP terminates the in-flight process tree immediately
-    # instead of only gating the next task.
-    from execution_pause import pause_engaged as _pause_engaged
-    _WATCHDOG_POLL_S = 5
-    try:
-        _deadline = monotonic() + timeout
-        while True:
-            if _pause_engaged():
-                _pty.terminate_job(h_job)
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                try:
-                    proc.wait(timeout=5)
-                except Exception:
-                    pass
-                raise RuntimeError("worker killed by ESTOP")
-            remaining = _deadline - monotonic()
-            if remaining <= 0:
-                _pty.terminate_job(h_job)
-                try:
-                    proc.kill()
-                except Exception:
-                    pass
-                try:
-                    proc.wait(timeout=5)
-                except Exception:
-                    pass
-                raise subprocess.TimeoutExpired(cmd, timeout)
-            try:
-                proc.wait(timeout=min(_WATCHDOG_POLL_S, remaining))
-                break  # process finished normally
-            except subprocess.TimeoutExpired:
-                continue  # check ESTOP again
-    finally:
-        # KILL_ON_JOB_CLOSE: the job handle must stay open until the process
-        # finishes; closing it early would terminate the worker prematurely.
-        try:
-            _pty.close_job(h_job)
-        except Exception:
-            pass
-        # Drain final pipe bytes before collecting output or releasing streams.
-        sout.wait(timeout=5)
-        serr.wait(timeout=5)
-        if isinstance(proc, worker_sandbox.RestrictedProcess):
-            proc.close()
+        # Collect output from pipe drains.
+        stdout_text = sout.text
+        stderr_text = serr.text
 
-    # Collect output from pipe drains.
-    stdout_text = sout.text
-    stderr_text = serr.text
-
-    usage = {}
-    if usage_path.exists():
-        usage = json.loads(usage_path.read_text(encoding="utf-8"))
-    # Preserve process-level failure evidence. Hermes may report transport/auth
-    # errors only on stderr; reducing that to empty stdout misclassifies provider
-    # capacity as a mission-quality failure.
-    process_returncode = int(getattr(proc, "returncode", 0) or 0)
-    if process_returncode:
-        usage["process_returncode"] = process_returncode
-    if stderr_text:
-        usage["process_error"] = stderr_text.strip()[:2000]
-    return stdout_text.strip(), usage
+        usage = {}
+        if usage_path.exists():
+            usage = json.loads(usage_path.read_text(encoding="utf-8"))
+        # Preserve process-level failure evidence. Hermes may report transport/auth
+        # errors only on stderr; reducing that to empty stdout misclassifies provider
+        # capacity as a mission-quality failure.
+        process_returncode = int(getattr(proc, "returncode", 0) or 0)
+        if process_returncode:
+            usage["process_returncode"] = process_returncode
+        if stderr_text:
+            usage["process_error"] = stderr_text.strip()[:2000]
+        return stdout_text.strip(), usage
 
 
 def ollama_chat(model: str, prompt: str, timeout: int = 300,

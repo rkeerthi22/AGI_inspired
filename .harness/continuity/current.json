@@ -1,27 +1,28 @@
 {
   "schema_version": 2,
-  "brief_revision": 83,
-  "created_at": "2026-09-07T16:37:35.291309+00:00",
+  "brief_revision": 84,
+  "created_at": "2026-09-07T18:34:42.420524+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "5b82789e51969bbaeefae86739293b41cecc3bca"
+    "based_on_head": "6395459a410dc9885d698030657085f39daf6d4e"
   },
   "task": {
-    "id": "G5-SPEC-REVISION-2026-09-07",
-    "phase": "g5-adversarial-review-revision-completed",
+    "id": "G5-PHASE1-BROKER-LOGGING-F132",
+    "phase": "phase1-broker-logging-completed",
     "status": "completed",
-    "next_action": "Awaiting Hermes H1/H2 reviews and Claude final comparison review on G5 Revision 2.0; HOLD code implementation."
+    "next_action": "Phase 1 verified (38/38 checks green, gate 76/76 green). Ready for Claude/Hermes verification review before claiming Phase 2 (F133)."
   },
   "completed": [
-    "G5 Rev 2.0: baked in Gap 1 attestation digest, Gap 2 broker audit prerequisite, Gap 3 abuse bounds",
-    "G1-G4 fixes + Claude review pushed to origin master (cd3464b..433543d)",
-    "Audited orchestrator/egress_broker.py and confirmed Gap 2 kill-assumption pre-implementation needs",
-    "Active work ownership released; ESTOP strictly engaged (True)",
-    "Model-free test gate 76/76 suites green across unit, containment, and integration tiers"
+    "F132: Added host= deny logging across all broker rejection paths in orchestrator/egress_broker.py",
+    "F132: Added ActiveBrokerCorrelation context manager and per-attempt correlation logging (runs/task{tid}_a{attempt}_broker.audit.jsonl)",
+    "F132: Wired orchestrator/execution.py hermes_worker with ActiveBrokerCorrelation and env correlation",
+    "F132: Added sections 8-11 to tests/test_egress_broker_integration.py verifying host deny logging, attempt correlation, and kill-assumption (38/38 checks green)",
+    "Model-free test gate 76/76 suites green across unit, containment, and integration tiers",
+    "docs/HARDENING.md (F132), docs/CURRENT_STATE.md, and docs/ACTIVE_WORK.json updated"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -31,28 +32,28 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "76/76 model-free suites green, exit 0. Full cohort 7/7 pass yield. Worker readiness verified. ESTOP strictly engaged (True)."
+    "detail": "76/76 model-free suites green, exit 0. Egress broker integration 38/38 checks green. ESTOP strictly engaged (True)."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "7a90908a4a6faa9a3620e38ee9eb35d6f1d3114641eeab4264394edcab462c46"
+      "sha256": "3702cf145c69a39fd9cba8fb4594a48df75fd29b96842c6283b79f0d95605b49"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "4ee9f4817861ab26481430b52815c84573dc05741266a42f8535607829f684cc"
+      "sha256": "ed4319696abce3412fb36dd3671d48ee9d78450e8d375173077b4214e8e314ef"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "0ddefef0031433559d2eefecdfd8e6083aa50d33ec32c4e1398d19afb1bec43b"
+      "sha256": "ed6a624b0f9677ff0786a415bd0adf055488ffa13e48d53762e86a33669984ec"
     },
     {
       "path": "docs/INCIDENTS.md",
       "sha256": "f90f4781892205b0c424030862da1398fb3ef4e99b8d51a598f329f1e9ab8df4"
     },
     {
-      "path": "docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md",
-      "sha256": "5b80dd5566bb24b0788179aa8511b85c3fac53d716dbff840cb3dc4bbd31cffa"
+      "path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
+      "sha256": "2285f25579164f957fb2cf8c22ef9a82fb6e3f46af8f4392faee7b415e7aec77"
     },
     {
       "path": "docs/reviews/GEMINI_PROPOSAL_VERIFICATION_ASYMMETRY_2026-09-07.md",
@@ -67,8 +68,8 @@
       "sha256": "fee9caa8a5418dda5ed181973174e32d776d89c88b7493b99c94c8b545f8d193"
     },
     {
-      "path": "tests/test_retry_artifacts.py",
-      "sha256": "28ee86d8d338048816621cf0e2e2da8eab090d68a99ec1e1096f51bb1c86ba1d"
+      "path": "tests/test_egress_broker_integration.py",
+      "sha256": "31f147556ba11d5f36a32c3bb8f32eadcb712a2df018110224e28ef14759dda5"
     }
   ]
 }

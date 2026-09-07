@@ -30,16 +30,16 @@
     },
     {
       "agent": "gemini-cli",
-      "role": "Architectural revision of G5 verification-asymmetry specification (incorporating Gap 1 time-of-check, Gap 2 broker-audit prerequisite, Gap 3 abuse bounds) — COMPLETED",
-      "task_id": "G5-SPEC-REVISION-2026-09-07",
+      "role": "Phase 1 (F132): Broker host= deny logging, per-attempt correlation, and hermetic integration tests",
+      "task_id": "G5-PHASE1-BROKER-LOGGING-F132",
       "mode": "completed",
       "owned_paths": [],
-      "started_at": "2026-09-07T16:25:00Z",
-      "last_update": "2026-09-07T16:35:00Z",
+      "started_at": "2026-09-07T16:55:00Z",
+      "last_update": "2026-09-07T17:10:00Z",
       "status": "completed",
       "blocked_by": null,
-      "handoff_path": "docs/reviews/GEMINI_PROPOSAL_VERIFICATION_ASYMMETRY_2026-09-07.md",
-      "notes": "COMPLETED. Revised G5 specification (Revision 2.0) incorporating Claude Code's 3 adversarial review conditions: (1) Gap 1 time-of-check resolved by evaluating worker_policy_permitted against signed attestation digest at worker run time; (2) Gap 2 kill-assumption resolved with empirical code audit confirming egress_broker.py deny logging gaps and defining Phase 1 hardening prerequisite; (3) Gap 3 abuse bounds established with 25% max abuse ceiling, 2-citation max, and minimum 2 OK primary sources requirement. Code implementation held pending Hermes H1/H2 and Claude final comparison review."
+      "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
+      "notes": "COMPLETED. Landed F132: (1) Added host=extracted_host logging to all broker deny paths in orchestrator/egress_broker.py; (2) Implemented ActiveBrokerCorrelation context manager and attempt resolution creating runs/task{tid}_a{attempt}_broker.audit.jsonl; (3) Wired contained hermes_worker in orchestrator/execution.py to run inside ActiveBrokerCorrelation; (4) Expanded tests/test_egress_broker_integration.py with sections 8-11 covering deny host logging, header-based correlation, context-manager correlation, and kill-assumption verification (38/38 checks green); (5) Model-free test gate 76/76 suites green. Write scope released. Ready for Phase 2 (F133)."
     },
     {
       "agent": "gemini-cli",
