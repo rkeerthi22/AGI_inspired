@@ -3012,4 +3012,43 @@ Fix:
 
 Verified by `tests/test_citecheck.py` (46/46 checks green) and full model-free test gate (76/76 suites green).
 
+### F134 — Verification asymmetry Phase 3: POLICY_DENIED abuse bounds, mechanical fabrication guard, and candidate logging — P1 — FIXED 2026-09-07
+
+Prior behavior: The `POLICY_DENIED` classification introduced in Option B+ (F133) relieved workers from false failures when citing external domains blocked by their restricted token. However, as identified in Gap 3 of the architectural review (`docs/reviews/GEMINI_PROPOSAL_VERIFICATION_ASYMMETRY_2026-09-07.md`), an unbounded policy-denial relief creates an escape hatch for lazy workers, which could claim policy denial on difficult research targets or fabricate facts from pages they never actually loaded. Specifically:
+1. No abuse bounds existed: a deliverable with 100% policy-denied citations could receive an automated pass without primary grounding in verified sources.
+2. No fabrication guard existed: a worker could attribute high confidence (`confidence: 3`) or verbatim quotations (`"..."`) to a URL that was blocked at the network layer, asserting knowledge from a page it was physically prevented from loading.
+3. No operator candidate discovery: policy-denied domains were logged in raw audit trails but not aggregated for operator review to consider egress allowlist expansion.
+
+Fix:
+1. Strict Mathematical Abuse Bounds (`orchestrator/citecheck.py:check_abuse_bounds`):
+   - Defined `MAX_POLICY_DENIED_FRAC = 0.25` (maximum 25% policy-denied citations of total checked).
+   - Defined `MAX_POLICY_DENIED_COUNT = 2` (maximum 2 absolute policy-denied citations).
+   - Defined `MIN_OK_CITATIONS = 2` (minimum primary grounding invariant: deliverables claiming policy relief MUST contain at least 2 OK citations verified live on host and permitted at worker run time).
+   - `check_abuse_bounds(summary)` validates grounding: if `ok < 2`, fails with `insufficient_verified_sources`; if `policy_denied > 2`, fails with `high_policy_denial_count`; if `policy_denied / checked > 0.25`, fails with `high_policy_denial_fraction`.
+2. Strict Mechanical Fabrication Guard (`orchestrator/citecheck.py:detect_fabrication`):
+   - Inspects deliverable text and citation contexts for any source classified as `POLICY_DENIED`.
+   - If the worker asserted `confidence: 3` (`confidence 3`, `conf: 3`, or table cell `3`) or attributed verbatim quotations (`"..."`, `“...”`, or markdown blockquotes) to a policy-denied source, flags a mechanical fabrication violation: the worker asserted knowledge from a page its network layer was blocked from receiving.
+   - Preserves legitimate reporting: sources marked `confidence: 1` or paraphrased facts without quotation pass the guard.
+3. Policy Expansion Candidates Log (`orchestrator/citecheck.py:record_policy_expansion_candidates`):
+   - Whenever citations are classified as `POLICY_DENIED`, appends structured records (`timestamp`, `task_id`, `attempt`, `host`, `url`) to `runs/policy_expansion_candidates.jsonl` (append-only) for operator review.
+4. Preflight Integration (`orchestrator/deliverable_preflight.py:run_preflight`, `orchestrator/task_runner.py`):
+   - Integrated `citecheck.detect_fabrication()`, `citecheck.check_abuse_bounds()`, and candidate logging into `run_preflight()`, passing `task_id` and `attempt` from `task_runner.py`.
+   - Auto-repair feedback explicitly instructs the worker on fabrication removal (downgrading confidence or removing verbatim quotes) and abuse bounds correction.
+5. Authoritative Critic Evaluation (`orchestrator/evaluation.py:run_critic`):
+   - Enforces mechanical FAIL on fabrication (`Fabrication: worker asserted high confidence or verbatim text from policy-denied source`) and `insufficient_verified_sources` without making an LLM critic call.
+   - Escalates deliverables with `high_policy_denial_fraction` or `high_policy_denial_count` to `needs_review`.
+6. Hermetic Regressions (`tests/test_deliverable_preflight.py`):
+   - Added 9 regression tests (expanding suite from 13 to 22 checks, 22/22 green):
+     - `test_abuse_bounds_under_ceiling_passes`: 1 denied + 3 OK passes.
+     - `test_abuse_bounds_over_25_percent_fails`: 2 denied + 2 OK fails (50% > 25%).
+     - `test_abuse_bounds_over_2_absolute_fails`: 3 denied + 9 OK fails (count 3 > 2).
+     - `test_min_ok_sources_insufficient_fails`: 1 denied + 1 OK fails (ok 1 < 2).
+     - `test_fabrication_guard_catches_conf3`: confidence 3 on denied source triggers fabrication failure.
+     - `test_fabrication_guard_catches_verbatim_quotes`: verbatim quotes on denied source trigger fabrication failure.
+     - `test_fabrication_guard_allows_conf1_and_unquoted`: confidence 1 unquoted passes.
+     - `test_policy_expansion_candidates_logged`: verifies JSONL logging.
+     - `test_evaluation_abuse_bounds_and_fabrication`: verifies evaluation mechanical failures and escalation.
+
+Verified by `tests/test_deliverable_preflight.py` (22/22 checks green) and full model-free test gate (76/76 suites green).
+
 

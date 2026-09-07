@@ -296,6 +296,34 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
         return _finish("fail", (f"MECHANICAL FAIL: {summary['dead']}/{summary['checked']} cited "
                                 f"URLs dead or fabricated (dead_frac={summary['dead_frac']}): {dead}"))
 
+    # F134: Record policy expansion candidates for operator review (append-only)
+    if summary.get("policy_denied", 0) > 0:
+        try:
+            citecheck.record_policy_expansion_candidates(
+                evidence, task_id=row.get("task_id"), attempt=attempt, runs_dir=RUNS
+            )
+        except Exception:
+            pass
+
+    # F134: Strict Mechanical Fabrication Guard
+    fabrications = citecheck.detect_fabrication(out, evidence)
+    if fabrications:
+        fab_urls = [f["url"] for f in fabrications]
+        return _finish(
+            "fail",
+            f"MECHANICAL FAIL: Fabrication: worker asserted high confidence or verbatim text from policy-denied source ({', '.join(fab_urls)})"
+        )
+
+    # F134: Abuse bounds on POLICY_DENIED citation relief
+    passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary)
+    if not passed_bounds:
+        if "insufficient_verified_sources" in (bounds_reason or ""):
+            return _finish("fail", f"MECHANICAL FAIL: {bounds_reason}")
+        else:
+            if tw:
+                tw.critic_evaluated("needs_review", model="abuse_bounds_exceeded", provider="")
+            return _finish("needs_review", f"ESCALATION: {bounds_reason}")
+
     critic_cfg = roles.get("critic") if isinstance(roles, dict) else {}
     if not isinstance(critic_cfg, dict):
         critic_cfg = {}

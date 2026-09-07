@@ -1,29 +1,30 @@
 {
   "schema_version": 2,
-  "brief_revision": 87,
-  "created_at": "2026-09-07T19:42:33.894761+00:00",
+  "brief_revision": 89,
+  "created_at": "2026-09-07T20:00:10.539554+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "8e01833cda17dacebe3cb73cd05d340ca1f37682"
+    "based_on_head": "57e0c11ac014c0d291a8fcdbfaf1ae25c1e65162"
   },
   "task": {
-    "id": "G5-PHASE2-ATTESTATION-CITECHECK-F133",
-    "phase": "phase2-attestation-citecheck-completed",
+    "id": "G5-PHASE3-ABUSE-BOUNDS-F134",
+    "phase": "phase3-abuse-bounds-completed",
     "status": "completed",
-    "next_action": "Phase 2 verified (46/46 checks green in test_citecheck, full gate 76/76 green). Ready for Claude/Hermes verification review before Phase 3 (F134 abuse bounds & preflight integration)."
+    "next_action": "G5 code phases complete (F132 broker, F133 citecheck snapshot, F134 abuse bounds + fabrication guard). Gate 76/76 green. Ready for Claude final review."
   },
   "completed": [
-    "F133: Added get_attestation_policy_digest and snapshot_egress_policy to orchestrator/egress_policy.py ensuring policy_digest reads from signed attestation token (Gap 1 invariant)",
-    "F133: Recorded active policy_digest and allowlisted_hosts into runs/task{tid}_a{attempt}_worker.usage.json at dispatch in orchestrator/task_runner.py",
-    "F133: Implemented immutable CitationCheckResult dataclass schema in orchestrator/citecheck.py (Section 4.1) evaluating worker_policy_permitted from frozen snapshot and broker_attempt_verified from runs/task{tid}_a{attempt}_broker.audit.jsonl",
-    "F133: Updated orchestrator/evaluation.py to pass task/attempt to citecheck.verify",
-    "F133: Expanded tests/test_citecheck.py with Sections 4-6 covering schema, Gap 1 invariant, and kill-assumption cross-check (46/46 checks green)",
-    "Model-free test gate 76/76 suites green across unit, containment, and integration tiers",
-    "docs/HARDENING.md (F133), docs/CURRENT_STATE.md, and docs/ACTIVE_WORK.json updated"
+    "F134: Added check_abuse_bounds() (<=25% ceiling, <=2 count, >=2 OK) in orchestrator/citecheck.py",
+    "F134: Added detect_fabrication() (hard FAIL on conf-3 or quotes) in orchestrator/citecheck.py",
+    "F134: Added record_policy_expansion_candidates() (runs/policy_expansion_candidates.jsonl)",
+    "F134: Integrated into preflight and evaluation with repair feedback and mechanical FAIL/escalation",
+    "F134: Passed task_id and attempt from task_runner.py to preflight",
+    "F134: Added 9 regression tests in tests/test_deliverable_preflight.py (22/22 checks green)",
+    "Model-free gate 76/76 suites green across unit, containment, and integration tiers",
+    "docs/HARDENING.md (F134), docs/CURRENT_STATE.md, and docs/ACTIVE_WORK.json updated"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -33,20 +34,20 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "76/76 model-free suites green, exit 0. Citecheck 46/46 checks green. Egress broker integration 38/38 checks green. ESTOP strictly engaged (True)."
+    "detail": "76/76 model-free suites green, exit 0. Preflight 22/22 green. Citecheck 46/46 green. Egress broker integration 38/38 green. ESTOP strictly engaged (True)."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "9231c27f57076093675217243d628a25443e88729e6be13acbec82757e21e932"
+      "sha256": "a96d1dce75672eb7a8dc30415b22aaac6df07757168cd47fa2a2ce8869cf9d49"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "07ba8d5d852403e0a93c58ad963982cb79cd05323bf48bd72597a8934783d28c"
+      "sha256": "1e38155ee6a8e565d743c2828b079820b6536a96325bc98239dfd8e50f162335"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "1e9b9b8e5369ebae9251c5b726eb652bfff75974b820e8c082bd8847063f6a33"
+      "sha256": "02defaf8e25d4cf47b80953a67d594d7d7217a6357e8ceb6d8b311c37ff08c68"
     },
     {
       "path": "docs/INCIDENTS.md",
@@ -65,16 +66,12 @@
       "sha256": "c4f2be2998b3993f97e8ff6e9d76519b73346f46eab385343577c3c33bd0db86"
     },
     {
-      "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
-      "sha256": "fee9caa8a5418dda5ed181973174e32d776d89c88b7493b99c94c8b545f8d193"
+      "path": "tests/test_deliverable_preflight.py",
+      "sha256": "86c4b5ebb28aaf2d23325422d60ef2faba7b24ea1096446cc7abcd7c0d35f2bc"
     },
     {
       "path": "tests/test_citecheck.py",
       "sha256": "877b4f96720af74515f05cc6d360222d1ca64c71e3e5b9b67186aa132b7e2876"
-    },
-    {
-      "path": "tests/test_egress_broker_integration.py",
-      "sha256": "31f147556ba11d5f36a32c3bb8f32eadcb712a2df018110224e28ef14759dda5"
     }
   ]
 }

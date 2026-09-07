@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T19:05:00Z",
+  "last_updated": "2026-09-07T19:56:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Phase 3 (F134): Abuse bounds, fabrication guard, and policy expansion candidates",
+      "task_id": "G5-PHASE3-ABUSE-BOUNDS-F134",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-07T19:50:00Z",
+      "last_update": "2026-09-07T19:56:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
+      "notes": "COMPLETED. Landed F134: (1) Added check_abuse_bounds() in orchestrator/citecheck.py enforcing <=25% ceiling, <=2 absolute count, and min 2 OK citations grounding invariant; (2) Added detect_fabrication() in orchestrator/citecheck.py detecting conf-3 and verbatim quotes on policy-denied sources; (3) Added record_policy_expansion_candidates() appending to runs/policy_expansion_candidates.jsonl; (4) Integrated into orchestrator/deliverable_preflight.py and orchestrator/evaluation.py with auto-repair feedback and mechanical FAIL/escalation; (5) Passed task_id and attempt from orchestrator/task_runner.py to preflight; (6) Added 9 hermetic regression tests in tests/test_deliverable_preflight.py (22/22 checks green); (7) Gate 76/76 green. Write scope released. Ready for Claude Code final pre-Path-2 verification review."
+    },
     {
       "agent": "gemini-cli",
       "role": "Phase 2 (F133): Attestation snapshot at worker run time + citecheck CitationCheckResult schema and broker cross-check",
@@ -9,7 +22,7 @@
       "mode": "completed",
       "owned_paths": [],
       "started_at": "2026-09-07T19:05:00Z",
-      "last_update": "2026-09-07T19:35:00Z",
+      "last_update": "2026-09-07T19:42:00Z",
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",

@@ -22,9 +22,15 @@ import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urljoin, urlparse
+
+try:
+    from runtime_context import ROOT
+except ImportError:
+    ROOT = Path(__file__).resolve().parent.parent
 
 CLASSIFICATION_OK = "OK"
 CLASSIFICATION_DEAD = "DEAD"
@@ -36,6 +42,11 @@ VALID_CLASSIFICATIONS = frozenset({
     CLASSIFICATION_POLICY_DENIED,
     CLASSIFICATION_UNREACHABLE,
 })
+
+# Phase 3 (F134) Abuse Bounds & Invariants
+MAX_POLICY_DENIED_FRAC = 0.25   # <= 25% of total citations can be POLICY_DENIED
+MAX_POLICY_DENIED_COUNT = 2     # <= 2 absolute POLICY_DENIED citations allowed
+MIN_OK_CITATIONS = 2            # >= 2 OK citations required when policy relief is claimed
 
 
 @dataclass(frozen=True)
@@ -676,4 +687,167 @@ def evidence_block(evidence: list[dict | CitationCheckResult]) -> str:
             if e.get("literal") and e.get("reachable") else ""
         lines.append(f"- {e.get('url')}: {status}{lit}")
     return "\n".join(lines)
+
+
+def check_abuse_bounds(summary: dict) -> tuple[bool, str | None]:
+    """Check Gap 3 abuse bounds for POLICY_DENIED citation relief (F134).
+
+    Bounds:
+    1. Maximum 25% POLICY_DENIED fraction of total citations.
+    2. Maximum 2 absolute POLICY_DENIED citations.
+    3. Minimum 2 OK citations required when policy relief is claimed.
+    """
+    checked = summary.get("checked", 0)
+    policy_denied = summary.get("policy_denied", 0)
+    ok = summary.get("ok", 0)
+
+    if policy_denied > 0:
+        if ok < MIN_OK_CITATIONS:
+            return False, f"insufficient_verified_sources: found {ok} OK citations, minimum {MIN_OK_CITATIONS} required"
+        if policy_denied > MAX_POLICY_DENIED_COUNT:
+            return False, f"high_policy_denial_count: {policy_denied} policy-denied citations exceeds maximum allowed ({MAX_POLICY_DENIED_COUNT})"
+        if checked > 0 and (policy_denied / checked > MAX_POLICY_DENIED_FRAC):
+            frac = policy_denied / checked
+            return False, f"high_policy_denial_fraction: {policy_denied}/{checked} ({frac:.0%}) exceeds {MAX_POLICY_DENIED_FRAC:.0%} ceiling"
+
+    return True, None
+
+
+_CONF_3_RE = re.compile(r'\b(?:confidence|conf)\s*[:=]?\s*3\b', re.IGNORECASE)
+_QUOTE_RE = re.compile(r'["“][^"”\n]{3,}["”]')
+
+
+def _find_url_context(text: str, url: str) -> str:
+    """Find text lines around url within the same paragraph/block."""
+    if not text or not url:
+        return ""
+    lines = text.splitlines()
+    for i, line in enumerate(lines):
+        if url in line:
+            start = max(0, i - 2)
+            end = min(len(lines), i + 3)
+            # bound by empty lines
+            for k in range(i - 1, start - 1, -1):
+                if not lines[k].strip():
+                    start = k + 1
+                    break
+            for k in range(i + 1, end):
+                if not lines[k].strip():
+                    end = k
+                    break
+            return "\n".join(lines[start:end])
+    return ""
+
+
+def detect_fabrication(
+    text: str,
+    evidence: list[CitationCheckResult | dict],
+) -> list[dict[str, Any]]:
+    """Detect worker fabrication on POLICY_DENIED citations (F134).
+
+    A worker cannot assert high confidence (confidence 3) or attribute verbatim
+    quotations ("...") to a source that was blocked by egress policy.
+    Such assertions are mechanically provable fabrications since the worker was
+    physically blocked from loading the resource at the network layer.
+    """
+    fabrications: list[dict[str, Any]] = []
+    for e in evidence:
+        cls_name = getattr(e, "classification", None) or (e.get("classification") if isinstance(e, dict) else None)
+        if cls_name != CLASSIFICATION_POLICY_DENIED:
+            continue
+
+        url = getattr(e, "url", None) or (e.get("url") if isinstance(e, dict) else "")
+        host = getattr(e, "host", None) or (e.get("host") if isinstance(e, dict) else "")
+        line = getattr(e, "line", None) or (e.get("line") if isinstance(e, dict) else "")
+
+        context = _find_url_context(text, url)
+        # Strip markdown link syntax to avoid treating markdown link titles as a quote
+        clean_line = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', line)
+        clean_context = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', context)
+
+        reasons = []
+        # 1. Check confidence 3
+        has_conf3 = False
+        if _CONF_3_RE.search(clean_line) or _CONF_3_RE.search(clean_context):
+            has_conf3 = True
+        elif clean_line.strip().startswith("|") and clean_line.strip().endswith("|"):
+            cells = [c.strip() for c in clean_line.strip().split("|")[1:-1]]
+            for c in cells:
+                if c in ("3", "3.0", "Conf 3", "conf 3", "Confidence 3"):
+                    has_conf3 = True
+                    break
+        if has_conf3:
+            reasons.append("confidence_3")
+
+        # 2. Check verbatim quotes
+        has_quote = False
+        if _QUOTE_RE.search(clean_line):
+            has_quote = True
+        elif re.search(r'^\s*>[ \t]+["“]?[^"\n]{3,}["”]?', clean_context, re.MULTILINE):
+            has_quote = True
+        elif _QUOTE_RE.search(clean_context):
+            has_quote = True
+        if has_quote:
+            reasons.append("verbatim_quote")
+
+        if reasons:
+            fabrications.append({
+                "url": url,
+                "host": host,
+                "reasons": reasons,
+                "detail": f"Fabrication: worker asserted {' and '.join(reasons)} for policy-denied source ({url})"
+            })
+
+    return fabrications
+
+
+def record_policy_expansion_candidates(
+    evidence: list[CitationCheckResult | dict],
+    task_id: int | None = None,
+    attempt: int | None = 1,
+    runs_dir: Path | None = None,
+) -> list[dict[str, Any]]:
+    """Append policy-denied domains to runs/policy_expansion_candidates.jsonl for operator review (F134).
+
+    Append-only log for candidates to consider allowlisting in egress_policy.yaml.
+    """
+    runs = Path(runs_dir) if runs_dir is not None else (ROOT / "runs")
+    log_file = runs / "policy_expansion_candidates.jsonl"
+    runs.mkdir(parents=True, exist_ok=True)
+
+    candidates: list[dict[str, Any]] = []
+    seen = set()
+    now_iso = datetime.now(timezone.utc).isoformat()
+
+    for e in evidence:
+        cls_name = getattr(e, "classification", None) or (e.get("classification") if isinstance(e, dict) else None)
+        if cls_name != CLASSIFICATION_POLICY_DENIED:
+            continue
+
+        url = getattr(e, "url", None) or (e.get("url") if isinstance(e, dict) else "")
+        host = getattr(e, "host", None) or (e.get("host") if isinstance(e, dict) else "")
+        key = (host, url)
+        if key in seen:
+            continue
+        seen.add(key)
+
+        entry = {
+            "timestamp": now_iso,
+            "task_id": task_id,
+            "attempt": attempt,
+            "host": host,
+            "url": url,
+            "classification": CLASSIFICATION_POLICY_DENIED,
+        }
+        candidates.append(entry)
+
+    if candidates:
+        try:
+            with log_file.open("a", encoding="utf-8") as f:
+                for c in candidates:
+                    f.write(json.dumps(c) + "\n")
+        except Exception:
+            pass
+
+    return candidates
 

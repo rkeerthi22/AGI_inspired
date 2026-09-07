@@ -555,7 +555,12 @@ def _run_research_task(context: _TaskContext) -> str:
 
     repair_attempt = 0
     while repair_attempt < deliverable_preflight.MAX_REPAIR_ATTEMPTS:
-        preflight_report = deliverable_preflight.run_preflight(out, spec=context.row.get("spec", ""))
+        preflight_report = deliverable_preflight.run_preflight(
+            out,
+            spec=context.row.get("spec", ""),
+            task_id=tid,
+            attempt=attempt,
+        )
         if preflight_report.passed or not preflight_report.repair_feedback:
             break
         if policy.token_budget_breached():

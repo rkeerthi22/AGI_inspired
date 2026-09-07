@@ -9,7 +9,9 @@ Verifies that:
 6. Repair loop accumulates token spend into usage and respects token budget breaches.
 """
 from pathlib import Path
+import json
 import sys
+import tempfile
 from unittest.mock import MagicMock, patch
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -240,6 +242,295 @@ def test_is_infra_error_suppresses_repair():
     assert report.repair_feedback is None, "Infra error must have repair_feedback=None to prevent repair calls"
 
 
+def test_abuse_bounds_under_ceiling_passes():
+    """1 POLICY_DENIED + 3 OK citations (25% <= 25%, count 1 <= 2, ok 3 >= 2) passes."""
+    text = (
+        "# Analysis\n\n"
+        "Here are facts from multiple sources:\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Fact D: [Denied](https://denied.com) (retrieved 2026-09-07, confidence 1, policy-blocked).\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied.com", host="denied.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is True
+        assert len(report.schema_issues) == 0
+
+
+def test_abuse_bounds_over_25_percent_fails():
+    """2 POLICY_DENIED + 2 OK citations (50% > 25% ceiling) fails preflight."""
+    text = (
+        "# Analysis\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [Denied 1](https://denied1.com) (confidence 1).\n"
+        "- Fact D: [Denied 2](https://denied2.com) (confidence 1).\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied1.com", host="denied1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied2.com", host="denied2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("high_policy_denial_fraction" in issue for issue in report.schema_issues)
+
+
+def test_abuse_bounds_over_2_absolute_fails():
+    """3 POLICY_DENIED citations (exceeds absolute cap of 2) fails preflight."""
+    text = "# Analysis\n\n" + "\n".join(f"- Fact {i}: [OK](https://ok{i}.com)" for i in range(1, 10)) + "\n"
+    text += "\n".join(f"- Denied {i}: [Denied](https://denied{i}.com) (confidence 1)" for i in range(1, 4))
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url=f"https://ok{i}.com", host=f"ok{i}.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ) for i in range(1, 10)
+    ] + [
+        citecheck.CitationCheckResult(
+            url=f"https://denied{i}.com", host=f"denied{i}.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ) for i in range(1, 4)
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("high_policy_denial_count" in issue for issue in report.schema_issues)
+
+
+def test_min_ok_sources_insufficient_fails():
+    """1 POLICY_DENIED + 1 OK citation (< 2 OK minimum grounding) fails preflight."""
+    text = (
+        "# Brief\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [Denied](https://denied.com) (confidence 1).\n"
+    ) * 3
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied.com", host="denied.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("insufficient_verified_sources" in issue for issue in report.schema_issues)
+
+
+def test_fabrication_guard_catches_conf3():
+    """Claiming confidence 3 on a POLICY_DENIED source triggers fabrication failure."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Blocked Fact: https://denied.com/pricing retrieved 2026-09-07, confidence 3.\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact B: [OK 2](https://ok2.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact C: [OK 3](https://ok3.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied.com/pricing", host="denied.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+            line="- Blocked Fact: https://denied.com/pricing retrieved 2026-09-07, confidence 3."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("Fabrication" in issue for issue in report.schema_issues)
+
+
+def test_fabrication_guard_catches_verbatim_quotes():
+    """Attributing verbatim quotes to a POLICY_DENIED source triggers fabrication failure."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Blocked Claim: \"Enterprise accounts include 24/7 dedicated support\" (https://denied.com/terms, confidence 1).\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact B: [OK 2](https://ok2.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact C: [OK 3](https://ok3.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied.com/terms", host="denied.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+            line="- Blocked Claim: \"Enterprise accounts include 24/7 dedicated support\" (https://denied.com/terms, confidence 1)."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("Fabrication" in issue for issue in report.schema_issues)
+
+
+def test_fabrication_guard_allows_conf1_and_unquoted():
+    """A POLICY_DENIED source marked confidence 1 without verbatim quotes passes fabrication guard."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Blocked Note: pricing details were not publicly reachable (https://denied.com/pricing, confidence 1).\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact B: [OK 2](https://ok2.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact C: [OK 3](https://ok3.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied.com/pricing", host="denied.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+            line="- Blocked Note: pricing details were not publicly reachable (https://denied.com/pricing, confidence 1)."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is True
+        assert len(report.schema_issues) == 0
+
+
+def test_policy_expansion_candidates_logged():
+    """POLICY_DENIED citations append candidates to runs/policy_expansion_candidates.jsonl."""
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_runs = Path(tmpdir)
+        mock_evidence = [
+            citecheck.CitationCheckResult(
+                url="https://denied.com/page", host="denied.com", reachable_on_host=True, http_status=200,
+                worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+            )
+        ]
+        candidates = citecheck.record_policy_expansion_candidates(
+            mock_evidence, task_id=140, attempt=1, runs_dir=tmp_runs
+        )
+        assert len(candidates) == 1
+        assert candidates[0]["host"] == "denied.com"
+        assert candidates[0]["task_id"] == 140
+
+        log_path = tmp_runs / "policy_expansion_candidates.jsonl"
+        assert log_path.is_file()
+        lines = [json.loads(line) for line in log_path.read_text(encoding="utf-8").splitlines() if line.strip()]
+        assert len(lines) == 1
+        assert lines[0]["host"] == "denied.com"
+        assert lines[0]["classification"] == "POLICY_DENIED"
+
+
+def test_evaluation_abuse_bounds_and_fabrication():
+    """Verify orchestrator/evaluation.py enforces fabrication hard FAIL and abuse bounds."""
+    import evaluation
+    row = {"task_id": 9999, "pass_criteria": "Research criteria", "spec": "Spec"}
+    roles = {"critic": {"model": "critic-test", "provider": "mock"}}
+
+    # Case A: Fabrication triggers mechanical FAIL
+    fab_text = "Here is a quote \"Guaranteed 100% uptime\" from https://denied.com/sla (conf 3)."
+    fab_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://denied.com/sla", host="denied.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+            line="from https://denied.com/sla (conf 3)."
+        )
+    ]
+    with patch.object(evaluation.citecheck, "verify", return_value=fab_evidence):
+        verdict, text = evaluation.run_critic(row, fab_text, roles, baseline=False)
+        assert verdict == "fail"
+        assert "Fabrication: worker asserted" in text
+
+    # Case B: High policy denial fraction triggers needs_review escalation
+    high_denial_text = "Multiple facts: https://ok.com https://denied1.com https://denied2.com"
+    high_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok.com", host="ok.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied1.com", host="denied1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ),
+        citecheck.CitationCheckResult(
+            url="https://denied2.com", host="denied2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+        ),
+    ]
+    with patch.object(evaluation.citecheck, "verify", return_value=high_evidence):
+        verdict, text = evaluation.run_critic(row, high_denial_text, roles, baseline=False)
+        assert verdict in ("needs_review", "fail")
+        assert "insufficient_verified_sources" in text or "high_policy_denial" in text
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -254,4 +545,14 @@ if __name__ == "__main__":
     test_perpetually_broken_worker_caps_at_two_attempts()
     test_no_direct_sockets_or_urllib()
     test_is_infra_error_suppresses_repair()
-    print("ALL 13 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_abuse_bounds_under_ceiling_passes()
+    test_abuse_bounds_over_25_percent_fails()
+    test_abuse_bounds_over_2_absolute_fails()
+    test_min_ok_sources_insufficient_fails()
+    test_fabrication_guard_catches_conf3()
+    test_fabrication_guard_catches_verbatim_quotes()
+    test_fabrication_guard_allows_conf1_and_unquoted()
+    test_policy_expansion_candidates_logged()
+    test_evaluation_abuse_bounds_and_fabrication()
+    print("ALL 22 DELIVERABLE PREFLIGHT TESTS PASSED!")
+

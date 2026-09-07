@@ -16,6 +16,7 @@ Core Architectural Rules (Incorporating Independent Peer Review):
    budget checks, and token spend accumulation.
 """
 from dataclasses import dataclass, field
+from pathlib import Path
 import re
 from typing import Any
 
@@ -103,10 +104,17 @@ def is_infra_error(text: str) -> bool:
     ])
 
 
-def run_preflight(text: str, spec: str = "") -> PreflightReport:
-    """Run mechanical preflight checks on deliverable text.
+def run_preflight(
+    text: str,
+    spec: str = "",
+    task_id: int | None = None,
+    attempt: int | None = 1,
+    runs_dir: Path | None = None,
+) -> PreflightReport:
+    """Run mechanical preflight checks on deliverable text (F126, F134).
     
-    Reuses citecheck.py for URL liveness and runs schema checks.
+    Reuses citecheck.py for URL liveness, policy denial abuse bounds, fabrication guard,
+    and schema checks.
     Does NOT modify text, open separate sockets, or execute LLM calls.
     """
     if not text or len(text.strip()) < 100:
@@ -123,8 +131,11 @@ def run_preflight(text: str, spec: str = "") -> PreflightReport:
             repair_feedback=None
         )
 
-    # 1. URL Liveness via authoritative citecheck.verify (reusing existing RC-1 logic)
-    evidence = citecheck.verify(text)
+    # 1. URL Liveness & Policy Evaluation via authoritative citecheck.verify
+    try:
+        evidence = citecheck.verify(text, task_id=task_id, attempt=attempt, runs_dir=runs_dir)
+    except TypeError:
+        evidence = citecheck.verify(text)
     summary = citecheck.summarize(evidence)
     dead_urls: list[dict[str, Any]] = []
 
@@ -139,10 +150,40 @@ def run_preflight(text: str, spec: str = "") -> PreflightReport:
     # Trigger URL repair if hard fail threshold met OR any URLs are provably dead (404/410/DNS failure)
     cite_failed = citecheck.is_hard_fail(summary) or len(dead_urls) > 0
 
-    # 2. Schema & Disclaimer Linter
+    # 2. F134: Record policy expansion candidates for operator review (append-only)
+    if summary.get("policy_denied", 0) > 0:
+        try:
+            citecheck.record_policy_expansion_candidates(
+                evidence, task_id=task_id, attempt=attempt, runs_dir=runs_dir
+            )
+        except Exception:
+            pass
+
+    # 3. F134: Strict Mechanical Fabrication Guard
+    try:
+        fabrications = citecheck.detect_fabrication(text, evidence)
+    except Exception:
+        fabrications = []
+
+    # 4. F134: Abuse Bounds on POLICY_DENIED citations
+    try:
+        passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary)
+    except Exception:
+        passed_bounds, bounds_reason = True, None
+
+    # 5. Schema & Disclaimer Linter
     schema_issues = check_schema(text, spec)
 
-    passed = not (cite_failed or schema_issues)
+    if fabrications:
+        for fab in fabrications:
+            schema_issues.append(
+                f"Fabrication detected: worker asserted high confidence or verbatim quotes for policy-denied source ({fab.get('url')}) which was blocked at the network layer."
+            )
+
+    if not passed_bounds and bounds_reason:
+        schema_issues.append(f"Policy denial bounds exceeded: {bounds_reason}")
+
+    passed = not (cite_failed or schema_issues or len(fabrications) > 0 or not passed_bounds)
     repair_feedback = None
 
     if not passed:
