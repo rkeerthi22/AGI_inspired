@@ -87,7 +87,14 @@ def main(argv: list[str] | None = None) -> int:
         retrieval_policy = retrieval_policy_for_profile(profile)
         install_hermes_adapter(Path(audit) if audit else None, retrieval_policy)
     else:
-        install_hermes_adapter(Path(audit) if audit else None)
+        try:
+            from retrieval_progress import RetrievalPolicy
+            if args.toolsets and "browser" not in args.toolsets:
+                install_hermes_adapter(Path(audit) if audit else None, RetrievalPolicy(max_calls=(3, 5, 0)))
+            else:
+                install_hermes_adapter(Path(audit) if audit else None)
+        except (ImportError, AttributeError):
+            install_hermes_adapter(Path(audit) if audit else None)
     original_args = ["-z", args.oneshot]
     for flag, value in (("--provider", args.provider), ("-m", args.model),
                         ("-t", args.toolsets), ("--usage-file", args.usage_file)):
@@ -197,6 +204,74 @@ def main(argv: list[str] | None = None) -> int:
         _ddgs_provider._run_ddgs_search = _direct_ddgs_search
     except Exception as e:
         sys.stderr.write(f"Warning: Failed to patch Hermes DDGS provider: {e}\n")
+
+    # Patch Hermes web_extract tool to fetch directly via egress broker proxy
+    try:
+        import tools.web_tools as _web_tools
+
+        async def _direct_web_extract(
+            urls: list,
+            format: str = "markdown",
+            char_limit: int | None = None,
+        ) -> str:
+            proxy_url = (
+                os.environ.get("HTTPS_PROXY")
+                or os.environ.get("HTTP_PROXY")
+                or "http://127.0.0.1:8787"
+            )
+            opener = urllib.request.build_opener(
+                urllib.request.ProxyHandler({"https": proxy_url, "http": proxy_url})
+            )
+            results = []
+            target_urls = urls[:5] if isinstance(urls, list) else []
+            for item in target_urls:
+                u = item if isinstance(item, str) else (item.get("url") or item.get("href") if isinstance(item, dict) else "")
+                if not u:
+                    continue
+                req = urllib.request.Request(
+                    u,
+                    headers={
+                        "User-Agent": (
+                            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                            "AppleWebKit/537.36 (KHTML, like Gecko) "
+                            "Chrome/120.0.0.0 Safari/537.36"
+                        )
+                    },
+                )
+                try:
+                    with opener.open(req, timeout=15) as res:
+                        raw_bytes = res.read()
+                        doc = lxml.html.fromstring(raw_bytes)
+                        title = doc.findtext(".//title") or ""
+                        for el in doc.xpath("//script|//style|//nav|//header|//footer|//svg|//noscript"):
+                            el.drop_tree()
+                        text = " ".join(doc.text_content().split())
+                        limit = char_limit or 15000
+                        results.append({
+                            "url": u,
+                            "title": title.strip(),
+                            "content": text[:limit],
+                            "error": None,
+                        })
+                except urllib.error.HTTPError as http_err:
+                    results.append({
+                        "url": u,
+                        "title": "",
+                        "content": "",
+                        "error": f"HTTP {http_err.code} ({http_err.reason})",
+                    })
+                except Exception as fetch_err:
+                    results.append({
+                        "url": u,
+                        "title": "",
+                        "content": "",
+                        "error": f"Fetch error: {fetch_err}",
+                    })
+            return json.dumps({"results": results}, ensure_ascii=False)
+
+        _web_tools.web_extract_tool = _direct_web_extract
+    except Exception as e:
+        sys.stderr.write(f"Warning: Failed to patch Hermes web_extract tool: {e}\n")
 
     # One-shot research output is deliberately withheld: the only user-visible
     # result is the dedicated evidence-only finalization below.

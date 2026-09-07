@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import os
 import sqlite3
 import subprocess
 import sys
@@ -22,6 +23,11 @@ import scheduler  # noqa: E402
 import yaml  # noqa: E402
 from execution_pause import estop_path, pause_engaged  # noqa: E402
 from cohort_isolation import CohortIsolation, LiveBackend  # noqa: E402
+
+if not os.environ.get("HARNESS_EGRESS_ATTESTATION"):
+    default_attestation = ROOT / ".harness" / "egress_attestation.signed"
+    if default_attestation.is_file():
+        os.environ["HARNESS_EGRESS_ATTESTATION"] = str(default_attestation)
 
 COHORT = ROOT / "workspace" / "validation" / "cohort_missions.json"
 SUMMARY = ROOT / "workspace" / "validation" / "cohort_summary.json"
@@ -54,8 +60,9 @@ def validation_roles() -> dict:
         "quota_group": "byteplus-coding-plan",
     }
     roles["worker"] = dict(byteplus)
-    roles["critic"] = dict(byteplus)
-    roles["manager"] = dict(byteplus)
+    # F120: critic must be independent from worker provider (worker=byteplus_coding, critic=ollama)
+    roles["critic"] = dict(roles["manager"])
+    roles["manager"] = dict(roles["manager"])
     return roles
 
 

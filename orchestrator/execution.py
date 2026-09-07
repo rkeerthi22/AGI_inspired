@@ -96,6 +96,11 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
         default_worker_home = ROOT / "workspace" / "worker_home"
         default_worker_home.mkdir(parents=True, exist_ok=True)
         base_env["HARNESS_WORKER_HOME"] = str(default_worker_home)
+    if not base_env.get("HARNESS_EGRESS_ATTESTATION"):
+        default_attestation = ROOT / ".harness" / "egress_attestation.signed"
+        if default_attestation.is_file():
+            base_env["HARNESS_EGRESS_ATTESTATION"] = str(default_attestation)
+            os.environ["HARNESS_EGRESS_ATTESTATION"] = str(default_attestation)
     env = worker_sandbox.worker_environment(
         base_env, provider_transport.authentication_env_from_config(model_cfg))
     # Proxy variables matter only with the separately attested OS boundary.

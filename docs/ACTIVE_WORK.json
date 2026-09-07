@@ -31,14 +31,14 @@
       "agent": "gemini-cli",
       "role": "Live cohort M5 execution under controlled window (F126 citecheck yield test)",
       "task_id": "LIVE-VALIDATION-M5-2026-09-06",
-      "mode": "blocked",
+      "mode": "completed",
       "owned_paths": [],
       "started_at": "2026-09-06T06:05:00Z",
-      "last_update": "2026-09-06T21:00:00Z",
-      "status": "blocked",
-      "blocked_by": "upstream_quota_and_operator_authorization",
-      "handoff_path": "docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md",
-      "notes": "BLOCKED: Model-free postmortem and code repairs complete (74/74 green). Task 130 and 131 failure mechanisms resolved. ESTOP strictly re-engaged (True). Awaiting upstream quota reset and explicit operator authorization before opening next controlled live window."
+      "last_update": "2026-09-07T03:18:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_M5_LIVE_VALIDATION_2026-09-07.md",
+      "notes": "COMPLETE: Mission M5 (FlowGPT hero claim verification) successfully passed in Task 137 under Windows Restricted Token containment (S-1-5-12), loopback egress broker (127.0.0.1:8787), WFP firewall rules active, in-process proxy scraper, and independent critic evaluation (glm-5.2:cloud). Ledger task 137 recorded status=done, critic_verdict=pass (77.4s, in=11767, out=4192). Model-free gate 75/75 green; worker readiness 6/6 pass; ESTOP strictly re-engaged (True)."
     },
     {
       "agent": "gemini-cli",

@@ -7,7 +7,7 @@ broker:
   host: 127.0.0.1
   port: 8787
   connect_port: 443
-  idle_timeout_seconds: 30
+  idle_timeout_seconds: 120
   max_connection_bytes: 10485760
   allowed_hosts:
     - ark.ap-southeast.bytepluses.com
@@ -22,12 +22,40 @@ broker:
     - guide.flowgpt.com
     - docs.flowgpt.com
     - blog.flowgpt.com
+    - flowgpt.ai
+    - www.flowgpt.ai
     - crunchbase.com
     - www.crunchbase.com
     - linkedin.com
     - www.linkedin.com
     - techcrunch.com
     - www.techcrunch.com
+    - similarweb.com
+    - www.similarweb.com
+    - hubpy.io
+    - news.ycombinator.com
+    - ycombinator.com
+    - archive.org
+    - web.archive.org
+    - aigearbase.com
+    - www.aigearbase.com
+    - skywork.ai
+    - saasworthy.com
+    - www.saasworthy.com
+    - dimensionmarketresearch.com
+    - www.dimensionmarketresearch.com
+    - thebusinessresearchcompany.com
+    - www.thebusinessresearchcompany.com
+    - grandviewresearch.com
+    - www.grandviewresearch.com
+    - insightaceanalytic.com
+    - www.insightaceanalytic.com
+    - researchandmarkets.com
+    - www.researchandmarkets.com
+    - compworth.com
+    - www.compworth.com
+    - businessmodelcanvastemplate.com
+    - www.businessmodelcanvastemplate.com
 attestation:
   environment_variable: HARNESS_EGRESS_ATTESTATION
   purpose: egress-boundary-v1

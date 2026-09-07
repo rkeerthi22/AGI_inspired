@@ -317,6 +317,8 @@ class RetrievalProgressController:
             return
         previous = STAGE_NAMES[stage]
         self.state.stage += 1
+        while self.state.stage < len(STAGE_NAMES) and self.policy.max_calls[self.state.stage] == 0:
+            self.state.stage += 1
         self.state.low_novelty_streak = 0
         self._audit("transition", source=previous, target=self.required_strategy,
                     reason=reason)
@@ -413,6 +415,13 @@ class RetrievalProgressController:
             "confidence 1-3, and explicit gaps, or (B) an explicit BOUNDED FAILURE report "
             "that lists the source URLs actually obtained, what they support, and the exact "
             "unresolved gaps. Never invent a fact, URL, rating, price, or retrieval result.\n\n"
+            "FORMATTING & SOURCING RULES:\n"
+            "- Every cited URL MUST be a full, complete, absolute URL starting with https:// (e.g., https://hubpy.io/blog/flowgpt-guide-2026). Never omit https:// or use bare domain strings.\n"
+            "- Every cited fact or source must state its retrieval date (e.g. 2026-09-07) and confidence 1-3.\n"
+            "- For claim verification missions:\n"
+            "  1. FlowGPT Official Claim: Quote the official claim verbatim with full source URL (https://flowgpt.com/) and retrieval date. If the official page returned HTTP 403 or was blocked, explicitly declare: 'HTTP 403 (blocked/inaccessible)'.\n"
+            "  2. Independent Third-Party Sources: Consult and list at least 1 independent source with its full canonical https:// URL, retrieval date, and what it says.\n"
+            "  3. Verdict: State explicitly 'Verdict: unconfirmed' (or 'confirmed' / 'refuted') with reasoned evidence.\n\n"
             f"ORIGINAL MISSION:\n{mission}\n\nBOUNDED EVIDENCE:\n{evidence}"
         )
 

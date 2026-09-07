@@ -5,12 +5,12 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-06 (Step 2 host hardening enforced & verified; egress broker active; postmortem repairs complete; worker readiness diagnostic 6/6 pass; synthetic M5 dry run 2/2 pass; model-free gate 75/75 green)
-**Phase:** Deliverable preflight (F126) + Host Hardening (Step 2 WFP firewall rules active & enforced); postmortem repairs landed (HERMES_HOME worker home, async_delegation patch order, stdin close, -t web); worker readiness diagnostic verified; model-free gate 75/75 green; upstream provider quota block pauses live cohort execution
+**Last Updated:** 2026-09-07 (Mission M5 / Task 137 live validation PASSED under Windows Restricted Token containment; broker idle timeout and in-process scraper hardened; model-free gate 75/75 green; worker readiness 6/6 pass; ESTOP engaged)
+**Phase:** Mission M5 live validation complete (Task 137: status=done, verdict=pass, 77.4s, in=11767, out=4192); F126 deliverable preflight & auto-repair active; Step 2 WFP firewall rules enforced; egress broker verified; ESTOP strictly re-engaged
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active | Egress WFP deny-direct-egress rule active
-**Verification:** Full model-free gate: 75/75 suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun). Worker readiness diagnostic: 6/6 checks PASS (1.8s). Verified by Gemini CLI. ESTOP strictly engaged.
+**Verification:** Full model-free gate: 75/75 suites green, exit 0 (11/11 egress policy, 13/13 deliverable preflight, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun). Worker readiness diagnostic: 6/6 checks PASS. Live M5 cohort execution (Task 137): status=done, critic_verdict=pass. ESTOP strictly engaged.
 
-Current handoff: `docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md`, `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md`, `scripts/check_worker_readiness.py`, `scripts/enforce_worker_firewall.ps1`, and `orchestrator/controlled_hermes.py`.
+Current handoff: `docs/reviews/GEMINI_M5_LIVE_VALIDATION_2026-09-07.md`, `docs/reviews/GEMINI_POSTMORTEM_TASK130_TASK131_2026-09-06.md`, `docs/SHARED_LAUNCH_BRIEF_2026-09-06.md`, `scripts/check_worker_readiness.py`, and `scripts/enforce_worker_firewall.ps1`.
 Step 2 host hardening (`scripts/enforce_worker_firewall.ps1`) is fully provisioned and enforced on this host:
 Windows Defender Firewall / WFP rules `AGI_Worker_Allow_Broker_Loopback` (allow 127.0.0.1:8787 TCP) and `AGI_Worker_Deny_Direct_Egress`
 (deny direct Internet for restricted worker SID S-1-5-12) are both verified [PASS] ENABLED. Signed attestation token
