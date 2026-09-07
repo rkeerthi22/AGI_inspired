@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T07:45:00Z",
+  "last_updated": "2026-09-07T09:30:00Z",
   "active_agents": [
+    {
+      "agent": "claude-code",
+      "role": "G5 asymmetry proposal adversarial review + next-action brief author (documentation only) — COMPLETED",
+      "task_id": "G5-ADVERSARIAL-REVIEW-2026-09-07",
+      "mode": "completed",
+      "owned_paths": ["docs/G5_ASYMMETRY_REVIEW_AND_NEXT_ACTIONS_2026-09-07.md"],
+      "started_at": "2026-09-07T09:10:00Z",
+      "last_update": "2026-09-07T09:30:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/G5_ASYMMETRY_REVIEW_AND_NEXT_ACTIONS_2026-09-07.md",
+      "notes": "COMPLETED. Independently verified Gemini's G1-G4 landings against disk (F129 attempt-scoped artifacts real in task_runner.py; F130 snapshot_live_repo excludes .log/.jsonl/task*/canary*/cohort_*; G3 doc token table now reconciles with ledger on M1/M2/M4; G5 proposal is 143-line doc-only). Gate 76/76 green measured. Adversarial review of G5 Option B+: APPROVED directionally with 3 mandatory implementation conditions (time-of-check via attestation digest not live policy; broker audit-log reliability as kill-assumption; POLICY_DENIED abuse-fraction bound). Flagged H1 (Hermes prediction_machine diagnosis) still undelivered. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
+    },
     {
       "agent": "gemini-cli",
       "role": "Post-cohort evidence integrity code repairs (G1 retry artifacts, G2 gate race, G3 multi-attempt accounting, G4 test residue) & G5 asymmetry design proposal",
