@@ -305,13 +305,13 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
         except Exception:
             pass
 
-    # F134: Strict Mechanical Fabrication Guard
+    # F134/F135: Strict Mechanical Fabrication Guard
     fabrications = citecheck.detect_fabrication(out, evidence)
     if fabrications:
         fab_urls = [f["url"] for f in fabrications]
         return _finish(
             "fail",
-            f"MECHANICAL FAIL: Fabrication: worker asserted high confidence or verbatim text from policy-denied source ({', '.join(fab_urls)})"
+            f"MECHANICAL FAIL: Fabrication: worker asserted high confidence or verbatim text from policy-denied / un-attempted source ({', '.join(fab_urls)})"
         )
 
     # F134: Abuse bounds on POLICY_DENIED citation relief

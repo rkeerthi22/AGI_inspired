@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T19:56:00Z",
+  "last_updated": "2026-09-07T21:18:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "F135: Close un-attempted (UNREACHABLE) branch gap in citecheck",
+      "task_id": "G5-F135-UNREACHABLE-BRANCH-FIX",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-07T21:18:00Z",
+      "last_update": "2026-09-07T21:42:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/G5_F135_UNREACHABLE_BRANCH_REVIEW_2026-09-07.md",
+      "notes": "COMPLETED. Landed F135: (1) Drive evidence_block labels off classification exclusively, adding UNVERIFIABLE for UNREACHABLE citations and gating literal_found append; (2) Extend detect_fabrication to inspect UNREACHABLE citations with distinct reason tags (unattempted_conf3, unattempted_quote); (3) Extend check_abuse_bounds min-2-OK to cover (policy_denied + unreachable) > 0 while keeping UNREACHABLE separate from the 25% / <=2 ceiling; (4) Added hermetic regression tests in tests/test_citecheck.py (58/58 green) and tests/test_deliverable_preflight.py (26/26 green); (5) Full model-free test gate 76/76 suites green. Write scope released. Ready for Claude Code final verification and Path 2 greenlight."
+    },
     {
       "agent": "gemini-cli",
       "role": "Phase 3 (F134): Abuse bounds, fabrication guard, and policy expansion candidates",

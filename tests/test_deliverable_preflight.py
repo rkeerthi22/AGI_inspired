@@ -530,6 +530,156 @@ def test_evaluation_abuse_bounds_and_fabrication():
         assert verdict in ("needs_review", "fail")
         assert "insufficient_verified_sources" in text or "high_policy_denial" in text
 
+    # Case C: F135 Fabrication on UNREACHABLE triggers mechanical FAIL
+    unreach_fab_text = "Claim: \"Confidential internal metric\" at https://unattempted.com/leak (conf 3)."
+    unreach_fab_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://unattempted.com/leak", host="unattempted.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
+            line="Claim: \"Confidential internal metric\" at https://unattempted.com/leak (conf 3)."
+        )
+    ]
+    with patch.object(evaluation.citecheck, "verify", return_value=unreach_fab_evidence):
+        verdict, text = evaluation.run_critic(row, unreach_fab_text, roles, baseline=False)
+        assert verdict == "fail"
+        assert "Fabrication: worker asserted" in text
+
+
+def test_fabrication_guard_catches_unattempted_conf3():
+    """F135: Claiming confidence 3 on an UNREACHABLE source triggers fabrication failure."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Unattempted Fact: https://unattempted.com/pricing retrieved 2026-09-07, confidence 3.\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact B: [OK 2](https://ok2.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact C: [OK 3](https://ok3.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://unattempted.com/pricing", host="unattempted.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
+            line="- Unattempted Fact: https://unattempted.com/pricing retrieved 2026-09-07, confidence 3."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("Fabrication" in issue for issue in report.schema_issues)
+
+
+def test_fabrication_guard_catches_unattempted_verbatim_quotes():
+    """F135: Attributing verbatim quotes to an UNREACHABLE source triggers fabrication failure."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Unattempted Claim: \"Enterprise accounts include 24/7 dedicated support\" (https://unattempted.com/terms, confidence 1).\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact B: [OK 2](https://ok2.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact C: [OK 3](https://ok3.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://unattempted.com/terms", host="unattempted.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
+            line="- Unattempted Claim: \"Enterprise accounts include 24/7 dedicated support\" (https://unattempted.com/terms, confidence 1)."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("Fabrication" in issue for issue in report.schema_issues)
+
+
+def test_fabrication_guard_allows_unattempted_conf1_and_unquoted():
+    """F135: An UNREACHABLE source marked confidence 1 without verbatim quotes passes fabrication guard."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: [OK 2](https://ok2.com) confirmed.\n"
+        "- Fact C: [OK 3](https://ok3.com) confirmed.\n"
+        "- Unattempted Note: pricing details were not checked (https://unattempted.com/pricing, confidence 1).\n"
+    ) * 2
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok2.com", host="ok2.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact B: [OK 2](https://ok2.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://ok3.com", host="ok3.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact C: [OK 3](https://ok3.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://unattempted.com/pricing", host="unattempted.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
+            line="- Unattempted Note: pricing details were not checked (https://unattempted.com/pricing, confidence 1)."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is True
+        assert len(report.schema_issues) == 0
+
+
+def test_abuse_bounds_unattempted_min_ok_fails():
+    """F135: Deliverable with 1 OK and 1 UNREACHABLE fails min-2-OK invariant."""
+    text = (
+        "# Research Report\n\n"
+        "- Fact A: [OK 1](https://ok1.com) confirmed.\n"
+        "- Fact B: https://unattempted.com/data noted, confidence 1.\n"
+    ) * 3
+    mock_evidence = [
+        citecheck.CitationCheckResult(
+            url="https://ok1.com", host="ok1.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+            line="- Fact A: [OK 1](https://ok1.com) confirmed."
+        ),
+        citecheck.CitationCheckResult(
+            url="https://unattempted.com/data", host="unattempted.com", reachable_on_host=True, http_status=200,
+            worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
+            line="- Fact B: https://unattempted.com/data noted, confidence 1."
+        ),
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="")
+        assert report.passed is False
+        assert any("insufficient_verified_sources" in issue for issue in report.schema_issues)
+
 
 if __name__ == "__main__":
     test_clean_deliverable_passes()
@@ -554,5 +704,9 @@ if __name__ == "__main__":
     test_fabrication_guard_allows_conf1_and_unquoted()
     test_policy_expansion_candidates_logged()
     test_evaluation_abuse_bounds_and_fabrication()
-    print("ALL 22 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_fabrication_guard_catches_unattempted_conf3()
+    test_fabrication_guard_catches_unattempted_verbatim_quotes()
+    test_fabrication_guard_allows_unattempted_conf1_and_unquoted()
+    test_abuse_bounds_unattempted_min_ok_fails()
+    print("ALL 26 DELIVERABLE PREFLIGHT TESTS PASSED!")
 

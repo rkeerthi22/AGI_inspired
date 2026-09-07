@@ -3051,4 +3051,40 @@ Fix:
 
 Verified by `tests/test_deliverable_preflight.py` (22/22 checks green) and full model-free test gate (76/76 suites green).
 
+### F135 — Close Un-Attempted (UNREACHABLE) branch gap in citecheck — P1 — FIXED 2026-09-07
+
+Prior behavior: In `orchestrator/citecheck.py`, when a citation was reachable on host (critic gets HTTP 200) but the worker was not permitted by policy and never attempted the fetch via the broker (no broker deny record), `classify_citation` correctly returned `UNREACHABLE`. However:
+1. Finding 1 (Mislabeled Evidence Block): `evidence_block()` drove formatting off `e.get("reachable")` rather than `classification`. Because an `UNREACHABLE` citation was reachable on host, it fell through to `elif e.get("reachable"): status = "OK"`, mislabeling an un-attempted, non-permitted source as a verified `"OK"` source to the critic prompt and appending claimed literals.
+2. Finding 2 (Fabrication Guard Hole): `detect_fabrication()` inspected only citations with `classification == CLASSIFICATION_POLICY_DENIED`. An un-attempted citation (`UNREACHABLE`) with `confidence: 3` or verbatim quotation (`"..."`) bypassed the fabrication guard completely, partially recreating the Option A blind-critic hole for lazy workers citing search snippets.
+3. Finding 3 (Abuse Bounds Gap): `check_abuse_bounds()` checked only `policy_denied > 0`. If a deliverable contained only `UNREACHABLE` citations alongside 0 or 1 `OK` citations, the minimum primary grounding invariant (`min-2-OK`) was bypassed.
+
+Fix:
+1. Evidence Block Classification-Driven Formatting (`orchestrator/citecheck.py:evidence_block`):
+   - Exclusively driven by `classification`.
+   - Explicitly formats `CLASSIFICATION_UNREACHABLE` as `"UNVERIFIABLE (reachable on host, but worker never attempted via broker; no policy-denial relief)"`.
+   - Strictly gates appending `claimed value '...' found on page` to `classification == CLASSIFICATION_OK`.
+2. Mechanical Fabrication Guard Extension (`orchestrator/citecheck.py:detect_fabrication`):
+   - Extends detection to both `CLASSIFICATION_POLICY_DENIED` and `CLASSIFICATION_UNREACHABLE`.
+   - Uses distinct reason tags: `unattempted_conf3` and `unattempted_quote` for `UNREACHABLE` citations (vs `policy_denied_conf3` and `policy_denied_quote` for `POLICY_DENIED`).
+   - Hard fails on overclaims (`confidence: 3`) and provable fabrications (verbatim quotes on un-attempted sources), while preserving the `confidence: 1` / unquoted carve-out.
+   - Updated preflight and evaluation failure messaging to reflect policy-denied or un-attempted sources.
+3. Primary Grounding Invariant Extension (`orchestrator/citecheck.py:check_abuse_bounds`):
+   - Evaluates `non_ok = policy_denied + unreachable`. If `non_ok > 0 and ok < MIN_OK_CITATIONS` (`2`), returns `insufficient_verified_sources`.
+   - Preserves scoping: `UNREACHABLE` is NOT folded into the 25% or <=2 `POLICY_DENIED` ceiling, avoiding false fails without cohort validation.
+4. Hermetic Regressions (`tests/test_citecheck.py`, `tests/test_deliverable_preflight.py`):
+   - `tests/test_citecheck.py` (58/58 checks green, up from 46/46):
+     - Asserts `evidence_block` labels `UNREACHABLE` as `UNVERIFIABLE` and does NOT label it as `OK`.
+     - Asserts `detect_fabrication` flags `unattempted_conf3` and `unattempted_quote`.
+     - Asserts `detect_fabrication` passes `UNREACHABLE` with `confidence: 1` and no quotes.
+     - Asserts `evidence_block` suppresses claimed literal values on `UNREACHABLE`.
+     - Asserts `check_abuse_bounds` fails on 1 OK + 1 UNREACHABLE and passes on 2 OK + 1 UNREACHABLE.
+   - `tests/test_deliverable_preflight.py` (26/26 checks green, up from 22/22):
+     - `test_fabrication_guard_catches_unattempted_conf3`
+     - `test_fabrication_guard_catches_unattempted_verbatim_quotes`
+     - `test_fabrication_guard_allows_unattempted_conf1_and_unquoted`
+     - `test_abuse_bounds_unattempted_min_ok_fails`
+     - Evaluator Case C regression for mechanical failure on UNREACHABLE fabrication.
+
+Verified by `tests/test_citecheck.py` (58/58 checks green), `tests/test_deliverable_preflight.py` (26/26 checks green), and full model-free test gate (76/76 suites green).
+
 

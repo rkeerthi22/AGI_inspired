@@ -176,8 +176,9 @@ def run_preflight(
 
     if fabrications:
         for fab in fabrications:
+            desc = "policy-denied" if fab.get("classification") == citecheck.CLASSIFICATION_POLICY_DENIED else "un-attempted"
             schema_issues.append(
-                f"Fabrication detected: worker asserted high confidence or verbatim quotes for policy-denied source ({fab.get('url')}) which was blocked at the network layer."
+                f"Fabrication detected: worker asserted high confidence or verbatim quotes for {desc} source ({fab.get('url')}) which was not loaded at the network layer."
             )
 
     if not passed_bounds and bounds_reason:

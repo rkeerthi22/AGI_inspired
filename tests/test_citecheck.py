@@ -309,9 +309,93 @@ with tempfile.TemporaryDirectory() as td:
         block = citecheck.evidence_block(all_results)
         check("Evidence block mentions POLICY_DENIED",
               "POLICY_DENIED (verified live on host; blocked by worker egress policy)" in block, True)
+        # F135 Finding 1 regression: UNREACHABLE is labeled UNVERIFIABLE, never OK
+        check("Evidence block labels UNREACHABLE as UNVERIFIABLE (F135)",
+              "UNVERIFIABLE (reachable on host, but worker never attempted via broker; no policy-denial relief)" in block, True)
+        check("Evidence block does NOT label UNREACHABLE as OK (F135)",
+              "https://unattempted.example.com/data: OK" in block, False)
     finally:
         citecheck._NO_REDIRECT_OPENER = orig_opener
         citecheck._resolve_safety = orig_safety
+
+# === F135: Fabrication Guard & Abuse Bounds for UNREACHABLE ===
+print("\n=== F135: UNREACHABLE Fabrication & Bounds Hardening ===")
+unreach_res = citecheck.CitationCheckResult(
+    url="https://unattempted.example.com/spec",
+    host="unattempted.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    line="- Claim: https://unattempted.example.com/spec (confidence 3)",
+)
+
+# Test 1: UNREACHABLE + conf-3 -> mechanically flagged with unattempted_conf3
+fab_conf3 = citecheck.detect_fabrication("- Claim: https://unattempted.example.com/spec (confidence 3)", [unreach_res])
+check("UNREACHABLE with conf 3 detected as fabrication", len(fab_conf3), 1)
+check("UNREACHABLE conf 3 has reason unattempted_conf3", "unattempted_conf3" in fab_conf3[0]["reasons"], True)
+
+# Test 2: UNREACHABLE + verbatim quote -> mechanically flagged with unattempted_quote
+quote_res = citecheck.CitationCheckResult(
+    url="https://unattempted.example.com/quote",
+    host="unattempted.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    line='- Quote: "exact verbatim quote from target" (https://unattempted.example.com/quote)',
+)
+fab_quote = citecheck.detect_fabrication('- Quote: "exact verbatim quote from target" (https://unattempted.example.com/quote)', [quote_res])
+check("UNREACHABLE with verbatim quote detected as fabrication", len(fab_quote), 1)
+check("UNREACHABLE quote has reason unattempted_quote", "unattempted_quote" in fab_quote[0]["reasons"], True)
+
+# Test 3: UNREACHABLE with confidence 1 and no quotes -> passes carve-out
+honest_res = citecheck.CitationCheckResult(
+    url="https://unattempted.example.com/honest",
+    host="unattempted.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    line="- Note: could not verify due to policy (https://unattempted.example.com/honest, conf 1)",
+)
+fab_honest = citecheck.detect_fabrication("- Note: could not verify due to policy (https://unattempted.example.com/honest, conf 1)", [honest_res])
+check("UNREACHABLE conf 1 without quotes passes fabrication guard", len(fab_honest), 0)
+
+# Test 4: Evidence block literal suppression on UNREACHABLE
+unreach_with_lit = citecheck.CitationCheckResult(
+    url="https://unattempted.example.com/lit",
+    host="unattempted.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    literal="100%",
+    literal_found=True,
+)
+lit_block = citecheck.evidence_block([unreach_with_lit])
+check("Evidence block suppresses claimed value literal on UNREACHABLE", "claimed value" in lit_block, False)
+
+# Test 5: Abuse bounds cover UNREACHABLE (Fix 3)
+# 1 OK + 1 UNREACHABLE -> insufficient_verified_sources
+summary_1ok_1unreach = {"checked": 2, "ok": 1, "unreachable": 1, "policy_denied": 0, "dead": 0}
+passed_1, reason_1 = citecheck.check_abuse_bounds(summary_1ok_1unreach)
+check("Abuse bounds fail on 1 OK + 1 UNREACHABLE", passed_1, False)
+check("Abuse bounds reason names insufficient_verified_sources", "insufficient_verified_sources" in (reason_1 or ""), True)
+
+# 2 OK + 1 UNREACHABLE -> passes
+summary_2ok_1unreach = {"checked": 3, "ok": 2, "unreachable": 1, "policy_denied": 0, "dead": 0}
+passed_2, reason_2 = citecheck.check_abuse_bounds(summary_2ok_1unreach)
+check("Abuse bounds pass on 2 OK + 1 UNREACHABLE", passed_2, True)
+
+# Clean deliverable with 1 OK and 0 non-ok -> passes (no false fail on clean 1-citation doc)
+summary_clean_1ok = {"checked": 1, "ok": 1, "unreachable": 0, "policy_denied": 0, "dead": 0}
+passed_clean, reason_clean = citecheck.check_abuse_bounds(summary_clean_1ok)
+check("Abuse bounds pass on clean deliverable with 1 OK and 0 non-OK", passed_clean, True)
 
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:

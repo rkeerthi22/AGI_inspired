@@ -677,33 +677,41 @@ def evidence_block(evidence: list[dict | CitationCheckResult]) -> str:
         classification = e.get("classification")
         if classification == CLASSIFICATION_POLICY_DENIED:
             status = "POLICY_DENIED (verified live on host; blocked by worker egress policy)"
+        elif classification == CLASSIFICATION_UNREACHABLE:
+            status = "UNVERIFIABLE (reachable on host, but worker never attempted via broker; no policy-denial relief)"
+        elif classification == CLASSIFICATION_OK:
+            status = "OK"
+        elif classification == CLASSIFICATION_DEAD or is_dead(e):
+            status = f"DEAD ({e.get('http_status') or e.get('error')})"
         elif e.get("reachable"):
             status = "OK"
-        elif is_dead(e):
-            status = f"DEAD ({e.get('http_status') or e.get('error')})"
         else:
             status = f"BLOCKED ({e.get('http_status') or e.get('error')})"
+
         lit = f", claimed value '{e.get('literal')}' found on page: {e.get('literal_found')}" \
-            if e.get("literal") and e.get("reachable") else ""
+            if e.get("literal") and (classification == CLASSIFICATION_OK or (classification is None and e.get("reachable"))) else ""
         lines.append(f"- {e.get('url')}: {status}{lit}")
     return "\n".join(lines)
 
 
 def check_abuse_bounds(summary: dict) -> tuple[bool, str | None]:
-    """Check Gap 3 abuse bounds for POLICY_DENIED citation relief (F134).
+    """Check Gap 3 abuse bounds for POLICY_DENIED and UNREACHABLE citations (F134, F135).
 
     Bounds:
-    1. Maximum 25% POLICY_DENIED fraction of total citations.
+    1. Minimum 2 OK citations required when any non-OK citations (policy_denied or unreachable) are present.
     2. Maximum 2 absolute POLICY_DENIED citations.
-    3. Minimum 2 OK citations required when policy relief is claimed.
+    3. Maximum 25% POLICY_DENIED fraction of total citations.
     """
     checked = summary.get("checked", 0)
     policy_denied = summary.get("policy_denied", 0)
+    unreachable = summary.get("unreachable", 0)
     ok = summary.get("ok", 0)
 
+    non_ok = policy_denied + unreachable
+    if non_ok > 0 and ok < MIN_OK_CITATIONS:
+        return False, f"insufficient_verified_sources: found {ok} OK citations, minimum {MIN_OK_CITATIONS} required"
+
     if policy_denied > 0:
-        if ok < MIN_OK_CITATIONS:
-            return False, f"insufficient_verified_sources: found {ok} OK citations, minimum {MIN_OK_CITATIONS} required"
         if policy_denied > MAX_POLICY_DENIED_COUNT:
             return False, f"high_policy_denial_count: {policy_denied} policy-denied citations exceeds maximum allowed ({MAX_POLICY_DENIED_COUNT})"
         if checked > 0 and (policy_denied / checked > MAX_POLICY_DENIED_FRAC):
@@ -743,17 +751,18 @@ def detect_fabrication(
     text: str,
     evidence: list[CitationCheckResult | dict],
 ) -> list[dict[str, Any]]:
-    """Detect worker fabrication on POLICY_DENIED citations (F134).
+    """Detect worker fabrication on non-allowlisted / un-attempted citations (F134, F135).
 
     A worker cannot assert high confidence (confidence 3) or attribute verbatim
-    quotations ("...") to a source that was blocked by egress policy.
-    Such assertions are mechanically provable fabrications since the worker was
-    physically blocked from loading the resource at the network layer.
+    quotations ("...") to a source that was blocked by egress policy (POLICY_DENIED)
+    or never attempted via the broker (UNREACHABLE).
+    Such assertions are mechanically provable fabrications since the worker
+    did not load the resource at the network layer.
     """
     fabrications: list[dict[str, Any]] = []
     for e in evidence:
         cls_name = getattr(e, "classification", None) or (e.get("classification") if isinstance(e, dict) else None)
-        if cls_name != CLASSIFICATION_POLICY_DENIED:
+        if cls_name not in (CLASSIFICATION_POLICY_DENIED, CLASSIFICATION_UNREACHABLE):
             continue
 
         url = getattr(e, "url", None) or (e.get("url") if isinstance(e, dict) else "")
@@ -765,6 +774,7 @@ def detect_fabrication(
         clean_line = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', line)
         clean_context = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', context)
 
+        prefix = "policy_denied" if cls_name == CLASSIFICATION_POLICY_DENIED else "unattempted"
         reasons = []
         # 1. Check confidence 3
         has_conf3 = False
@@ -777,7 +787,7 @@ def detect_fabrication(
                     has_conf3 = True
                     break
         if has_conf3:
-            reasons.append("confidence_3")
+            reasons.append(f"{prefix}_conf3")
 
         # 2. Check verbatim quotes
         has_quote = False
@@ -788,14 +798,16 @@ def detect_fabrication(
         elif _QUOTE_RE.search(clean_context):
             has_quote = True
         if has_quote:
-            reasons.append("verbatim_quote")
+            reasons.append(f"{prefix}_quote")
 
         if reasons:
+            source_desc = "policy-denied" if cls_name == CLASSIFICATION_POLICY_DENIED else "unattempted"
             fabrications.append({
                 "url": url,
                 "host": host,
+                "classification": cls_name,
                 "reasons": reasons,
-                "detail": f"Fabrication: worker asserted {' and '.join(reasons)} for policy-denied source ({url})"
+                "detail": f"Fabrication: worker asserted {' and '.join(reasons)} for {source_desc} source ({url})"
             })
 
     return fabrications
