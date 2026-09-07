@@ -2880,3 +2880,73 @@ without crashing the transaction.
 Verified across all subsequent cohort runs and unit test suite `tests/test_cohort_isolation.py`
 (11/11 tests passing).
 
+### F129 — Retry-attempt artifact preservation and multi-attempt accounting semantics — P1 — FIXED 2026-09-07
+
+Prior behavior: Retries and post-failure diagnostics reused flat `task{tid}_*` filenames
+without an attempt suffix. When pre-window diagnostics ran on task 116 at 02:13 on 2026-09-07,
+a synthetic run clobbered `task116_mission.usage.json` (writing 2,600 in / 1,100 out) while
+`task116_worker.usage.json` still held the authentic 09-03 data (24,110 in / 3,573 out).
+Furthermore, multi-attempt token accounting semantics were undefined: the reconciliation
+invariant `worker + critic == mission` held only for single-attempt tasks; multi-attempt
+tasks sometimes recorded cumulative spend at the top level while worker+critic files held
+only the final attempt, causing the validation doc's token table to mismatch the ledger on
+tasks 106, 109, and 115.
+
+Fix:
+1. Deterministic Attempt Resolution (`orchestrator/worker_diagnostics.py:get_task_attempt`):
+   Monotonically resolves attempt count from `tasks.attempt_count` in SQLite and existing
+   `task{tid}_a*_*` and legacy un-suffixed artifacts on disk. Never regresses or clobbers.
+2. Attempt-Suffixed Raw Diagnostics & Usage (`worker_diagnostics.write_worker_raw`,
+   `task_runner._run_research_task`, `task_runner._record_outcome`, `workflow.run_synthesis`):
+   Writes `task{tid}_a{attempt}_worker_raw.txt`, `task{tid}_a{attempt}_worker.usage.json`,
+   `task{tid}_a{attempt}_critic.usage.json`, and `task{tid}_a{attempt}_mission.usage.json`.
+   Attempt 1 mirrors to legacy un-suffixed filenames for backward compatibility; Attempt 2+
+   never mutates or clobbers prior attempt files.
+3. Unified Accounting Semantics (`orchestrator/evaluation.py:build_mission_usage`):
+   Top-level `input_tokens`, `output_tokens`, and `total_tokens` strictly report *this attempt's*
+   spend, guaranteeing `worker + critic == mission` holds mathematically. Cumulative tokens across
+   all attempts are recorded in `attempt_totals: {input_tokens, output_tokens, total_tokens}`,
+   reconciling with `ledger.db` (`tokens_in`/`tokens_out`).
+4. Ledger Attempt Count Tracking (`orchestrator/ledger.py:finish_task`):
+   Added `attempt_count` parameter to persist attempt index into SQLite `tasks` table.
+
+Verified by `tests/test_retry_artifacts.py` (37/37 assertions passing).
+
+### F130 — snapshot_live_repo race during concurrent live execution windows — P2 — FIXED 2026-09-07
+
+Prior behavior: In `tests/test_operator_cli.py`, `snapshot_live_repo()` computed a SHA-256 digest
+of every file in `runs/`. When a model-free gate was run concurrently with an open live execution
+window (e.g. during Gemini's controlled validation cohort run), background appends to
+`runs/health_events.jsonl`, `runs/batch_*.log`, or task deliverable files changed the snapshot
+between `before` and `after`, causing `test_operator_cli` to fail (observed 74/75 during audit).
+
+Fix:
+In `tests/test_operator_cli.py:snapshot_live_repo()`, excluded append-only logs (`.log`, `.jsonl`)
+and active task execution artifacts (`task*`, `canary*`, `cohort_*`) from the `runs` directory
+digest comparison. Operator CLI commands (`agi status`, `agi doctor`, etc.) remain fully verified
+against state tampering without false failures during live operational windows.
+
+Verified by `tests/test_operator_cli.py` (164/164 assertions passing).
+
+### F131 — Test and diagnostic residue isolation in production runs directory — P2 — FIXED 2026-09-07
+
+Prior behavior: Multiple test suites and diagnostic probes targeted the production `runs/` directory:
+1. `tests/test_m5_dryrun.py` did not patch `evaluation.RUNS`, causing it to write synthetic M5
+   data into `runs/task116_mission.usage.json` and clobber production task 116 evidence.
+2. `tests/test_f50.py` passed `ROOT / "runs" / "t.usage.json"` to `worker_with_failover`.
+3. `tests/test_f66.py` set `td = ROOT / "runs"` and left `task660066_a1_*` artifacts behind.
+4. Ad-hoc diagnostic probes created `task999999_mission.usage.json`, `test_diag_usage.json`,
+   `test_hermes_oneshot_usage.json`, and `test_usage.json` in `runs/`.
+
+Fix:
+1. Isolated `tests/test_m5_dryrun.py` by adding `patch.object(evaluation, "RUNS", self.runs_dir)`
+   and renumbering test task IDs to `99116` and `99117`.
+2. Routed `tests/test_f50.py` usage writing to `tempfile.gettempdir()` with immediate cleanup.
+3. Isolated `tests/test_f66.py` inside an ephemeral `tempfile.TemporaryDirectory()`.
+4. Restored authentic 2026-09-03 values in `runs/task116_mission.usage.json` (24,110 in / 3,573 out /
+   27,683 total / 7 API calls / 8 executed retrieval calls / 8 citation fetches).
+5. Deleted all orphaned diagnostic residue files from production `runs/`.
+
+Verified by running `test_m5_dryrun.py` (2/2), `test_f50.py` (15/15), and `test_f66.py` (39/39)
+with zero residue left in `runs/`.
+

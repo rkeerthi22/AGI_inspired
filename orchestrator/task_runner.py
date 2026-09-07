@@ -29,7 +29,7 @@ from retrieval_progress import (DEFAULT_RETRIEVAL_PROFILE,
                                 DYNAMIC_BROWSER_PROFILE,
                                 retrieval_policy_for_profile)
 from health_events import emit as emit_health_event
-from worker_diagnostics import write_worker_raw
+from worker_diagnostics import write_worker_raw, get_task_attempt
 
 
 @dataclass(frozen=True)
@@ -164,7 +164,10 @@ def _run_research_task(context: _TaskContext) -> str:
         # missing/unreadable file adds nothing.
         try:
             import json as _json
-            _ev_path = rc.RUNS / f"task{tid}_citation_evidence.json"
+            attempt_hint = int(row.get("attempt_count") or 0)
+            _ev_path = rc.RUNS / f"task{tid}_a{attempt_hint}_citation_evidence.json"
+            if not _ev_path.exists():
+                _ev_path = rc.RUNS / f"task{tid}_citation_evidence.json"
             if _ev_path.exists():
                 _ev = _json.loads(_ev_path.read_text(encoding="utf-8"))
                 if _ev.get("evidence"):
@@ -384,7 +387,8 @@ def _run_research_task(context: _TaskContext) -> str:
                            failure_stage="admission")
         return "budget_skip"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
-    usage_path = rc.RUNS / f"task{tid}_worker.usage.json"
+    attempt = get_task_attempt(tid, row, rc.RUNS)
+    usage_path = rc.RUNS / f"task{tid}_a{attempt}_worker.usage.json"
     fs_snapshot = integrity.fs_integrity_snapshot()
     usage: dict = {}
     # F106 §2 (audit 2026-09-05): fs_integrity_check MUST run even when the
@@ -403,29 +407,31 @@ def _run_research_task(context: _TaskContext) -> str:
                 out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
                     prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
                     **worker_options)
+            if attempt == 1 and usage_path.is_file():
+                (rc.RUNS / f"task{tid}_worker.usage.json").write_bytes(usage_path.read_bytes())
         except subprocess.TimeoutExpired:
-            write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout"}, "worker")
+            write_worker_raw(rc.RUNS, tid, "", {"process_error": "worker timeout"}, "worker", attempt=attempt)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes="worker timeout",
-                               append_note=True)
+                               append_note=True, attempt_count=attempt)
             rc.log(f"task {tid}: infra_failed (timeout)")
             if tw:
                 tw.task_failed("worker timeout", failure_stage="execution")
             return "infra_failed"
         except integrity.DatabaseMutationViolation as exc:
-            write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc)}, "worker")
+            write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc)}, "worker", attempt=attempt)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes=f"database containment violation: {exc}",
-                               append_note=True)
+                               append_note=True, attempt_count=attempt)
             rc.log(f"task {tid}: infra_failed (database containment violation)")
             if tw:
                 tw.task_failed("database containment violation", failure_stage="execution")
             return "infra_failed"
         except Exception as exc:
-            write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc)}, "worker")
+            write_worker_raw(rc.RUNS, tid, "", {"process_error": str(exc)}, "worker", attempt=attempt)
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
                                critic_notes=f"worker launch failure: {exc}",
-                               append_note=True)
+                               append_note=True, attempt_count=attempt)
             rc.log(f"task {tid}: infra_failed (worker launch failure: {exc})")
             if tw:
                 tw.task_failed("worker launch failure", failure_stage="execution",
@@ -436,15 +442,15 @@ def _run_research_task(context: _TaskContext) -> str:
     # Persist the FULL raw output regardless of what happens next -- a misclassified
     # task must stay diagnosable. Learned 2026-07-18: a real, substantial brief was
     # nearly lost with only a 200-char snippet surviving in critic_notes.
-    write_worker_raw(rc.RUNS, tid, out, usage, "worker")
+    write_worker_raw(rc.RUNS, tid, out, usage, "worker", attempt=attempt)
     out = execution._strip_tool_chatter(out)
 
     if exhausted:
         # F9: every model in the chain hit quota -- park exactly as before this fix.
         ledger.finish_task(tid, artifacts=[], status="quota_wait",
                            critic_notes="quota/usage limit on every model in the "
-                                        "fallback chain â€” parked (Â§1.6, F9)",
-                           append_note=True)
+                                        "fallback chain — parked (§1.6, F9)",
+                           append_note=True, attempt_count=attempt)
         rc.log(f"task {tid}: chain_exhausted (every fallback model quota-limited)")
         if tw:
             tw.task_failed("every fallback model quota-limited", failure_stage="execution")
@@ -460,8 +466,8 @@ def _run_research_task(context: _TaskContext) -> str:
     if execution.worker_failed(out, usage):
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"worker API failure (full text in "
-                                       f"runs/task{tid}_worker_raw.txt): {out[:200]}",
-                           append_note=True)
+                                       f"runs/task{tid}_a{attempt}_worker_raw.txt): {out[:200]}",
+                           append_note=True, attempt_count=attempt)
         rc.log(f"task {tid}: infra_failed ({out[:80]})")
         if tw:
             tw.task_failed("worker API failure", failure_stage="execution",
@@ -469,7 +475,8 @@ def _run_research_task(context: _TaskContext) -> str:
         return "infra_failed"
     if len(out) < 200:
         ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",
-                           critic_notes=f"output too short ({len(out)} chars) â€” no deliverable")
+                           critic_notes=f"output too short ({len(out)} chars) — no deliverable",
+                           attempt_count=attempt)
         rc.log(f"task {tid}: failed (short output)")
         if tw:
             tw.task_failed("output too short", failure_stage="classification",
@@ -484,7 +491,8 @@ def _run_research_task(context: _TaskContext) -> str:
     if deny_hits:
         ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",
                            critic_notes=f"deny-list match: {deny_hits} -- see policy.yaml "
-                                        f"hard_exclusions; output not persisted as a deliverable")
+                                        f"hard_exclusions; output not persisted as a deliverable",
+                           attempt_count=attempt)
         integrity.escalate(f"task {tid}: worker output matched deny-list pattern(s) {deny_hits}",
                 trigger="deny_list_match", task_id=tid)
         rc.log(f"task {tid}: failed (deny-list match {deny_hits})")
@@ -498,7 +506,7 @@ def _run_research_task(context: _TaskContext) -> str:
     # Trap 2: Never fire repair loop on infra failures, chain exhaustion, or error outputs.
     if exhausted or execution.worker_failed(out, usage) or deliverable_preflight.is_infra_error(out):
         return _record_outcome(context, out, usage, worker_cfg, scope_note,
-                               out_dir, wk, baseline)
+                               out_dir, wk, baseline, attempt=attempt)
 
     repair_attempt = 0
     while repair_attempt < deliverable_preflight.MAX_REPAIR_ATTEMPTS:
@@ -511,12 +519,15 @@ def _run_research_task(context: _TaskContext) -> str:
         repair_attempt += 1
         rc.log(f"task {tid}: preflight repair attempt {repair_attempt}/{deliverable_preflight.MAX_REPAIR_ATTEMPTS} triggered")
         repair_prompt = deliverable_preflight.build_repair_prompt(prompt, out, preflight_report.repair_feedback)
-        repair_usage_path = rc.RUNS / f"task{tid}_worker_repair_{repair_attempt}.usage.json"
+        repair_usage_path = rc.RUNS / f"task{tid}_a{attempt}_worker_repair_{repair_attempt}.usage.json"
         try:
             with integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
                 r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
                     repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
                     **worker_options)
+            if attempt == 1 and repair_usage_path.is_file():
+                (rc.RUNS / f"task{tid}_worker_repair_{repair_attempt}.usage.json").write_bytes(
+                    repair_usage_path.read_bytes())
         except Exception as exc:
             rc.log(f"task {tid}: repair attempt {repair_attempt} failed with exception: {exc}")
             break
@@ -539,29 +550,41 @@ def _run_research_task(context: _TaskContext) -> str:
         r_clean = execution._strip_tool_chatter(r_out)
         if len(r_clean) >= 200 and not policy.deny_list_scan(r_clean):
             out = r_clean
-            write_worker_raw(rc.RUNS, tid, out, usage, "worker")
+            write_worker_raw(rc.RUNS, tid, out, usage, "worker", attempt=attempt)
 
     return _record_outcome(context, out, usage, worker_cfg, scope_note,
-                           out_dir, wk, baseline)
+                           out_dir, wk, baseline, attempt=attempt)
 
 
 def _record_outcome(context: _TaskContext, out: str, usage: dict,
                     worker_cfg: dict, scope_note: str, out_dir, wk: str,
-                    baseline: bool) -> str:
+                    baseline: bool, attempt: int = 1) -> str:
     """Persist, grade, account for, and learn from a completed worker output."""
     tid, mission, roles, row = (context.tid, context.mission,
                                 context.roles, context.row)
     # write deliverable
     slug = re.sub(r"[^a-z0-9]+", "-", row["spec"].lower())[:60].strip("-")
     dest = out_dir / f"{wk}_{slug}.md"
-    dest.write_text(out + f"\n\n---\n_task {tid} Â· {datetime.now().isoformat(timespec='seconds')}"
-                          f" Â· {worker_cfg['model']}_\n", encoding="utf-8")
+    dest.write_text(out + f"\n\n---\n_task {tid} · {datetime.now().isoformat(timespec='seconds')}"
+                          f" · {worker_cfg['model']}_\n", encoding="utf-8")
 
     critic_usage: dict = {}
-    verdict, verdict_text = evaluation.run_critic(
-        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
-        worker_config=worker_cfg)
-    mission_usage = evaluation.build_mission_usage(tid, usage, critic_usage)
+    try:
+        verdict, verdict_text = evaluation.run_critic(
+            row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
+            worker_config=worker_cfg, attempt=attempt)
+    except TypeError:
+        verdict, verdict_text = evaluation.run_critic(
+            row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
+            worker_config=worker_cfg)
+    try:
+        mission_usage = evaluation.build_mission_usage(
+            tid, usage, critic_usage,
+            prior_in=row.get("tokens_in"),
+            prior_out=row.get("tokens_out"),
+            attempt=attempt)
+    except TypeError:
+        mission_usage = evaluation.build_mission_usage(tid, usage, critic_usage)
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                 trigger="pass_criteria_ambiguous", task_id=tid)
@@ -591,7 +614,8 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(rc.ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out,
                        critic_verdict=("needs_review" if verdict == "infra_failed" else verdict),
-                       critic_notes=verdict_text[:500], status=status)
+                       critic_notes=verdict_text[:500], status=status,
+                       attempt_count=attempt)
 
     # Lesson capture (baseline weeks: harvest only, promotion stays OFF per Â§7):
     # critic objections become lesson_candidates so week-3 skill promotion has evidence.

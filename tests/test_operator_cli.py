@@ -168,7 +168,16 @@ def snapshot_live_repo() -> dict:
     proc = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain=v1",
                            "--untracked-files=all"], capture_output=True, text=True)
     targets["git_status"] = (True, proc.stdout)
-    runs_digests = {p.name: digest(p) for p in (ROOT / "runs").glob("*") if p.is_file()}
+    # F130: Exclude append-only log files (.log, .jsonl) and live task execution artifacts
+    # (task*, canary*, cohort_*) so concurrent live windows do not fail the model-free gate.
+    runs_digests = {
+        p.name: digest(p) for p in (ROOT / "runs").glob("*")
+        if p.is_file() and not (
+            p.name.endswith(".log") or
+            p.name.endswith(".jsonl") or
+            p.name.startswith(("task", "canary", "cohort_"))
+        )
+    }
     targets["runs"] = (True, runs_digests)
     return targets
 

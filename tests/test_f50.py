@@ -12,6 +12,7 @@ locality alone never causes a skip, because `allow_local=False` was the tempting
 No model is ever called: ollama_chat / hermes_worker are stubbed.
 """
 import sys
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -107,8 +108,12 @@ print("\n=== 5. worker_with_failover got the same guard ===")
 wcalls = []
 execution.hermes_worker = lambda prompt, cfg, path, timeout=None: (wcalls.append(cfg["model"]), ("", {}))[1]
 execution.load_fallback_chain = lambda: [SMALL]
-out, usage, cfg_used, exhausted = execution.worker_with_failover(
-    synth, SMALL, ROOT / "runs" / "t.usage.json", log_prefix="t")
+temp_usage = Path(tempfile.gettempdir()) / "t.usage.json"
+try:
+    out, usage, cfg_used, exhausted = execution.worker_with_failover(
+        synth, SMALL, temp_usage, log_prefix="t")
+finally:
+    temp_usage.unlink(missing_ok=True)
 check("worker path also skips a rung that cannot fit", wcalls, [])
 check("and reports exhausted", exhausted, True)
 

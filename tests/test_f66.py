@@ -150,15 +150,9 @@ citations = citecheck.extract_citations(dupe_text)
 check("citation extraction deduplicates URL", [c["url"] for c in citations],
       ["https://example.com/pricing", "https://example.com/reviews"])
 
-td = ROOT / "runs"
-if True:
+with tempfile.TemporaryDirectory() as td:
     runs = Path(td)
     row = {"task_id": 660066, "pass_criteria": "Must be cited"}
-    cleanup_paths = [runs / f"task660066_{suffix}" for suffix in (
-        "critic.usage.json", "citation_evidence.json", "mission.usage.json",
-        "worker.usage.retrieval.jsonl")]
-    for path in cleanup_paths:
-        path.unlink(missing_ok=True)
     critic_usage = {}
     evidence = [
         {"url": "https://example.com/pricing", "reachable": True,
@@ -203,7 +197,7 @@ if True:
                         "rejected_calls": 1}) + "\n", encoding="utf-8")
         mission = evaluation.build_mission_usage(
             660066, {"input_tokens": 1000, "output_tokens": 100, "api_calls": 5,
-                 "retrieval_finalization_calls": 1}, critic_usage)
+                 "retrieval_finalization_calls": 1}, critic_usage, runs_dir=runs)
         check("mission calls reconcile", mission["api_calls"], 6)
         check("mission input reconciles", mission["input_tokens"], 1101)
         check("mission output reconciles", mission["output_tokens"], 107)
@@ -212,9 +206,6 @@ if True:
         check("citation retrieval accounting visible", mission["citation_fetches"], 2)
         check("all external retrieval visible", mission["total_external_retrieval_calls"], 8)
         check("mission usage file exists", (runs / "task660066_mission.usage.json").is_file())
-
-    for path in cleanup_paths:
-        path.unlink(missing_ok=True)
 
 execution_source = (ROOT / "orchestrator" / "execution.py").read_text(encoding="utf-8")
 launcher_source = (ROOT / "orchestrator" / "controlled_hermes.py").read_text(encoding="utf-8")

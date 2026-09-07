@@ -12,7 +12,8 @@
     "test_migrations",
     "test_operator_auth",
     "test_runtime_admission",
-    "test_deliverable_preflight"
+    "test_deliverable_preflight",
+    "test_retry_artifacts"
   ],
   "containment": [
     "test_worker_sandbox",

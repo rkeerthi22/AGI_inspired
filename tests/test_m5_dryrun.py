@@ -55,6 +55,7 @@ class M5DryRunTests(unittest.TestCase):
         self.patches = [
             patch.object(rc, "ROOT", Path(self.temp_dir)),
             patch.object(rc, "RUNS", self.runs_dir),
+            patch.object(evaluation, "RUNS", self.runs_dir),
             patch.object(ledger, "LEDGER_DB", self.db_path),
             patch.object(policy, "token_budget_breached", return_value=False),
         ]
@@ -68,7 +69,7 @@ class M5DryRunTests(unittest.TestCase):
 
     def test_m5_revisit_auto_repairs_dead_urls_to_pass(self):
         """Simulates M5 FlowGPT verification: initial draft has 4 dead URLs, repair fixes them, passes."""
-        tid = 116
+        tid = 99116
         spec = (
             "[cohort-2026-W36][M5][recovery] FlowGPT homepage hero claim verification: "
             "confirm or refute FlowGPT's stated '50M+ prompts served' headline using "
@@ -179,7 +180,7 @@ Verdict: **Confirmed**. Independent coverage confirms FlowGPT's stated prompt vo
 
     def test_perpetually_broken_worker_caps_at_max_repair_attempts(self):
         """If worker continues to return dead URLs, auto-repair halts at MAX_REPAIR_ATTEMPTS=2."""
-        tid = 117
+        tid = 99117
         spec = "[cohort-2026-W36][M5][recovery] FlowGPT claim test"
 
         with sqlite3.connect(self.db_path) as conn:

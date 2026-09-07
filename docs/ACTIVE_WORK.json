@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T06:20:00Z",
+  "last_updated": "2026-09-07T07:45:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Post-cohort evidence integrity code repairs (G1 retry artifacts, G2 gate race, G3 multi-attempt accounting, G4 test residue) & G5 asymmetry design proposal",
+      "task_id": "EVIDENCE-INTEGRITY-CODE-REPAIRS-2026-09-07",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-07T07:45:00Z",
+      "last_update": "2026-09-07T08:55:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_PROPOSAL_VERIFICATION_ASYMMETRY_2026-09-07.md",
+      "notes": "COMPLETE: Delivered G1 retry-attempt artifact preservation (F129), G2 snapshot_live_repo race fix (F130), G3 unified multi-attempt token accounting semantics (F129) + reconciled token table in docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md against real ledger, G4 test residue cleanup and test isolation (F131, authentic runs/task116_mission.usage.json restored), and G5 structural design proposal for verification asymmetry (docs/reviews/GEMINI_PROPOSAL_VERIFICATION_ASYMMETRY_2026-09-07.md, proposal only, no code implementation). Added tests/test_retry_artifacts.py. Full model-free gate 76/76 suites green; ESTOP strictly engaged (True); write locks released."
+    },
     {
       "agent": "claude-code",
       "role": "Post-cohort evidence-integrity task brief author (documentation only) — COMPLETED",

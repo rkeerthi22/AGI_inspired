@@ -47,7 +47,7 @@ import ledger  # noqa: F401 -- used via ledger.<name>(...)
 import policy  # noqa: F401 -- used via policy.<name>(...)
 import prompts  # noqa: F401 -- used via prompts.<name>(...)
 import scheduler  # noqa: F401 -- used via scheduler.<name>(...)
-from worker_diagnostics import write_worker_raw
+from worker_diagnostics import write_worker_raw, get_task_attempt
 
 
 def _status_for_critic_verdict(verdict: str) -> str:
@@ -142,6 +142,7 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         rc.log(f"task {tid}: quota_wait (token budget)"); return "quota_wait"
     worker_cfg = roles["worker"]
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']} (tool-free synthesis)")
+    attempt = get_task_attempt(tid, row, rc.RUNS)
     import urllib.error
     try:
         # F9: synthesis_with_failover() consumes every 429 internally (trying the next
@@ -155,16 +156,17 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
         out, model_used_cfg, exhausted = synthesis_result
     except urllib.error.HTTPError as e:
         write_worker_raw(rc.RUNS, tid, "", {"process_error": f"synthesis HTTP {e.code}"},
-                         "synthesis")
+                         "synthesis", attempt=attempt)
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis HTTP {e.code}",
-                           append_note=True)
+                           append_note=True, attempt_count=attempt)
         rc.log(f"task {tid}: infra_failed (HTTP {e.code})"); return "infra_failed"
     except Exception as e:
-        write_worker_raw(rc.RUNS, tid, "", {"process_error": str(e)}, "synthesis")
+        write_worker_raw(rc.RUNS, tid, "", {"process_error": str(e)}, "synthesis",
+                         attempt=attempt)
         ledger.finish_task(tid, artifacts=[], status="infra_failed",
                            critic_notes=f"synthesis call failed: {e}",
-                           append_note=True)
+                           append_note=True, attempt_count=attempt)
         rc.log(f"task {tid}: infra_failed ({e})"); return "infra_failed"
 
     if exhausted:
@@ -176,7 +178,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                 f"synthesis fallback unavailable ({reason}); at least one model was "
                 "ineligible for the prompt context")
         ledger.finish_task(tid, artifacts=[], status=status,
-                           critic_notes=note, append_note=True)
+                           critic_notes=note, append_note=True,
+                           attempt_count=attempt)
         rc.log(f"task {tid}: synthesis_exhausted ({reason})")
         return "chain_exhausted" if quota_only else "capacity_exhausted"
     if model_used_cfg != worker_cfg:
@@ -187,11 +190,12 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                            f"exhaustion on the primary worker", trigger="model_failover", task_id=tid)
         worker_cfg = model_used_cfg  # so the deliverable footer below is truthful too
 
-    write_worker_raw(rc.RUNS, tid, out, syn_usage, "synthesis")
+    write_worker_raw(rc.RUNS, tid, out, syn_usage, "synthesis", attempt=attempt)
     out = execution._strip_tool_chatter(out)
     if len(out.strip()) < 200:
         ledger.finish_task(tid, artifacts=[], status="failed", critic_verdict="fail",
-                           critic_notes=f"output too short ({len(out)} chars)")
+                           critic_notes=f"output too short ({len(out)} chars)",
+                           attempt_count=attempt)
         rc.log(f"task {tid}: failed (short output)"); return "failed"
 
     slug = re.sub(r"[^a-z0-9]+", "-", row["spec"].lower())[:60].strip("-")
@@ -200,10 +204,22 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
                           f" · {worker_cfg['model']} (synthesis, tool-free)_\n",
                     encoding="utf-8")
     critic_usage: dict = {}
-    verdict, verdict_text = evaluation.run_critic(
-        row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
-        worker_config=worker_cfg)
-    mission_usage = evaluation.build_mission_usage(tid, syn_usage, critic_usage)
+    try:
+        verdict, verdict_text = evaluation.run_critic(
+            row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
+            worker_config=worker_cfg, attempt=attempt)
+    except TypeError:
+        verdict, verdict_text = evaluation.run_critic(
+            row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
+            worker_config=worker_cfg)
+    try:
+        mission_usage = evaluation.build_mission_usage(
+            tid, syn_usage, critic_usage,
+            prior_in=row.get("tokens_in"),
+            prior_out=row.get("tokens_out"),
+            attempt=attempt)
+    except TypeError:
+        mission_usage = evaluation.build_mission_usage(tid, syn_usage, critic_usage)
     if verdict == "needs_review":
         integrity.escalate(f"task {tid}: critic verdict ambiguous -- {verdict_text[:200]}",
                            trigger="pass_criteria_ambiguous", task_id=tid)
@@ -226,7 +242,8 @@ def run_synthesis(tid: int, row: dict, mission: dict, roles: dict, out_dir: Path
     ledger.finish_task(tid, artifacts=[str(dest.relative_to(rc.ROOT))], cost_usd=0.0,
                        tokens_in=tok_in, tokens_out=tok_out,
                        critic_verdict=("needs_review" if verdict == "infra_failed" else verdict),
-                       critic_notes=verdict_text[:500], status=status)
+                       critic_notes=verdict_text[:500], status=status,
+                       attempt_count=attempt)
     if verdict == "fail":
         ledger.add_lesson(tid, f"[{mission['id']}] {verdict_text[:300]}", kind="failed")
     rc.log(f"task {tid}: {status} verdict={verdict} (synthesis, {dest.name})")

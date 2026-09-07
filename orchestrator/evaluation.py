@@ -211,7 +211,8 @@ def critic_is_independent(worker_config: dict | None,
 
 def run_critic(row: dict, out: str, roles: dict, baseline: bool,
                scope_note: str = "", usage_out: dict | None = None,
-               worker_config: dict | None = None) -> tuple[str, str]:
+               worker_config: dict | None = None,
+               attempt: int = 1) -> tuple[str, str]:
     """Tool-free critic judging deliverable CONTENT, now backed by a mechanical,
     non-LLM truth signal (H4, docs/HARDENING.md — fixes F3, F4). Returns
     (verdict, text) where verdict is 'pass' | 'fail' | 'needs_review' — the third
@@ -227,6 +228,10 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     A write failure must never convert a real verdict into a silent auto-fail,
     so persistence exceptions are logged and swallowed -- the verdict path
     stays trustworthy regardless of disk state.
+
+    F129: write attempt-suffixed artifacts (e.g. task<id>_a<attempt>_critic.usage.json)
+    so retries never clobber prior attempt evidence. Maintain canonical un-suffixed
+    paths for attempt 1.
 
     The production caller passes the actual worker configuration. A critic on
     the same provider is not independent, even when its model string differs:
@@ -245,8 +250,11 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
         usage["total_tokens"] = int(usage.get("input_tokens") or 0) + int(
             usage.get("output_tokens") or 0)
         try:
-            (RUNS / f"task{row['task_id']}_critic.usage.json").write_text(
+            (RUNS / f"task{row['task_id']}_a{attempt}_critic.usage.json").write_text(
                 json.dumps(usage, indent=2) + "\n", encoding="utf-8")
+            if attempt == 1:
+                (RUNS / f"task{row['task_id']}_critic.usage.json").write_text(
+                    json.dumps(usage, indent=2) + "\n", encoding="utf-8")
         except Exception as e:
             log(f"critic usage not persisted for task {row['task_id']} ({e})")
         return verdict, text
@@ -262,11 +270,16 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     usage["citation_fetches"] = len(evidence)
     usage["citation_unique_urls"] = len({e.get("url") for e in evidence if e.get("url")})
     try:
-        (RUNS / f"task{row['task_id']}_citation_evidence.json").write_text(
-            json.dumps({"task_id": row["task_id"], "fetch_attempts": len(evidence),
-                        "unique_urls": usage["citation_unique_urls"],
-                        "summary": summary, "error": evidence_error,
-                        "evidence": evidence}, indent=2) + "\n", encoding="utf-8")
+        ev_payload = json.dumps({"task_id": row["task_id"], "attempt": attempt,
+                    "fetch_attempts": len(evidence),
+                    "unique_urls": usage["citation_unique_urls"],
+                    "summary": summary, "error": evidence_error,
+                    "evidence": evidence}, indent=2) + "\n"
+        (RUNS / f"task{row['task_id']}_a{attempt}_citation_evidence.json").write_text(
+            ev_payload, encoding="utf-8")
+        if attempt == 1:
+            (RUNS / f"task{row['task_id']}_citation_evidence.json").write_text(
+                ev_payload, encoding="utf-8")
     except Exception as e:
         log(f"citation evidence not persisted for task {row['task_id']} ({e})")
     tw = trajectory.active()
@@ -354,9 +367,17 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
             # Persist WHY, not just the verdict: today's three 001 failures (24/25/26)
             # were only diagnosable because the one-sentence reason happened to name a
             # missing section. The full trace makes that reliable instead of lucky.
-            trace_path=RUNS / f"task{row['task_id']}_critic_reasoning.txt",
+            trace_path=RUNS / f"task{row['task_id']}_a{attempt}_critic_reasoning.txt",
             usage_out=model_usage,
             **call_options)
+        if attempt == 1:
+            try:
+                _t_src = RUNS / f"task{row['task_id']}_a{attempt}_critic_reasoning.txt"
+                if _t_src.exists():
+                    (RUNS / f"task{row['task_id']}_critic_reasoning.txt").write_text(
+                        _t_src.read_text(encoding="utf-8"), encoding="utf-8")
+            except Exception:
+                pass
     except Exception as e:
         if tw:
             tw.critic_evaluated("infra_failed", model=critic_cfg.get("model", ""),
@@ -382,8 +403,11 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
     return _finish(parsed_verdict, verdict_text)
 
 
-def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dict:
-    """F66: merge worker/finalizer, critic, and citation retrieval accounting
+def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict,
+                        prior_in: int = 0, prior_out: int = 0,
+                        attempt: int = 1,
+                        runs_dir: Path | None = None) -> dict:
+    """F66 / F129: merge worker/finalizer, critic, and citation retrieval accounting
     into one mission usage file. The arithmetic is direct, no guesswork:
 
         total_tokens     = worker_in + worker_out + critic_in + critic_out
@@ -397,18 +421,28 @@ def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dic
             (covers the apples-to-apples number across runs that
              have varying tool strategies and citation needs)
 
-    The worker/finalizer split is preserved verbatim from the worker's usage
-    file (``api_calls`` includes the finalizer). The critic block includes
-    its own api_calls + in/out tokens + total_tokens so the mission total
-    reconciles exactly across the three roles.
+    F129 (G1/G3): The reconciliation invariant worker + critic == mission holds
+    strictly for THIS attempt (input_tokens, output_tokens, total_tokens).
+    A separate ``attempt_totals`` block accumulates prior attempts' consumption
+    for exact reconciliation with ledger tokens_in / tokens_out.
+    Attempt-suffixed files (task<tid>_a<attempt>_mission.usage.json) preserve
+    historical evidence without in-place clobbering. Attempt 1 also maintains
+    canonical un-suffixed paths for backwards compatibility.
     """
+    runs = runs_dir or RUNS
     worker_in = int(worker_usage.get("input_tokens") or worker_usage.get("tokens_in") or 0)
     worker_out = int(worker_usage.get("output_tokens") or worker_usage.get("tokens_out") or 0)
     critic_in = int(critic_usage.get("input_tokens") or critic_usage.get("tokens_in") or 0)
     critic_out = int(critic_usage.get("output_tokens") or critic_usage.get("tokens_out") or 0)
+    this_in = worker_in + critic_in
+    this_out = worker_out + critic_out
+    accum_in = this_in + int(prior_in or 0)
+    accum_out = this_out + int(prior_out or 0)
     executed_retrieval = 0
     rejected = 0
-    audit_path = RUNS / f"task{tid}_worker.usage.retrieval.jsonl"
+    audit_path = runs / f"task{tid}_a{attempt}_worker.usage.retrieval.jsonl"
+    if not audit_path.is_file():
+        audit_path = runs / f"task{tid}_worker.usage.retrieval.jsonl"
     try:
         for line in audit_path.read_text(encoding="utf-8").splitlines():
             event = json.loads(line)
@@ -420,9 +454,15 @@ def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dic
     citation_fetches = int(critic_usage.get("citation_fetches") or 0)
     citation_unique = int(critic_usage.get("citation_unique_urls") or 0)
     merged = {
-        "input_tokens": worker_in + critic_in,
-        "output_tokens": worker_out + critic_out,
-        "total_tokens": worker_in + worker_out + critic_in + critic_out,
+        "attempt": attempt,
+        "input_tokens": this_in,
+        "output_tokens": this_out,
+        "total_tokens": this_in + this_out,
+        "attempt_totals": {
+            "input_tokens": accum_in,
+            "output_tokens": accum_out,
+            "total_tokens": accum_in + accum_out,
+        },
         "api_calls": int(worker_usage.get("api_calls") or 0)
                      + int(critic_usage.get("api_calls") or 0),
         "research_and_finalization_api_calls": int(worker_usage.get("api_calls") or 0),
@@ -437,6 +477,9 @@ def build_mission_usage(tid: int, worker_usage: dict, critic_usage: dict) -> dic
         "citation_unique_urls": citation_unique,
         "total_external_retrieval_calls": executed_retrieval + citation_fetches,
     }
-    (RUNS / f"task{tid}_mission.usage.json").write_text(
+    (runs / f"task{tid}_a{attempt}_mission.usage.json").write_text(
         json.dumps(merged, indent=2) + "\n", encoding="utf-8")
+    if attempt == 1:
+        (runs / f"task{tid}_mission.usage.json").write_text(
+            json.dumps(merged, indent=2) + "\n", encoding="utf-8")
     return merged

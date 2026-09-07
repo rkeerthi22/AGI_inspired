@@ -120,7 +120,8 @@ def start_task(task_id: int, model_used: str) -> None:
 
 def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, tokens_out=None,
                 critic_verdict=None, critic_notes=None, status="done",
-                interventions=None, intervention_types=None, append_note=False) -> None:
+                interventions=None, intervention_types=None, append_note=False,
+                attempt_count=None) -> None:
     """F21 (docs/HARDENING.md): consumption columns default to None and are written
     via COALESCE, so OMITTING them preserves whatever a previous attempt recorded.
 
@@ -166,13 +167,15 @@ def finish_task(task_id: int, *, artifacts, cost_usd=None, tokens_in=None, token
             "critic_notes=CASE WHEN ?=1 THEN TRIM(COALESCE(critic_notes,'') || ' | ' || ?) "
             "             ELSE COALESCE(?, critic_notes) END, "
             "interventions=COALESCE(?, interventions), "
-            "intervention_types=COALESCE(?, intervention_types) WHERE task_id=?",
+            "intervention_types=COALESCE(?, intervention_types), "
+            "attempt_count=COALESCE(?, attempt_count) WHERE task_id=?",
             (status, stamp,
              json.dumps(artifacts), cost_usd, tokens_in, tokens_out,
              critic_verdict,
              1 if append_note else 0, critic_notes or "", critic_notes,
              interventions,
-             json.dumps(intervention_types) if intervention_types else None, task_id),
+             json.dumps(intervention_types) if intervention_types else None,
+             attempt_count, task_id),
         )
 
 

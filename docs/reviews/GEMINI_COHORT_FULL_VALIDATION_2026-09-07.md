@@ -29,18 +29,19 @@ The real-world validation cohort has achieved **7 out of 7 missions PASSED (100%
 
 Every mission was executed inside a transactional `CohortIsolation` controlled window with independent critic routing (`roles['critic'] = glm-5.2:cloud != roles['worker'] = byteplus_coding/ark-code-latest`), verified in `ledger/ledger.db`:
 
-| Mission ID | Type | Task ID | Duration | Tokens In | Tokens Out | Critic Verdict | Status | Facts Extracted | Artifact Path |
+| Mission ID | Type | Task ID | Duration | Tokens In (Cumulative) | Tokens Out (Cumulative) | Critic Verdict | Status | Facts Extracted | Artifact Path |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: | :--- |
-| **M1** | straightforward_research | 106 | 97.2s | 14,204 | 4,210 | **`pass`** | `done` | +8 | `workspace/shopify/2026-W36_cohort-2026-w36-m1-straightforward-research-prompthero-ai-pro.md` |
-| **M2** | dynamic_browser_required | 109 | 114.5s | 18,920 | 5,112 | **`pass`** | `done` | +10 | `workspace/shopify/2026-W36_cohort-2026-w36-m2-dynamic-browser-canonical-aiprm-pricing-p.md` |
+| **M1** | straightforward_research | 106 | 97.2s | 55,471 | 9,180 | **`pass`** | `done` | +8 | `workspace/shopify/2026-W36_cohort-2026-w36-m1-straightforward-research-prompthero-ai-pro.md` |
+| **M2** | dynamic_browser_required | 109 | 114.5s | 16,765 | 6,235 | **`pass`** | `done` | +10 | `workspace/shopify/2026-W36_cohort-2026-w36-m2-dynamic-browser-canonical-aiprm-pricing-p.md` |
 | **M3** | externally_blocked_source | 140 | 136.4s | 40,404 | 7,329 | **`pass`** | `done` | +11 | `workspace/shopify/2026-W37_cohort-2026-w36-m3-blocked-source-promptbase-customer-review.md` |
-| **M4** | multi_source_synthesis | 115 | 82.1s | 16,330 | 4,890 | **`pass`** | `done` | +9 | `workspace/shopify/2026-W36_cohort-2026-w36-m4-multi-source-synthesis-build-a-4-competit.md` |
+| **M4** | multi_source_synthesis | 115 | 82.1s | 7,415 | 2,749 | **`pass`** | `done` | +9 | `workspace/shopify/2026-W36_cohort-2026-w36-m4-multi-source-synthesis-build-a-4-competit.md` |
 | **M5** | recovery_mission | 137 | 77.4s | 11,767 | 4,192 | **`pass`** | `done` | +6 | `workspace/shopify/2026-W37_cohort-2026-w36-m5-recovery-flowgpt-homepage-hero-claim-veri.md` |
 | **M6** | capability_selection | 145 | 159.2s | 44,385 | 11,039 | **`pass`** | `done` | +6 | `workspace/shopify/2026-W37_cohort-2026-w36-m6-capability-selection-identify-the-most-c.md` |
 | **M7** | partial_answer | 150 | 135.1s | 34,598 | 9,126 | **`pass`** | `done` | +12 | `workspace/shopify/2026-W37_cohort-2026-w36-m7-partial-answer-ai-prompt-marketplace-lan.md` |
 
 **Overall Cohort Pass Rate: 7 / 7 (100.0%)**  
-**Total Tokens Consumed across Passing Cohort:** 180,608 input tokens, 45,898 output tokens.
+**Total Tokens Consumed across Passing Cohort (Ledger Cumulative):** 210,805 input tokens, 49,850 output tokens (260,655 total).  
+*(Note on Multi-Attempt Accounting Semantics / F129: Reconciled to ledger cumulative totals. Top-level usage artifacts record single-attempt spend satisfying worker + critic == mission, while attempt_totals tracks the cumulative ledger spend across retries.)*
 
 ---
 
