@@ -1,23 +1,14 @@
 {
   "schema_version": 2,
-  "brief_revision": 77,
-  "created_at": "2026-09-07T03:19:51.190906+00:00",
+  "brief_revision": 78,
+  "created_at": "2026-09-07T03:25:44.725026+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      ".harness/egress_attestation.signed",
-      "config/egress_policy.yaml",
-      "docs/ACTIVE_WORK.json",
-      "docs/CURRENT_STATE.md",
-      "orchestrator/controlled_hermes.py",
-      "orchestrator/retrieval_progress.py",
-      "workspace/validation/cohort_isolation.py",
-      "docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md"
-    ],
-    "based_on_head": "3a80ef51343d6ca51d4dbcd66bce317a792728b9"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "c81ad2dd4c441c8fbede936d69ae0fad48cbc44e"
   },
   "task": {
     "id": "LIVE-VALIDATION-REMAINING-COHORT-2026-09-07",
