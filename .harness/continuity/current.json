@@ -1,17 +1,17 @@
 {
   "schema_version": 2,
-  "brief_revision": 78,
-  "created_at": "2026-09-07T03:25:44.725026+00:00",
+  "brief_revision": 79,
+  "created_at": "2026-09-07T03:43:11.076415+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "c81ad2dd4c441c8fbede936d69ae0fad48cbc44e"
+    "based_on_head": "5edbc0b21a45a5a78baa3886fb6818e2e15f794b"
   },
   "task": {
-    "id": "LIVE-VALIDATION-REMAINING-COHORT-2026-09-07",
+    "id": "DOCS-REGISTRY-SYNC-2026-09-07",
     "phase": "cohort-full-validation-completed",
     "status": "completed",
     "next_action": "Review handoff with Claude Code and operator; prepare enterprise three-identity deployment packaging."
@@ -19,10 +19,11 @@
   "completed": [
     "Real-world validation cohort 7/7 (100% pass yield) completed across M1-M7 under Windows Restricted Token containment (S-1-5-12) & independent critic (glm-5.2:cloud)",
     "M5 (task 137), M3 (task 140), M6 (task 145), M7 (task 150) all verified done/pass in ledger; M1, M2, M4 verified passing",
-    "Multi-engine search adapter in controlled_hermes.py and egress broker allowlist synchronization in config/egress_policy.yaml",
+    "F127 multi-engine search adapter in controlled_hermes.py and egress broker allowlist synchronization in config/egress_policy.yaml",
+    "F128 CohortIsolation NTFS atomic replacement exponential backoff in workspace/validation/cohort_isolation.py",
     "Retrieval controller low_novelty_limit=4 and finalization prompt guidance landed in orchestrator/retrieval_progress.py",
-    "CohortIsolation NTFS atomic replacement exponential backoff in workspace/validation/cohort_isolation.py",
     "Comprehensive audit dossier authored at docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md",
+    "Canonical hardening (F127/F128) and incidents (2026-09-07) registries fully updated and synchronized",
     "Step 2 host hardening: scripts/enforce_worker_firewall.ps1 provisioned & verified (11/11)",
     "Model-free gate 75/75 suites green across unit, containment, and integration tiers"
   ],
@@ -39,11 +40,23 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "64b8ce193dabd571800b86039bcac32e86b4c2776df752f4692fa95eaba67ab9"
+      "sha256": "70a3e0229f0388ec7e13b96656eb82474679fc59094504e4b8fd22b790a02405"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "c683eb62ad1406aff819a4ab442e5b8df299a690db71a935eeba3968fd9d8b15"
+      "sha256": "1676cf9a77cb07377a2de2c88b12247dd506786ccbab4978b49ec021c3cff92d"
+    },
+    {
+      "path": "docs/HARDENING.md",
+      "sha256": "ab5d78227181b4d1e7486873e00cb144011462663e250fc710d893339f1dfd20"
+    },
+    {
+      "path": "docs/INCIDENTS.md",
+      "sha256": "f90f4781892205b0c424030862da1398fb3ef4e99b8d51a598f329f1e9ab8df4"
+    },
+    {
+      "path": "docs/GEMINI_REVIEW_DOSSIER.md",
+      "sha256": "a00ae5f947a098005fd5690e6517cef71bf77821f23091dd38a7d2251c156b0b"
     },
     {
       "path": "docs/reviews/GEMINI_COHORT_FULL_VALIDATION_2026-09-07.md",
@@ -60,10 +73,6 @@
     {
       "path": "docs/SECURITY_BLUEPRINT_2026-09-04.md",
       "sha256": "fee9caa8a5418dda5ed181973174e32d776d89c88b7493b99c94c8b545f8d193"
-    },
-    {
-      "path": "docs/HARDENING.md",
-      "sha256": "c53fd47ac1278fb826d862b031aea6df5837e8b65caa94066a9f7333350122fc"
     },
     {
       "path": "workspace/validation/cohort_isolation.py",
