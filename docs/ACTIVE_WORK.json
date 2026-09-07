@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-07T03:35:00Z",
+  "last_updated": "2026-09-07T06:20:00Z",
   "active_agents": [
+    {
+      "agent": "claude-code",
+      "role": "Post-cohort evidence-integrity task brief author (documentation only) — COMPLETED",
+      "task_id": "EVIDENCE-INTEGRITY-BRIEF-2026-09-07",
+      "mode": "completed",
+      "owned_paths": ["docs/EVIDENCE_INTEGRITY_TASKS_2026-09-07.md"],
+      "started_at": "2026-09-07T06:05:00Z",
+      "last_update": "2026-09-07T06:20:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/EVIDENCE_INTEGRITY_TASKS_2026-09-07.md",
+      "notes": "COMPLETED. Independently verified 7/7 cohort PASS against real ledger (tasks 106/109/140/115/137/145/150 all critic_verdict=pass, status=done); gate 75/75 green; WFP rules provisioned; OmniRoute still correctly held. Authored post-cohort task brief assigning Gemini (code fixes: HIGH-1 retry-artifact collision, MEDIUM-2 gate-during-window race, MEDIUM-1 multi-attempt accounting, LOW-2 test residue) + verification-asymmetry STRUCTURAL design proposal; Hermes (diagnostic: LOW-1 prediction_machine import restore-or-remove; independent verification of fixes). Surfaced honest caveat: Gemini's validation doc token table mismatches ledger on 3/7 rows (M1/M2/M4) — live evidence of MEDIUM-1. No code changes, no live calls, no ESTOP change, no push. Coordination doc only."
+    },
     {
       "agent": "gemini-cli",
       "role": "Canonical documentation & hardening/incidents registry synchronization (F127/F128)",
