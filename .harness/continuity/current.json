@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "brief_revision": 94,
-  "created_at": "2026-09-08T04:43:24.564888+00:00",
+  "brief_revision": 95,
+  "created_at": "2026-09-08T04:53:52.875304+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
@@ -59,7 +59,7 @@
     },
     {
       "path": "docs/reviews/GEMINI_FRONTIER_COMPARISON_AND_ENTERPRISE_AUDIT_2026-09-08.md",
-      "sha256": "2a806a0a53fea5abbd35084f22ae2305619d1d3c7124f60eba3aa53f745b7115"
+      "sha256": "030d3930beda0e74c21006096c5fb391412bd58a222951d6fe86d13281af0096"
     },
     {
       "path": "scripts/deploy_three_identity.ps1",
