@@ -1,82 +1,74 @@
 {
   "schema_version": 2,
-  "brief_revision": 91,
-  "created_at": "2026-09-07T21:44:22.689443+00:00",
+  "brief_revision": 93,
+  "created_at": "2026-09-08T03:43:57.080355+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "217d000289ff66ff3c47cb9b5a6efa3f51dcab21"
+    "tree_clean": false,
+    "changed_paths": [
+      ".harness/continuity/current.json"
+    ],
+    "based_on_head": "454882ea727ff99a3df83215b4ab3d5d67434431"
   },
   "task": {
-    "id": "G5-F135-UNREACHABLE-BRANCH-FIX",
-    "phase": "f135-unreachable-branch-completed",
+    "id": "PATH2-THREE-IDENTITY-DEPLOYMENT-2026-09-08",
+    "phase": "path2-three-identity-deployment-completed",
     "status": "completed",
-    "next_action": "F135 landed (UNREACHABLE evidence formatting, fabrication guard, abuse bounds). Gate 76/76 green. Ready for Claude Code final verification and Path 2 greenlight."
+    "next_action": "Path 2 landed (deploy_three_identity.ps1, test suite 7/7, canonical guide). Gate 77/77 green. Ready for release preflight."
   },
   "completed": [
-    "F135: Driven evidence_block labels exclusively off classification; UNREACHABLE labeled UNVERIFIABLE",
-    "F135: Extended detect_fabrication() to catch conf-3 and verbatim quotes on UNREACHABLE citations",
-    "F135: Extended check_abuse_bounds() min-2-OK to fire when (policy_denied + unreachable) > 0",
-    "F135: Added regression tests in tests/test_citecheck.py (58/58 green)",
-    "F135: Added regression tests in tests/test_deliverable_preflight.py (26/26 green)",
-    "Model-free gate 76/76 suites green across unit, containment, and integration tiers",
-    "docs/HARDENING.md (F135), docs/CURRENT_STATE.md, and docs/ACTIVE_WORK.json updated"
+    "Path 2: Authored scripts/deploy_three_identity.ps1 with 8 lifecycle actions",
+    "Path 2: Authored tests/test_three_identity_deployment.py (7/7 green)",
+    "Path 2: Registered in tests/tiers.json ('unit' tier)",
+    "Path 2: Authored docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md",
+    "Model-free gate 77/77 suites green across all tiers",
+    "Updated docs/HARDENING.md (F136), docs/CURRENT_STATE.md, docs/ACTIVE_WORK.json"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
     "No push without operator release decision",
     "Claim write ownership before edits; no concurrent worktree edits during full gates",
-    "No production keys or host accounts provisioned; local token checks are not deployed three-identity isolation",
-    "Critic stays unrestricted on host (do not contain critic)",
-    "Do not touch Path 2 deployment until F135 verified by Claude"
+    "Critic stays unrestricted on host (preserves ground truth)",
+    "No production keys or host accounts provisioned in test suites"
   ],
   "gate": {
     "status": "passed",
-    "detail": "76/76 model-free suites green, exit 0. Preflight 26/26 green. Citecheck 58/58 green. Egress broker integration 38/38 green. ESTOP strictly engaged (True)."
+    "detail": "77/77 model-free suites green, exit 0. Three-identity deployment 7/7 green. Worker readiness 6/6 pass. ESTOP strictly engaged (True)."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "6509d6c7a22c47a4d39125fcf7a4b63b7125e93a801b104146b642c1484bad4a"
+      "sha256": "dc28e99fae12d2cfda4a8278fdb40acb79330331557850b69271e6b366cca230"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "f97a4bf611d0ee819bef0762c49112dd3d1006c0453af7b8b41c8d1a04a24322"
+      "sha256": "723b09454c8bc3dba6620ec9138931e03599878170ca22698d3064ee1a9fbbc0"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "5f5694e0ad38a2e423bc20ca7529c438ecf22c2eea3832f49db47f1d65fbb955"
+      "sha256": "cffcbb7635b214bb41a6c344b1d168d968b34ce75a610dd6b772fdace551eed2"
     },
     {
       "path": "docs/INCIDENTS.md",
       "sha256": "f90f4781892205b0c424030862da1398fb3ef4e99b8d51a598f329f1e9ab8df4"
     },
     {
-      "path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
-      "sha256": "2285f25579164f957fb2cf8c22ef9a82fb6e3f46af8f4392faee7b415e7aec77"
+      "path": "docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md",
+      "sha256": "242f4755b24e8ca912b43974036ac6b0868ef6f069954ea00e62781e4957c134"
     },
     {
-      "path": "docs/G5_F135_UNREACHABLE_BRANCH_REVIEW_2026-09-07.md",
-      "sha256": "50deb25e84cc8ea9d8bddaf87b46d8569180257c0eb2e71e95ab92c98039f86e"
+      "path": "scripts/deploy_three_identity.ps1",
+      "sha256": "0b3308e978908809db215507e7a758907fe6acc20f22fa657a9b3bedf9c3980d"
     },
     {
-      "path": "docs/reviews/GEMINI_PROPOSAL_VERIFICATION_ASYMMETRY_2026-09-07.md",
-      "sha256": "b58a252416683fd99db2582611f1401b51d9229b8a2b9c08a24e73892d4054ed"
+      "path": "tests/test_three_identity_deployment.py",
+      "sha256": "edb0f772af7d20e71b33808fdcbc4cf863c63523db3dff5b52bb2913a44d530b"
     },
     {
-      "path": "docs/HANDOFF_PROTOCOL.md",
-      "sha256": "c4f2be2998b3993f97e8ff6e9d76519b73346f46eab385343577c3c33bd0db86"
-    },
-    {
-      "path": "tests/test_deliverable_preflight.py",
-      "sha256": "4eba7288c648044e31d62b91811425e533f9644d507006b58dcb8b1cac415b1a"
-    },
-    {
-      "path": "tests/test_citecheck.py",
-      "sha256": "a3f8c06d6fc038f795b05511507e25f27b4b46bb9b3b9cb426f5df2b757633f0"
+      "path": "tests/tiers.json",
+      "sha256": "53c97a7668a28cd1b3bfe5ec949f0a7799e3ce75026e6341ebf82c156bf2b01e"
     }
   ]
 }
