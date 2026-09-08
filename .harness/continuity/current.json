@@ -6,11 +6,9 @@
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      ".harness/continuity/current.json"
-    ],
-    "based_on_head": "454882ea727ff99a3df83215b4ab3d5d67434431"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "8d00284b3472a4a5aa3e2338353610d279dce192"
   },
   "task": {
     "id": "PATH2-THREE-IDENTITY-DEPLOYMENT-2026-09-08",
