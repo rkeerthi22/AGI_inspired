@@ -5,7 +5,7 @@
 **Date:** 2026-09-08  
 **Author:** Gemini CLI (Independent Principal Architect & Reviewer)  
 **Audience:** Claude Code (Joint Reviewer / Release Authority), Human Operator, Codex, Hermes  
-**Baseline Git HEAD:** `06e1a98` (clean working tree, in sync with `origin/master`)  
+**Baseline Git HEAD:** `3bd0d2c` (clean working tree, based on `06e1a98`)  
 **Verification Gate:** **77/77 suites green, exit 0** (`python -B tests/run_all.py`, measured live)  
 **Safety State:** ESTOP strictly engaged (`True`), zero active live calls, mutation quiescence verified  
 
@@ -106,7 +106,7 @@ Directly evaluating the release admission contract defined in [`orchestrator/ope
 ├────────────────────────────────────────┼─────────┼───────────────────────────────────────────────┤
 │ 1. Git Tree Cleanliness & Sync         │ PASS    │ Clean working tree, 0 divergence from origin  │
 ├────────────────────────────────────────┼─────────┼───────────────────────────────────────────────┤
-│ 2. Continuity & Reference Integrity    │ PASS    │ Brief revision 93 valid, 0 discrepancies      │
+│ 2. Continuity & Reference Integrity    │ PASS    │ Brief revision 94 valid, 0 discrepancies      │
 ├────────────────────────────────────────┼─────────┼───────────────────────────────────────────────┤
 │ 3. Hermetic Model-Free Test Gate       │ PASS    │ 77/77 suites green across all tiers (exit 0)  │
 ├────────────────────────────────────────┼─────────┼───────────────────────────────────────────────┤
@@ -230,21 +230,24 @@ Claude Code should review this document and independently verify the disk eviden
 ### Step 2: Operator Decision Gate (Path A vs. Path B)
 The human operator can choose between two forward paths:
 
-* **Path A (Elevated Host Provisioning):**
-  - Open an elevated Administrator PowerShell prompt.
-  - Run:
+* **Path A (Privileged Host Provisioning — Deliberate & Reversible):**
+  - **Nature of Action:** Host provisioning is a real, privileged system mutation (creates local Windows user accounts `AGI_Signer` and `AGI_Worker`, installs the `AGI_Signer_Service` Windows service, configures SDDL DACLs, and applies kernel WFP firewall rules).
+  - **Reversibility Guarantee:** The deployment automation is explicitly designed to be fully reversible. Running `.\scripts\deploy_three_identity.ps1 -Action Remove` completely unwinds all created accounts, services, and firewall rules.
+  - **Execution:** Open an elevated Administrator PowerShell prompt and run:
     ```powershell
     Set-ExecutionPolicy -Scope Process Bypass
     .\scripts\deploy_three_identity.ps1 -Action ProvisionAccounts,ConfigureAcls,ConfigureFirewall,InstallSignerService,Verify
     ```
   - This transitions the host from proto-token isolation to true three-identity Windows account isolation.
 
-* **Path B (Confirming Live Cohort under Controlled Window):**
-  - Run a canary quota health probe:
-    ```bash
-    python -B orchestrator/batch_runner.py --canaries
-    ```
-  - Open a controlled window to execute a live validation cohort under current `F124` restricted tokens, empirically validating Option B+ network interception in live traffic.
+* **Path B (Confirming Live Cohort under Controlled Window — Zero Blast Radius):**
+  - **Nature of Action:** Runs entirely within the existing unprivileged workspace, executing a confirming live cohort under current `F124` restricted tokens. Requires zero elevated admin privileges, mutates zero host accounts, and tests Option B+ network interception against real web traffic.
+  - **Execution:**
+    1. Run a canary quota health probe:
+       ```bash
+       python -B orchestrator/batch_runner.py --canaries
+       ```
+    2. Open a controlled window to execute a live validation cohort under current `F124` restricted tokens, empirically validating Option B+ network interception in live traffic.
 
 ### Standing Invariants
 * Maintain `ESTOP = True`.
