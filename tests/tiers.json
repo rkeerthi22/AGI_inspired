@@ -13,7 +13,8 @@
     "test_operator_auth",
     "test_runtime_admission",
     "test_deliverable_preflight",
-    "test_retry_artifacts"
+    "test_retry_artifacts",
+    "test_three_identity_deployment"
   ],
   "containment": [
     "test_worker_sandbox",

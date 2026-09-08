@@ -3087,4 +3087,34 @@ Fix:
 
 Verified by `tests/test_citecheck.py` (58/58 checks green), `tests/test_deliverable_preflight.py` (26/26 checks green), and full model-free test gate (76/76 suites green).
 
+### F136 — Path 2: Enterprise Three-Identity Deployment Packaging and Host Provisioning Automation — P1 — IMPLEMENTED 2026-09-08
+
+Prior behavior: The harness prototype ran workers under Windows Restricted Tokens derived from the interactive user session (`S-1-5-12`). While effective at local privilege restriction, enterprise deployment requires three distinct Windows security principals (SIDs) to guarantee OS-level non-repudiation and cryptographic key isolation: `AGI_Signer` (holding the Ed25519 audit signing key), `AGI_Controller` (orchestrating tasks and running the unrestricted independent critic), and `AGI_Worker` (sandboxed research execution). Prior to Path 2, no automated provisioning, ACL configuration, or deployment verification script existed, leaving host setup manual and error-prone.
+
+Fix:
+1. Automated Deployment Script (`scripts/deploy_three_identity.ps1`):
+   - Implemented 8 idempotent actions: `Plan`, `ProvisionAccounts`, `InitializeKeys`, `ConfigureAcls`, `ConfigureFirewall`, `InstallSignerService`, `Verify`, and `Remove`.
+   - `Plan`: Audits elevation, active controller SID, existing service accounts, and outputs configuration paths.
+   - `ProvisionAccounts`: Creates local service accounts `AGI_Signer` and `AGI_Worker` with secure random passwords, validates distinct SIDs, and generates `config/audit_signer.json`.
+   - `InitializeKeys`: Invokes `audit_signer_service.py initialize-key` under the `AGI_Signer` context and records public key in config.
+   - `ConfigureAcls`: Configures NTFS ACLs granting `AGI_Worker` FullControl over `workspace\worker_home`, Modify over `runs\`, and explicit Deny over `.harness\`.
+   - `ConfigureFirewall`: Applies WFP rules via `scripts/enforce_worker_firewall.ps1` enforcing loopback-only broker egress (port 8787) and direct outbound packet blocking.
+   - `InstallSignerService`: Registers Windows Service `AGI_AuditSigner` executing `orchestrator/audit_signer_service.py serve`.
+   - `Verify`: 5-point health check validating configuration, distinct SIDs, firewall rules, directories, and SDDL generation.
+   - `Remove`: Automated teardown and service uninstallation.
+2. Canonical Documentation (`docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md`):
+   - Authored complete architecture guide, access control matrix, SDDL specification (`D:P(D;;GA;;;WorkerSID)(A;;GA;;;SignerSID)(A;;0x12019b;;;ControllerSID)`), runbook, and troubleshooting guide.
+3. Model-Free Test Suite (`tests/test_three_identity_deployment.py`):
+   - Added 7 hermetic unit tests registered in `tests/tiers.json` (`unit` tier):
+     - `test_signer_config_valid`: Validates 3 distinct SIDs loading.
+     - `test_signer_config_rejects_duplicate_sids`: Fails closed on SID collision (`distinct_signer_controller_worker_required`).
+     - `test_signer_config_rejects_invalid_sid_format`: Validates dedicated SID format (`S-1-5-21-*` or `S-1-5-80-*`).
+     - `test_signer_config_rejects_invalid_pipe_name`: Enforces canonical pipe naming.
+     - `test_pipe_sddl_generation`: Asserts protected DACL `D:P` denying worker Generic All and granting controller `0x12019b`.
+     - `test_audit_signer_caller_authorization`: Asserts controller authorized, worker denied, and restricted tokens denied.
+     - `test_deploy_script_plan_action`: Asserts `deploy_three_identity.ps1 -Action Plan` executes exit 0 under non-elevated shells.
+
+Verified by `tests/test_three_identity_deployment.py` (7/7 tests green) and full model-free test gate (77/77 suites green).
+
+
 
