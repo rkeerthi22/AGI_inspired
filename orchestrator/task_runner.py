@@ -343,10 +343,7 @@ def _run_research_task(context: _TaskContext) -> str:
         f"confidence is 1 â€” say so plainly rather than assigning 3 to a source you could not "
         f"read. Never cite a page you did not successfully open for a value you did not see "
         f"on it.\n"
-        f"QUOTATIONS: text in quotation marks must be copied VERBATIM from the cited page. If "
-        f"you are paraphrasing or reconstructing pricing/terms, write it as your own summary "
-        f"without quote marks. A quoted sentence that does not appear on the page is treated "
-        f"as fabrication, even when the underlying number is right.\n\n"
+        f"QUOTATIONS: Never use quotation marks (including double quotes \"\", curly quotes “”, or blockquotes >) on search snippets or on sources that were policy-denied or un-opened! If a page was not directly opened this run, summarize or paraphrase its facts entirely in plain prose without any quotation marks. Verbatim quotes on un-opened, snippet-only, or policy-denied sources are mechanically classified as fabrication and fail automatically. Keep policy-denied citations to at most 2.\n\n"
         f"TOOL FAILURES: If a web search or page fetch fails (timeout, 503, 403, or any error), "
         f"do not stop or produce an error message as your output. Note which sources failed, "
         f"continue with available sources, and produce the best deliverable you can with partial "
@@ -434,20 +431,29 @@ def _run_research_task(context: _TaskContext) -> str:
             usage["policy_digest"] = policy_snapshot.get("policy_digest")
             usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
             if usage_path.is_file():
-                try:
-                    curr_usage = json.loads(usage_path.read_text(encoding="utf-8"))
-                    curr_usage["policy_digest"] = policy_snapshot.get("policy_digest")
-                    curr_usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
-                    usage_path.write_text(json.dumps(curr_usage, indent=2), encoding="utf-8")
-                except Exception:
-                    pass
+                for _retry in range(5):
+                    try:
+                        curr_usage = json.loads(usage_path.read_text(encoding="utf-8"))
+                        curr_usage["policy_digest"] = policy_snapshot.get("policy_digest")
+                        curr_usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+                        usage_path.write_text(json.dumps(curr_usage, indent=2) + "\n", encoding="utf-8")
+                        break
+                    except Exception:
+                        import time
+                        time.sleep(0.05)
             else:
                 try:
-                    usage_path.write_text(json.dumps(usage, indent=2), encoding="utf-8")
+                    usage_path.write_text(json.dumps(usage, indent=2) + "\n", encoding="utf-8")
                 except Exception:
                     pass
             if attempt == 1 and usage_path.is_file():
-                (rc.RUNS / f"task{tid}_worker.usage.json").write_bytes(usage_path.read_bytes())
+                for _retry in range(5):
+                    try:
+                        (rc.RUNS / f"task{tid}_worker.usage.json").write_bytes(usage_path.read_bytes())
+                        break
+                    except Exception:
+                        import time
+                        time.sleep(0.05)
         except subprocess.TimeoutExpired:
             usage["policy_digest"] = policy_snapshot.get("policy_digest")
             usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
@@ -570,14 +576,37 @@ def _run_research_task(context: _TaskContext) -> str:
         rc.log(f"task {tid}: preflight repair attempt {repair_attempt}/{deliverable_preflight.MAX_REPAIR_ATTEMPTS} triggered")
         repair_prompt = deliverable_preflight.build_repair_prompt(prompt, out, preflight_report.repair_feedback)
         repair_usage_path = rc.RUNS / f"task{tid}_a{attempt}_worker_repair_{repair_attempt}.usage.json"
+        if not repair_usage_path.is_file():
+            repair_usage_path.parent.mkdir(parents=True, exist_ok=True)
+            try:
+                repair_usage_path.write_text(json.dumps(policy_snapshot, indent=2) + "\n", encoding="utf-8")
+            except Exception:
+                pass
         try:
             with integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
                 r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
                     repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
                     **worker_options)
+            if repair_usage_path.is_file():
+                for _retry in range(5):
+                    try:
+                        curr_r_usage = json.loads(repair_usage_path.read_text(encoding="utf-8"))
+                        curr_r_usage["policy_digest"] = policy_snapshot.get("policy_digest")
+                        curr_r_usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
+                        repair_usage_path.write_text(json.dumps(curr_r_usage, indent=2) + "\n", encoding="utf-8")
+                        break
+                    except Exception:
+                        import time
+                        time.sleep(0.05)
             if attempt == 1 and repair_usage_path.is_file():
-                (rc.RUNS / f"task{tid}_worker_repair_{repair_attempt}.usage.json").write_bytes(
-                    repair_usage_path.read_bytes())
+                for _retry in range(5):
+                    try:
+                        (rc.RUNS / f"task{tid}_worker_repair_{repair_attempt}.usage.json").write_bytes(
+                            repair_usage_path.read_bytes())
+                        break
+                    except Exception:
+                        import time
+                        time.sleep(0.05)
         except Exception as exc:
             rc.log(f"task {tid}: repair attempt {repair_attempt} failed with exception: {exc}")
             break

@@ -101,6 +101,49 @@ def main(argv: list[str] | None = None) -> int:
         if value is not None:
             original_args.extend((flag, value))
     sys.argv = ["hermes", *original_args]
+
+    # Windows Restricted Token ACL Patch:
+    # Under restricted tokens (S-1-5-12 / BUILTIN\Users), Python's os.mkdir, os.makedirs,
+    # and tempfile.mkdtemp with mode=0o700 create directories with inheritance blocked
+    # and access granted only to OWNER RIGHTS/SYSTEM/Administrators, excluding BUILTIN\Users.
+    # When browser tools or child processes attempt to open files in those directories,
+    # Windows raises [Errno 13] Permission denied.
+    # Normalizing 0o700 to 0o777 on Windows preserves full inheritance of BUILTIN\Users modify
+    # permissions from HARNESS_WORKER_HOME.
+    if sys.platform == "win32":
+        _orig_mkdir = os.mkdir
+        _orig_makedirs = os.makedirs
+        _orig_chmod = os.chmod
+
+        def _safe_mkdir(path, mode=0o777, *a, **kw):
+            if mode == 0o700 or (isinstance(mode, int) and (mode & 0o777) == 0o700):
+                mode = 0o777
+            return _orig_mkdir(path, mode, *a, **kw)
+
+        def _safe_makedirs(name, mode=0o777, exist_ok=False):
+            if mode == 0o700 or (isinstance(mode, int) and (mode & 0o777) == 0o700):
+                mode = 0o777
+            return _orig_makedirs(name, mode=mode, exist_ok=exist_ok)
+
+        def _safe_chmod(path, mode, *a, **kw):
+            if mode == 0o700 or (isinstance(mode, int) and (mode & 0o777) == 0o700):
+                mode = 0o777
+            return _orig_chmod(path, mode, *a, **kw)
+
+        os.mkdir = _safe_mkdir
+        os.makedirs = _safe_makedirs
+        os.chmod = _safe_chmod
+        os.environ.setdefault(
+            "AGENT_BROWSER_ARGS",
+            "--no-sandbox,--disable-dev-shm-usage,--disable-crash-reporter,--disable-breakpad,--no-crash-upload,--disable-gpu",
+        )
+        try:
+            import tempfile
+            if hasattr(tempfile, "_os"):
+                tempfile._os.mkdir = _safe_mkdir
+        except Exception:
+            pass
+
     # Pre-emptively patch async_delegation before any tools or agent modules are imported.
     # When run_agent is imported, it transitively loads tools.process_registry which
     # initializes a module-level ProcessRegistry and attempts to restore undelivered
@@ -345,6 +388,13 @@ def main(argv: list[str] | None = None) -> int:
         print(captured.getvalue(), end="")
         research_usage["process_returncode"] = int(rc)
         research_usage["failed"] = True
+        try:
+            from egress_policy import snapshot_egress_policy
+            snap = snapshot_egress_policy()
+            research_usage.setdefault("policy_digest", snap.get("policy_digest"))
+            research_usage.setdefault("allowlisted_hosts", snap.get("allowlisted_hosts", []))
+        except Exception:
+            pass
         if usage_path:
             usage_path.write_text(json.dumps(research_usage, indent=2) + "\n",
                                   encoding="utf-8")
@@ -381,6 +431,13 @@ def main(argv: list[str] | None = None) -> int:
     )
     if usage_path and usage_path.exists():
         usage = merge_finalization_usage(research_usage, final_usage)
+        try:
+            from egress_policy import snapshot_egress_policy
+            snap = snapshot_egress_policy()
+            usage.setdefault("policy_digest", snap.get("policy_digest"))
+            usage.setdefault("allowlisted_hosts", snap.get("allowlisted_hosts", []))
+        except Exception:
+            pass
         usage_path.write_text(json.dumps(usage, indent=2) + "\n", encoding="utf-8")
     print(final)
     # A bounded failure is useful evidence, but it is not a successful worker

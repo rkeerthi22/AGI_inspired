@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "brief_revision": 95,
-  "created_at": "2026-09-08T04:53:52.875304+00:00",
+  "brief_revision": 96,
+  "created_at": "2026-09-09T00:24:14.664550+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
@@ -11,18 +11,20 @@
     "based_on_head": "afb6605914d0b49ed81134e0d2c89a2c0ed6f41b"
   },
   "task": {
-    "id": "FRONTIER-COMPARISON-ENTERPRISE-AUDIT-2026-09-08",
-    "phase": "frontier-comparison-enterprise-audit-completed",
+    "id": "LIVE-VALIDATION-COHORT-2026-09-08",
+    "phase": "live-validation-cohort-option-b-completed",
     "status": "completed",
-    "next_action": "Claude Code independent review & sign-off; Operator decision on Path A (host provisioning) vs. Path B (confirming live cohort)."
+    "next_action": "Claude Code independent review & Operator release sign-off; Operator execution of Path A (deploy_three_identity.ps1) for M2 browser support."
   },
   "completed": [
-    "Delivered docs/reviews/GEMINI_FRONTIER_COMPARISON_AND_ENTERPRISE_AUDIT_2026-09-08.md",
-    "Completed full verification of Claude's Master Architecture Completion Plan (Phases 1-4, F132-F136)",
-    "Integrated Hermes independent evidence sweep (M5 hero claim non-existence, M6 Algolia query fix)",
-    "Delivered unvarnished frontier SOTA comparison against AWS Firecracker, Modal, and Google gVisor",
-    "Delivered binary Boolean enterprise release admission audit (safe_to_proceed = False)",
-    "Verified 77/77 model-free test gate green across all tiers",
+    "Option B+ live network interception (F132-F135) empirically verified in real traffic (Tasks 153-169)",
+    "Triple cohort clean pass achieved under live broker and independent critic: M5 (Task 166, facts+5), M6 (Task 162, facts+10), M7 (Task 167, facts+18)",
+    "Repaired fabrication false-positive bug in citecheck.py (standalone URL regex, item boundary scoping, multi-URL table cell sentence-scoping) with 4 regression tests (62/62 citecheck green)",
+    "Repaired worker home mode=0o700 ACL inheritance trap in controlled_hermes.py",
+    "Diagnosed Chromium multi-process IPC containment boundary under in-process restricted tokens (M2 Tasks 155-158)",
+    "Verified F134 abuse bounds escalation on live traffic (Task 169 needs_review)",
+    "Delivered docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
+    "Full model-free test gate green at 77/77 suites",
     "Released write scope in docs/ACTIVE_WORK.json"
   ],
   "locked_constraints": [
@@ -34,16 +36,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "77/77 model-free suites green, exit 0. Three-identity deployment 7/7 green. Worker readiness 6/6 pass. ESTOP strictly engaged (True)."
+    "detail": "77/77 model-free suites green, exit 0. Citecheck 62/62 green. Preflight 26/26 green. Three-identity deployment 7/7 green. Worker readiness 6/6 pass. ESTOP strictly engaged (True)."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "dc28e99fae12d2cfda4a8278fdb40acb79330331557850b69271e6b366cca230"
+      "sha256": "f5555b7f441795c1b435f165d73995eba27d73a0d2d083ea851da86fadb3d80b"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "be8219e9196e793ede0ef8f273e9286748f73def52277bf5c0d878c6a64b1928"
+      "sha256": "613266388e2c47b79fb1f4b091410aa3118cc83dab8883bb59ec63cce70e137f"
     },
     {
       "path": "docs/HARDENING.md",
@@ -58,12 +60,20 @@
       "sha256": "242f4755b24e8ca912b43974036ac6b0868ef6f069954ea00e62781e4957c134"
     },
     {
+      "path": "docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
+      "sha256": "d7112c0e0d9f1d9099fd3d5d28e1794ce1415a3203cb9d4d6e23c92b7f681d93"
+    },
+    {
       "path": "docs/reviews/GEMINI_FRONTIER_COMPARISON_AND_ENTERPRISE_AUDIT_2026-09-08.md",
       "sha256": "030d3930beda0e74c21006096c5fb391412bd58a222951d6fe86d13281af0096"
     },
     {
       "path": "scripts/deploy_three_identity.ps1",
       "sha256": "0b3308e978908809db215507e7a758907fe6acc20f22fa657a9b3bedf9c3980d"
+    },
+    {
+      "path": "tests/test_citecheck.py",
+      "sha256": "595f167a6c547218825c83e757c163b9d6b040c25428bfdb644a48dc7df17658"
     },
     {
       "path": "tests/test_three_identity_deployment.py",

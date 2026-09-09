@@ -397,10 +397,63 @@ summary_clean_1ok = {"checked": 1, "ok": 1, "unreachable": 0, "policy_denied": 0
 passed_clean, reason_clean = citecheck.check_abuse_bounds(summary_clean_1ok)
 check("Abuse bounds pass on clean deliverable with 1 OK and 0 non-OK", passed_clean, True)
 
+# Test 6: Scoped list item boundary prevents false positive bleed
+multi_item_text = (
+    "- Fact A: [OK](https://ok.example.com) has rating 4.9/5 (confidence 3).\n"
+    "- Fact B: https://unattempted.example.com/item was blocked or returned error.\n"
+)
+unreach_item_res = citecheck.CitationCheckResult(
+    url="https://unattempted.example.com/item",
+    host="unattempted.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    line="- Fact B: https://unattempted.example.com/item was blocked or returned error.",
+)
+fab_no_bleed = citecheck.detect_fabrication(multi_item_text, [unreach_item_res])
+check("Scoped list item boundary prevents false conf3 bleed", len(fab_no_bleed), 0)
+
+# Test 7: Standalone URL matching does not match inside archive.org URLs
+archive_text = (
+    "The target site https://target.example.com/ returned HTTP 403.\n"
+    "Snapshot at https://web.archive.org/web/20260901/https://target.example.com/ has quote \"archived content\" (confidence 3).\n"
+)
+target_unreach_res = citecheck.CitationCheckResult(
+    url="https://target.example.com/",
+    host="target.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    line="The target site https://target.example.com/ returned HTTP 403.",
+)
+fab_archive = citecheck.detect_fabrication(archive_text, [target_unreach_res])
+check("Standalone matching ignores embedded target inside archive.org URL", len(fab_archive), 0)
+
+# Test 8: Detected quotes are captured in offending_quotes
+quote_detected_text = '- Quote on denied: "exact stolen phrase" (https://unattempted.example.com/quoted)'
+quoted_res = citecheck.CitationCheckResult(
+    url="https://unattempted.example.com/quoted",
+    host="unattempted.example.com",
+    reachable_on_host=True,
+    http_status=200,
+    worker_policy_permitted=False,
+    broker_attempt_verified=False,
+    classification=citecheck.CLASSIFICATION_UNREACHABLE,
+    line=quote_detected_text,
+)
+fab_captured = citecheck.detect_fabrication(quote_detected_text, [quoted_res])
+check("Offending quote captured in fabrications list", len(fab_captured), 1)
+check("Offending quote text preserved", '"exact stolen phrase"' in fab_captured[0].get("offending_quotes", []), True)
+
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:
     print("FAILURES:")
     for failure in failures:
         print(f"  - {failure}")
     raise SystemExit(1)
+
 

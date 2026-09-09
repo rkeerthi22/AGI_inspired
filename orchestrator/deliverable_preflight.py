@@ -177,8 +177,9 @@ def run_preflight(
     if fabrications:
         for fab in fabrications:
             desc = "policy-denied" if fab.get("classification") == citecheck.CLASSIFICATION_POLICY_DENIED else "un-attempted"
+            quotes_info = f" Quotes found: {', '.join(fab.get('offending_quotes', [])[:3])}." if fab.get("offending_quotes") else ""
             schema_issues.append(
-                f"Fabrication detected: worker asserted high confidence or verbatim quotes for {desc} source ({fab.get('url')}) which was not loaded at the network layer."
+                f"Fabrication detected: worker asserted high confidence or verbatim quotes for {desc} source ({fab.get('url')}) which was not loaded at the network layer.{quotes_info}"
             )
 
     if not passed_bounds and bounds_reason:
@@ -223,7 +224,13 @@ def format_repair_feedback(dead_urls: list[dict[str, Any]], schema_issues: list[
             lines.append(f"- {s}")
 
     lines.append("\n**Action Required:**")
-    lines.append("Regenerate the COMPLETE, corrected final deliverable addressing every item above. Ensure all tables are complete and all citations point to active pages.")
+    has_fabrication = any("Fabrication detected" in s for s in schema_issues)
+    has_policy_bounds = any("Policy denial bounds exceeded" in s for s in schema_issues)
+    if has_fabrication:
+        lines.append("- For Fabrication: You MUST remove all quotation marks (including double quotes \"\", curly quotes “”, single quotes '', and blockquotes >) around any text citing sources that were policy-denied, un-attempted, or search snippets. Express the facts entirely in your own words without quotation marks, or omit the citation.")
+    if has_policy_bounds:
+        lines.append("- For Policy Denial bounds: You MUST cite at most 2 policy-denied / aggregator sources. Remove extraneous aggregator links to satisfy the <=25% and <=2 policy denial ceiling.")
+    lines.append("- Regenerate the COMPLETE, corrected final deliverable addressing every item above. Ensure all tables are complete and all citations point to active pages.")
 
     return "\n".join(lines)
 

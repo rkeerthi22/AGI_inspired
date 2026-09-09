@@ -390,6 +390,8 @@ def load_worker_policy_snapshot(
     paths = []
     if attempt is not None:
         paths.append(runs / f"task{task_id}_a{attempt}_worker.usage.json")
+        for r in range(5, 0, -1):
+            paths.append(runs / f"task{task_id}_a{attempt}_worker_repair_{r}.usage.json")
     paths.append(runs / f"task{task_id}_worker.usage.json")
 
     for p in paths:
@@ -410,6 +412,27 @@ def load_worker_policy_snapshot(
                     }
             except Exception:
                 pass
+
+    runs_canonical = (runs_dir.resolve() if runs_dir is not None else (ROOT / "runs").resolve())
+    harness_runs = (ROOT / "runs").resolve()
+    if runs_canonical == harness_runs:
+        try:
+            from egress_policy import snapshot_egress_policy
+            snap = snapshot_egress_policy()
+            raw_hosts = snap.get("allowlisted_hosts") or []
+            cleaned = []
+            for h in raw_hosts:
+                norm = _normal_host(str(h))
+                cleaned.append(norm)
+                if norm.startswith("www."):
+                    cleaned.append(norm[4:])
+            return {
+                "policy_digest": snap.get("policy_digest"),
+                "allowlisted_hosts": sorted(list(set(cleaned))),
+            }
+        except Exception:
+            pass
+
     return {"policy_digest": None, "allowlisted_hosts": []}
 
 
@@ -725,26 +748,70 @@ _CONF_3_RE = re.compile(r'\b(?:confidence|conf)\s*[:=]?\s*3\b', re.IGNORECASE)
 _QUOTE_RE = re.compile(r'["“][^"”\n]{3,}["”]')
 
 
-def _find_url_context(text: str, url: str) -> str:
-    """Find text lines around url within the same paragraph/block."""
+def _standalone_url_pat(url: str) -> re.Pattern:
+    """Compile pattern that matches url as a standalone token, not embedded in another URL (e.g. web.archive.org)."""
+    return re.compile(r'(?<![a-zA-Z0-9/_.-])' + re.escape(url) + r'(?![a-zA-Z0-9/_.-])')
+
+
+def _find_url_contexts(text: str, url: str) -> list[str]:
+    """Find text contexts around standalone occurrences of url within its list item, table row, or sentence."""
     if not text or not url:
-        return ""
+        return []
+    pat = _standalone_url_pat(url)
     lines = text.splitlines()
+    contexts = []
     for i, line in enumerate(lines):
-        if url in line:
-            start = max(0, i - 2)
-            end = min(len(lines), i + 3)
-            # bound by empty lines
-            for k in range(i - 1, start - 1, -1):
-                if not lines[k].strip():
-                    start = k + 1
+        if not pat.search(line):
+            continue
+        # Table row: if multiple distinct URLs exist in row, scope strictly to sentence/clause
+        if line.strip().startswith("|") and line.strip().endswith("|"):
+            all_urls = re.findall(r'https?://[^\s)\]\"\'|,]+', line)
+            if len(set(all_urls)) > 1:
+                cells = [c.strip() for c in line.strip().split("|")[1:-1]]
+                matching_cells = [c for c in cells if pat.search(c)]
+                for cell in matching_cells:
+                    sentences = re.split(r'(?<=[.!?])\s+', cell)
+                    matching_sentences = [s for s in sentences if pat.search(s)]
+                    if matching_sentences:
+                        contexts.extend(matching_sentences)
+                    else:
+                        contexts.append(cell)
+            else:
+                contexts.append(line)
+            continue
+        # Markdown list item: gather only this item and any indented continuation lines
+        if re.match(r'^\s*[-*+\d.]', line):
+            item_lines = [line]
+            for next_line in lines[i + 1:]:
+                if next_line.strip() and not re.match(r'^\s*[-*+\d.]', next_line) and next_line.startswith(('  ', '\t')):
+                    item_lines.append(next_line)
+                else:
                     break
-            for k in range(i + 1, end):
-                if not lines[k].strip():
-                    end = k
-                    break
-            return "\n".join(lines[start:end])
-    return ""
+            target = " ".join(item_lines)
+        else:
+            # Paragraph bounded by empty lines, list items, or tables
+            start = i
+            while start > 0 and lines[start - 1].strip() and not re.match(r'^\s*[-*+\d.|]', lines[start - 1]):
+                start -= 1
+            end = i + 1
+            while end < len(lines) and lines[end].strip() and not re.match(r'^\s*[-*+\d.|]', lines[end]):
+                end += 1
+            target = " ".join(lines[start:end])
+
+        # If multiple sentences in target, isolate sentences referencing this url
+        sentences = re.split(r'(?<=[.!?])\s+', target)
+        matching_sentences = [s for s in sentences if pat.search(s)]
+        if matching_sentences:
+            contexts.append(" ".join(matching_sentences))
+        else:
+            contexts.append(target)
+    return contexts
+
+
+def _find_url_context(text: str, url: str) -> str:
+    """Backward-compatible helper returning the primary context for url."""
+    contexts = _find_url_contexts(text, url)
+    return contexts[0] if contexts else ""
 
 
 def detect_fabrication(
@@ -767,47 +834,55 @@ def detect_fabrication(
 
         url = getattr(e, "url", None) or (e.get("url") if isinstance(e, dict) else "")
         host = getattr(e, "host", None) or (e.get("host") if isinstance(e, dict) else "")
-        line = getattr(e, "line", None) or (e.get("line") if isinstance(e, dict) else "")
 
-        context = _find_url_context(text, url)
-        # Strip markdown link syntax to avoid treating markdown link titles as a quote
-        clean_line = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', line)
-        clean_context = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', context)
+        contexts = _find_url_contexts(text, url)
+        if not contexts:
+            raw_line = getattr(e, "line", None) or (e.get("line") if isinstance(e, dict) else "")
+            if raw_line:
+                contexts = [raw_line]
 
         prefix = "policy_denied" if cls_name == CLASSIFICATION_POLICY_DENIED else "unattempted"
         reasons = []
-        # 1. Check confidence 3
-        has_conf3 = False
-        if _CONF_3_RE.search(clean_line) or _CONF_3_RE.search(clean_context):
-            has_conf3 = True
-        elif clean_line.strip().startswith("|") and clean_line.strip().endswith("|"):
-            cells = [c.strip() for c in clean_line.strip().split("|")[1:-1]]
-            for c in cells:
-                if c in ("3", "3.0", "Conf 3", "conf 3", "Confidence 3"):
-                    has_conf3 = True
-                    break
-        if has_conf3:
-            reasons.append(f"{prefix}_conf3")
+        offending_quotes = []
 
-        # 2. Check verbatim quotes
-        has_quote = False
-        if _QUOTE_RE.search(clean_line):
-            has_quote = True
-        elif re.search(r'^\s*>[ \t]+["“]?[^"\n]{3,}["”]?', clean_context, re.MULTILINE):
-            has_quote = True
-        elif _QUOTE_RE.search(clean_context):
-            has_quote = True
-        if has_quote:
-            reasons.append(f"{prefix}_quote")
+        for ctx in contexts:
+            # Strip markdown link syntax to avoid treating markdown link titles as a quote
+            clean = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', ctx)
+
+            # 1. Check confidence 3
+            has_conf3 = False
+            if _CONF_3_RE.search(clean):
+                has_conf3 = True
+            elif clean.strip().startswith("|") and clean.strip().endswith("|"):
+                cells = [c.strip() for c in clean.strip().split("|")[1:-1]]
+                for c in cells:
+                    if c in ("3", "3.0", "Conf 3", "conf 3", "Confidence 3"):
+                        has_conf3 = True
+                        break
+            if has_conf3 and f"{prefix}_conf3" not in reasons:
+                reasons.append(f"{prefix}_conf3")
+
+            # 2. Check verbatim quotes
+            quotes = _QUOTE_RE.findall(clean)
+            if re.search(r'^\s*>[ \t]+["“]?[^"\n]{3,}["”]?', clean, re.MULTILINE):
+                quotes.append("> blockquote")
+            if quotes:
+                if f"{prefix}_quote" not in reasons:
+                    reasons.append(f"{prefix}_quote")
+                offending_quotes.extend(quotes)
 
         if reasons:
             source_desc = "policy-denied" if cls_name == CLASSIFICATION_POLICY_DENIED else "unattempted"
+            detail = f"Fabrication: worker asserted {' and '.join(reasons)} for {source_desc} source ({url})"
+            if offending_quotes:
+                detail += f" [quotes: {', '.join(offending_quotes[:3])}]"
             fabrications.append({
                 "url": url,
                 "host": host,
                 "classification": cls_name,
                 "reasons": reasons,
-                "detail": f"Fabrication: worker asserted {' and '.join(reasons)} for {source_desc} source ({url})"
+                "detail": detail,
+                "offending_quotes": offending_quotes,
             })
 
     return fabrications

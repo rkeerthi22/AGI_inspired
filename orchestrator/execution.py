@@ -88,9 +88,10 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # Harness provider identities stay provider-neutral; transports may expose
     # their own canonical selector (Hermes named custom providers use custom:<slug>).
     hermes_provider = model_cfg.get("hermes_provider", model_cfg["provider"])
+    toolsets = "web,browser" if retrieval_profile == "dynamic_browser_required" else "web"
     cmd = [str(venv_python), str(launcher), "-z", prompt, "--provider", hermes_provider,
            "-m", model_cfg["model"], "--usage-file", str(usage_path),
-           "-t", "web"]
+           "-t", "web" if retrieval_profile != "dynamic_browser_required" else "web,browser"]
     base_env = dict(os.environ)
     if not base_env.get("HARNESS_WORKER_HOME"):
         default_worker_home = ROOT / "workspace" / "worker_home"
@@ -113,6 +114,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # Authorize a dedicated local headless browser instead of attaching to the
     # user's Chrome (which requires interactive remote-debugging approval).
     env["HARNESS_UNATTENDED_BROWSER"] = "1"
+    if sys.platform == "win32":
+        env["AGENT_BROWSER_ARGS"] = "--no-sandbox,--disable-dev-shm-usage,--disable-crash-reporter,--disable-breakpad,--no-crash-upload,--disable-gpu"
     if retrieval_profile:
         # The profile is harness-owned control metadata, not model-selected
         # prompt text. The controlled child validates it before any model call.
@@ -132,7 +135,8 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     broker_audit_path = usage_path.parent / (
         f"task{tid}_a{attempt}_broker.audit.jsonl" if tid else f"{usage_path.stem}_broker.audit.jsonl"
     )
-    broker_audit_path.unlink(missing_ok=True)
+    if "repair" not in usage_path.name:
+        broker_audit_path.unlink(missing_ok=True)
     env["HARNESS_BROKER_AUDIT"] = str(broker_audit_path)
     if tid is not None:
         env["HARNESS_TASK_ID"] = str(tid)

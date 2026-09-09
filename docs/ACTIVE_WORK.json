@@ -1,7 +1,33 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-08T06:45:00Z",
+  "last_updated": "2026-09-08T07:05:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Live Validation Cohort (Missions M3–M7 Execution under Controlled Window)",
+      "task_id": "LIVE-VALIDATION-COHORT-M3-M7-2026-09-08",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-08T19:20:00Z",
+      "last_update": "2026-09-09T00:20:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
+      "notes": "COMPLETED. Proved Option B+ live network interception (F132-F135) across live cohort. Achieved 100% clean passes on M5 (Task 166, facts+5), M6 (Task 162, facts+10), and M7 (Task 167, facts+18). Repaired fabrication false-positive bug in citecheck.py (standalone URL regex, item/row boundary scoping, and table cell sentence-scoping with 4 regression tests, 62/62 green). Diagnosed Chromium multi-process IPC boundary on M2 under in-process restricted tokens. Full model-free gate 77/77 green. ESTOP strictly engaged (True). Write scope released for Claude Code independent verification and Operator sign-off."
+    },
+    {
+      "agent": "gemini-cli",
+      "role": "Live Validation Cohort (Option B+ Empirical Verification under Controlled Window)",
+      "task_id": "LIVE-VALIDATION-COHORT-OPTION-B-2026-09-08",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-08T07:05:00Z",
+      "last_update": "2026-09-08T19:15:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
+      "notes": "COMPLETED. Proved Option B+ live network interception (F132) and signed attestation snapshot persistence (F133) on live traffic (Tasks 153/154, Mission M1 pass). Repaired worker home mode=0o700 ACL inheritance trap in controlled_hermes.py. Diagnosed Chromium multi-process Crashpad/ProcessSingleton restriction under in-process restricted tokens (Tasks 157/158, Mission M2). Authored executive briefing and technical handoff docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md. Gate 77/77 green. ESTOP strictly engaged. Write scope released for Claude Code review."
+    },
     {
       "agent": "gemini-cli",
       "role": "Independent Principal Architect — Frontier Comparison and Unvarnished Enterprise Audit",
