@@ -3,7 +3,7 @@
 Verifies that the chain correctly:
 - Skips quota-exhausted rungs in the same quota_group
 - Tries genuinely separate providers (no quota_group) after cloud 429s
-- Falls through to the last resort (local gemma) when everything is exhausted
+- Falls through to the last resort (local qwen) when everything is exhausted
 - Handles the config as shipped with anthropic + openai rungs
 """
 from __future__ import annotations
@@ -43,7 +43,7 @@ provider_names = [c["provider"] for c in chain]
 check("ollama is first rung", provider_names[0], "ollama")
 check("anthropic is in the chain", "anthropic" in provider_names)
 check("openai is in the chain", "openai" in provider_names)
-check("gemma4:12b-ctx4k is last resort", provider_names[-1], "ollama")
+check("local qwen rung is last resort", provider_names[-1], "ollama")
 
 # Anthropic rung has no quota_group
 ant = [c for c in chain if c["provider"] == "anthropic"]
@@ -85,7 +85,7 @@ execution.load_fallback_chain = lambda: [
     {"provider": "ollama", "model": "glm-5.2:cloud", "quota_group": "ollama-cloud"},
     {"provider": "anthropic", "model": "claude-sonnet-5"},
     {"provider": "openai", "model": "gpt-4o"},
-    {"provider": "ollama", "model": "gemma4:12b-ctx4k", "context_tokens": 4096},
+    {"provider": "ollama", "model": "qwen3.5:2b-q4_K_M-ctx16k", "context_tokens": 16384},
 ]
 
 candidates = execution._failover_candidates(worker_cfg, allow_local=True)
@@ -93,7 +93,7 @@ candidate_keys = [(c["provider"], c["model"]) for c in candidates]
 check("worker model is first candidate", candidate_keys[0], ("ollama", "kimi-k2.7-code:cloud"))
 check("anthropic is in failover candidates", ("anthropic", "claude-sonnet-5") in candidate_keys)
 check("openai is in failover candidates", ("openai", "gpt-4o") in candidate_keys)
-check("gemma4 is in failover candidates", ("ollama", "gemma4:12b-ctx4k") in candidate_keys)
+check("local qwen is in failover candidates", ("ollama", "qwen3.5:2b-q4_K_M-ctx16k") in candidate_keys)
 
 # Deduplication: if the worker config matches a chain entry, it appears once
 worker_cfg_dup = {"provider": "ollama", "model": "glm-5.2:cloud", "quota_group": "ollama-cloud"}
@@ -140,7 +140,7 @@ with tempfile.TemporaryDirectory() as td:
         execution.load_fallback_chain = lambda: [
             {"provider": "anthropic", "model": "claude-sonnet-5"},
             {"provider": "openai", "model": "gpt-4o"},
-            {"provider": "ollama", "model": "gemma4:12b-ctx4k", "context_tokens": 4096},
+            {"provider": "ollama", "model": "qwen3.5:2b-q4_K_M-ctx16k", "context_tokens": 16384},
         ]
 
         def mock_worker(prompt, cfg, attempt_path, timeout=900, retrieval_profile=None):
@@ -166,9 +166,9 @@ with tempfile.TemporaryDirectory() as td:
             ("byteplus_coding", "ark-code-latest"),
             ("anthropic", "claude-sonnet-5"),
             ("openai", "gpt-4o"),
-            ("ollama", "gemma4:12b-ctx4k"),
+            ("ollama", "qwen3.5:2b-q4_K_M-ctx16k"),
         ])
-        check("worker path reaches local rung", cfg_used["model"], "gemma4:12b-ctx4k")
+        check("worker path reaches local rung", cfg_used["model"], "qwen3.5:2b-q4_K_M-ctx16k")
         check("worker path returns local output",
               exhausted is False and out.startswith("local fallback answer"))
     finally:
@@ -185,7 +185,7 @@ try:
     execution.load_fallback_chain = lambda: [
         {"provider": "anthropic", "model": "claude-sonnet-5"},
         {"provider": "openai", "model": "gpt-4o"},
-        {"provider": "ollama", "model": "gemma4:12b-ctx4k", "context_tokens": 4096},
+        {"provider": "ollama", "model": "qwen3.5:2b-q4_K_M-ctx16k", "context_tokens": 16384},
     ]
 
     def mock_chat(model, prompt, timeout=300, trace_path=None, usage_out=None,
@@ -227,9 +227,9 @@ try:
         ("byteplus_coding", "ark-code-latest"),
         ("anthropic", "claude-sonnet-5"),
         ("openai", "gpt-4o"),
-        ("ollama", "gemma4:12b-ctx4k"),
+        ("ollama", "qwen3.5:2b-q4_K_M-ctx16k"),
     ])
-    check("synthesis path reaches local rung", outcome.model_cfg["model"], "gemma4:12b-ctx4k")
+    check("synthesis path reaches local rung", outcome.model_cfg["model"], "qwen3.5:2b-q4_K_M-ctx16k")
     check("synthesis path returns local output",
           outcome.exhausted is False and outcome.output == "local synthesis answer")
 finally:

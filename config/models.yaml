@@ -29,20 +29,22 @@ roles:
     quota_group: ollama-cloud
 
   fallback:
-    # MEASURED 1.54 tok/s on this box (2026-07-17). Emergency / offline batch ONLY.
-    # Never assign a live, latency-sensitive role here.
-    # F38: the capped variant, not plain gemma4:12b — the uncapped model cannot LOAD on
-    # this box at all (KV cache OOM at its 262k default context).
+    # MEASURED 2026-09-10 on this box (REST bench, num_ctx pinned per variant):
+    #   qwen3.5:2b-q4_K_M-ctx16k: 68-74 tok/s, 100% GPU at ctx 16384, load ~7s
+    #   gemma4:12b-ctx4k (previous): 1.54 tok/s, 75-103s load, never completed a synthesis
+    # The qwen variant also RAISES the local rung's usable context from 4,096 to 16,384,
+    # letting it serve the ~10-15K-token synthesis prompts gemma could never fit.
+    # F38 discipline still applies: bake num_ctx into a model VARIANT so both the hermes
+    # CLI and ollama_chat() callers get the cap without either passing num_ctx.
     provider: ollama
-    model: gemma4:12b-ctx4k
-    context_tokens: 4096
+    model: qwen3.5:2b-q4_K_M-ctx16k
+    context_tokens: 16384
     # No quota_group: local inference draws on no shared quota pool, so a cloud 429 must
     # never cause this rung to be skipped.
-    # F50: context_tokens is the num_ctx baked into the Modelfile by F38. Declaring it lets
-    # the failover chain skip this rung when a prompt provably cannot fit, instead of
-    # stalling ~1800s at 1.5 tok/s and failing with nothing useful to say. Measured: a
-    # synthesis prompt needs ~9,800-15,100 tok, so it is correctly skipped for those and
-    # still tried for anything that fits.
+    # F50: context_tokens is the num_ctx baked into the variant's Modelfile. Declaring it
+    # lets the failover chain skip this rung when a prompt provably cannot fit, instead of
+    # stalling. Measured: synthesis prompts need ~9,800-15,100 tok -- the old 4,096 rung
+    # was ALWAYS skipped for those; at 16,384 it can actually serve them.
 
   embeddings:
     # Deferred: FTS5 (Hermes built-in) first. Enable only if recall demands it.
@@ -103,4 +105,14 @@ fallback_chain:
   # can only waste a call, never skip a rung that would have worked. Measured: synthesis
   # prompts need ~9,800-15,100 tok, so this rung had NEVER been able to serve that path at
   # any brief cap this project has used; it is now skipped there and still tried elsewhere.
-  - { provider: ollama, model: gemma4:12b-ctx4k, context_tokens: 4096 }  # last resort, ~1.5 tok/s
+  # ── SWAPPED 2026-09-10 (LOCAL-MODEL-SWAP-2026-09-10) ─────────────────────────────
+  # gemma4:12b-ctx4k replaced by qwen3.5:2b-q4_K_M-ctx16k. Measured on this box via REST
+  # (num_ctx pinned): 74.5 tok/s at ctx 4096, 65-71 tok/s at ctx 16384 with a 1,600-token
+  # research prompt loaded -- 100% GPU placement, ~7s model load. The gemma rung it
+  # replaces measured 1.54 tok/s with 75-103s loads and had never completed a real
+  # synthesis prompt (4,096-token cap vs ~9,800-15,100-token synthesis prompts).
+  # The plain `qwen3.5:2b` tag is the Q8 build (~2.7GB) and silently spills to CPU at
+  # Ollama's 262k default context -- measured 18.9 tok/s, 77% CPU. ONLY the -ctx16k
+  # variant (built FROM qwen3.5:2b-q4_K_M) is the chain's local rung.
+  # Rebuild: ollama create qwen3.5:2b-q4_K_M-ctx16k -f config/qwen3.5-2b-q4-ctx16k.Modelfile
+  - { provider: ollama, model: qwen3.5:2b-q4_K_M-ctx16k, context_tokens: 16384 }  # 68-74 tok/s measured

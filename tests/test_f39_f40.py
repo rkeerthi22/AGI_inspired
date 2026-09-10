@@ -63,10 +63,10 @@ check("first rung succeeds, nothing else tried", attempted, ["kimi-k2.7-code:clo
 print("\n=== F39: a rung with NO quota_group is never skipped by inference ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud",
-                                       "claude-sonnet-5", "gpt-4o", "gemma4:12b-ctx4k"})
+                                       "claude-sonnet-5", "gpt-4o", "qwen3.5:2b-q4_K_M-ctx16k"})
 out, usage, cfg, exhausted = execution.worker_with_failover("p", WORKER, Path("x.json"), "test")
 check("all rungs attempted despite quota exhaustion",
-      attempted, ["kimi-k2.7-code:cloud", "claude-sonnet-5", "gpt-4o", "gemma4:12b-ctx4k"])
+      attempted, ["kimi-k2.7-code:cloud", "claude-sonnet-5", "gpt-4o", "qwen3.5:2b-q4_K_M-ctx16k"])
 check("only now is the chain exhausted", exhausted, True)
 
 # ------------------------------------------------------------------ F40
@@ -76,14 +76,14 @@ check("no local rung offered when allow_local=False", cands,
       ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o"])
 check("local IS offered for ordinary work",
       [c["model"] for c in execution._failover_candidates(WORKER, allow_local=True)],
-      ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o", "gemma4:12b-ctx4k"])
+      ["kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o", "qwen3.5:2b-q4_K_M-ctx16k"])
 
 print("\n=== F40: quota-exhausted canary PARKS instead of degrading ===")
 attempted.clear()
 execution.hermes_worker = fake_worker({"kimi-k2.7-code:cloud", "glm-5.2:cloud", "claude-sonnet-5", "gpt-4o"})
 out, usage, cfg, exhausted = execution.worker_with_failover(
     "p", WORKER, Path("x.json"), "canary C2", allow_local=False)
-check("never reached the local model", "gemma4:12b-ctx4k" in attempted, False)
+check("never reached the local model", "qwen3.5:2b-q4_K_M-ctx16k" in attempted, False)
 check("reports exhausted -> caller parks it (week_pending rises, gate shuts)",
       exhausted, True)
 

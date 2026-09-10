@@ -1,0 +1,31 @@
+# qwen3.5:2b-q4_K_M-ctx16k — the fallback chain's local rung (replaces gemma4:12b-ctx4k).
+#
+# WHY THIS EXISTS (measured 2026-09-10, task LOCAL-MODEL-SWAP-2026-09-10):
+# Same F38 discipline as the gemma variant it replaces: neither the hermes CLI nor
+# orchestrator's ollama_chat() passes `num_ctx`, so Ollama uses the model's DEFAULT
+# context every time. For qwen3.5 that default is 262,144 tokens, which allocates a KV
+# cache far larger than the 4GB RTX 3050 can hold — the Q8 `qwen3.5:2b` tag measured
+# 18.9 tok/s at 77% CPU (spill) purely because of that default. Baking num_ctx into a
+# VARIANT fixes both callers at once and keeps the choice in config rather than code
+# (CLAUDE.md: "swapping a model = editing models.yaml, never code").
+#
+# WHY THIS MODEL (measured on this box, num_ctx pinned, /api/generate):
+#     qwen3.5:2b-q4_K_M      ctx 4096  -> 74.5 tok/s, 100% GPU, ~7s load
+#     qwen3.5:2b-q4_K_M      ctx 16384 -> 65-71 tok/s, 100% GPU, ~7s load
+#     qwen3.5:2b (Q8 tag)    ctx 4096  -> 18.9 tok/s, 77% CPU (spill)
+#     gemma4:e2b             ctx 4096  -> 12.5-31.8 tok/s, 17-37s loads (spills)
+#     gemma4:12b-ctx4k (old) ctx 4096  -> 1.54 tok/s, 75-103s load — never completed a task
+# The q4_K_M weights are ~1.6GB, leaving ~1.8GB of the 4GB card for the KV cache — the
+# 16,384-token context fits ENTIRELY on GPU, where the old gemma rung could not even load
+# past 4,096 tokens. This raises the local rung from a 4K cap (which could never serve
+# the ~9,800-15,100-token synthesis prompts) to one that can.
+#
+# WHY 16384 AND NOT 262144: the KV cache at 16K fits in VRAM (measured 100% GPU);
+# beyond that it spills to CPU and speed collapses. 16K covers every synthesis prompt
+# size measured in this project to date (F50: 9,800-15,100 tokens).
+#
+# REBUILD:  ollama create qwen3.5:2b-q4_K_M-ctx16k -f config/qwen3.5-2b-q4-ctx16k.Modelfile
+
+FROM qwen3.5:2b-q4_K_M
+
+PARAMETER num_ctx 16384
