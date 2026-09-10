@@ -3118,3 +3118,32 @@ Verified by `tests/test_three_identity_deployment.py` (7/7 tests green) and full
 
 
 
+
+### F137 — Local fallback rung swap: gemma4:12b-ctx4k → qwen3.5:2b-q4_K_M-ctx16k — P0 — IMPLEMENTED 2026-09-10
+
+Prior behavior: the chain's last rung was `gemma4:12b-ctx4k` — measured 1.54 tok/s, 75–103s
+loads, and (per F38/F50) it had never once completed a real synthesis prompt: its 4,096-token
+cap sat below every measured synthesis prompt size (9,800–15,100 tokens), so the rung was
+structurally skipped on the exact path it existed to serve.
+
+Fix:
+1. Benchmarked three candidates on this box via Ollama REST (num_ctx pinned): `qwen3.5:2b-q4_K_M`
+   (74.5 tok/s @ 4K ctx, 65–71 tok/s @ 16K ctx, 100% GPU, ~7s load), `gemma4:e2b` (12.5–31.8
+   tok/s, 17–37s loads, spills), `qwen3.5:2b` Q8 tag (18.9 tok/s, 77% CPU — silent spill at
+   Ollama's 262K default context). Q4_K_M won by ~45× over the incumbent.
+2. New variant `qwen3.5:2b-q4_K_M-ctx16k` via `config/qwen3.5-2b-q4-ctx16k.Modelfile` (same F38
+   discipline: num_ctx baked into the variant because neither the hermes CLI nor `ollama_chat()`
+   passes it). Raises the local rung's usable context 4,096 → 16,384 — now serves every
+   measured synthesis prompt size.
+3. `config/models.yaml`: fallback role + chain rung swapped, measured numbers recorded in comments.
+4. Tests updated to the new rung: `test_fallback_chain.py`, `test_f39_f40.py`, `test_f50.py`
+   (test_f50's premise honestly updated: the 39,141-char content-synthesis prompt now FITS and
+   is SERVED — the upgrade working — while the 60,420-char shopify prompt remains the skip case).
+5. Deletions: `gemma4:12b`, `gemma4:12b-ctx4k`, `gemma4:e2b`, `qwen3.5:2b` (Q8) removed from
+   Ollama; ~16.4 GB freed on S:. Kept: `qwen3.5:2b-q4_K_M` (variant base), hermes3, moondream.
+6. Hermes CLI default (`model.default`) repointed from the base tag to the `-ctx16k` variant
+   after measuring the base tag spilling to 73% CPU at Ollama's 262K default context (the same
+   F38 trap, caught live in an interactive session).
+Verified: full model-free gate 77/77 suites green after the swap (unit, containment,
+integration). Commit `5c9025d`. Historical F38/F50 gemma entries above are preserved as
+written — evidence of what was true then. Hermes config change is outside the repo.

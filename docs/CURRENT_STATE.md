@@ -246,7 +246,9 @@ independent security review. See
    and `M7`.
 2. Do not spend another live attempt without acknowledging provider reality:
    BytePlus quota can exhaust, Anthropic/OpenAI credentials are currently
-   absent, and the local gemma rung may be the only remaining completion path.
+   absent, and the local qwen3.5:2b-q4_K_M-ctx16k rung (swapped in 2026-09-10,
+   commit 5c9025d — replaces gemma4:12b-ctx4k) may be the only remaining
+   completion path.
 3. Post-cohort backlog status (2026-09-04): items 1–4 DONE + committed (`4f773e6`) —
    (1) protected-path warning (F107), (2) preflight/health-warning triage (F105 cohort
    entry + F108 test pollution), (3) spec-lint/crying-wolf cleanup (F108 health events
