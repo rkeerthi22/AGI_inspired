@@ -1,10 +1,10 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-08T07:05:00Z",
+  "last_updated": "2026-09-10T08:32:30Z",
   "active_agents": [
     {
       "agent": "gemini-cli",
-      "role": "Live Validation Cohort (Missions M3–M7 Execution under Controlled Window)",
+      "role": "Live Validation Cohort (Missions M3\u2013M7 Execution under Controlled Window)",
       "task_id": "LIVE-VALIDATION-COHORT-M3-M7-2026-09-08",
       "mode": "completed",
       "owned_paths": [],
@@ -30,7 +30,7 @@
     },
     {
       "agent": "gemini-cli",
-      "role": "Independent Principal Architect — Frontier Comparison and Unvarnished Enterprise Audit",
+      "role": "Independent Principal Architect \u2014 Frontier Comparison and Unvarnished Enterprise Audit",
       "task_id": "FRONTIER-COMPARISON-ENTERPRISE-AUDIT-2026-09-08",
       "mode": "completed",
       "owned_paths": [],
@@ -91,7 +91,7 @@
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/ARCHITECTURE_COMPLETION_PLAN_2026-09-07.md",
-      "notes": "COMPLETED. Landed F133: (1) Added get_attestation_policy_digest and snapshot_egress_policy to orchestrator/egress_policy.py ensuring policy_digest reads from signed attestation token (Gap 1); (2) Recorded active policy_digest and allowlisted_hosts into runs/task{tid}_a{attempt}_worker.usage.json at dispatch in orchestrator/task_runner.py; (3) Implemented immutable CitationCheckResult dataclass schema in orchestrator/citecheck.py (§4.1) evaluating worker_policy_permitted from frozen snapshot and broker_attempt_verified from runs/task{tid}_a{attempt}_broker.audit.jsonl; (4) Updated orchestrator/evaluation.py to pass task/attempt to citecheck.verify; (5) Expanded tests/test_citecheck.py with Sections 4-6 covering schema, Gap 1 invariant, and kill-assumption cross-check (46/46 checks green); (6) Full model-free gate 76/76 suites green. Write scope released. Ready for Phase 3 (F134)."
+      "notes": "COMPLETED. Landed F133: (1) Added get_attestation_policy_digest and snapshot_egress_policy to orchestrator/egress_policy.py ensuring policy_digest reads from signed attestation token (Gap 1); (2) Recorded active policy_digest and allowlisted_hosts into runs/task{tid}_a{attempt}_worker.usage.json at dispatch in orchestrator/task_runner.py; (3) Implemented immutable CitationCheckResult dataclass schema in orchestrator/citecheck.py (\u00a74.1) evaluating worker_policy_permitted from frozen snapshot and broker_attempt_verified from runs/task{tid}_a{attempt}_broker.audit.jsonl; (4) Updated orchestrator/evaluation.py to pass task/attempt to citecheck.verify; (5) Expanded tests/test_citecheck.py with Sections 4-6 covering schema, Gap 1 invariant, and kill-assumption cross-check (46/46 checks green); (6) Full model-free gate 76/76 suites green. Write scope released. Ready for Phase 3 (F134)."
     },
     {
       "agent": "claude-code",
@@ -453,6 +453,26 @@
       "blocked_by": null,
       "handoff_path": "docs/CODEX_HANDOFF_2026-09-05_HISTORICAL_AUDIT_FIX.md",
       "notes": "DONE. F119 completed: full-history replica artifact verification implemented in orchestrator/audit_replication.py (verify_checkpoint_chain and audit_state with replica_root). Hermetic regressions added to tests/test_audit_replication.py (7/7 green). Full gate 69/69 green. Ready for Codex handover."
+    },
+    {
+      "agent": "hermes",
+      "role": "Local model swap: gemma4:12b -> qwen3.5:2b-q4_K_M-ctx16k (fallback rung upgrade)",
+      "task_id": "LOCAL-MODEL-SWAP-2026-09-10",
+      "mode": "completed",
+      "owned_paths": [
+        "config/models.yaml",
+        "config/gemma4-12b-ctx4k.Modelfile",
+        "tests/test_fallback_chain.py",
+        "tests/test_f39_f40.py",
+        "tests/test_f50.py",
+        "tests/test_f37.py"
+      ],
+      "started_at": "2026-09-10T08:24:32Z",
+      "last_update": "2026-09-10T08:32:30Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETED. gemma4:12b + gemma4:12b-ctx4k deleted from Ollama after swap committed (5c9025d) and 77/77 gate green. Local rung is now qwen3.5:2b-q4_K_M-ctx16k: 68-74 tok/s measured, 100% GPU, 16K ctx (was 1.54 tok/s @ 4K). Also deleted: gemma4:e2b (lost benchmark, 12-32 tok/s w/ spills), qwen3.5:2b Q8 tag (spills at default ctx). Freed ~16.4 GB on S:. Kept: qwen3.5:2b-q4_K_M (base for the variant), hermes3, moondream. Old gemma Modelfile retained in config/ for rollback history."
     }
   ],
   "coordination_rules": [
