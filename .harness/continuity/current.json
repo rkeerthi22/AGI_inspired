@@ -1,34 +1,35 @@
 {
   "schema_version": 2,
-  "brief_revision": 98,
-  "created_at": "2026-09-11T10:00:00.000000+00:00",
+  "brief_revision": 99,
+  "created_at": "2026-09-11T09:43:44.086455+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "47013ecf3fa78003b022299880816ceecce369e1"
+    "tree_clean": false,
+    "changed_paths": [
+      ".harness/egress_attestation.signed",
+      "config/egress_policy.yaml",
+      "docs/ACTIVE_WORK.json",
+      "docs/CURRENT_STATE.md",
+      "docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md"
+    ],
+    "based_on_head": "43b57d4df1c501abd7a3a55d00c42e5960d59327"
   },
   "task": {
-    "id": "PATH-A-THREE-IDENTITY-DEPLOYMENT-2026-09-11",
-    "phase": "three-identity-deployment-verified-live",
+    "id": "SUPERVISED-LAUNCH-COHORT-AND-EMPIRICAL-PROOFS-2026-09-11",
+    "phase": "supervised-cohort-and-empirical-proofs-completed",
     "status": "completed",
-    "next_action": "UNC WORM share provisioning (Deficit B) and Claude Code review."
+    "next_action": "Claude Code independent verification of supervised cohort & candidate deferral."
   },
   "completed": [
-    "Path A: Three-Identity live deployment verified (AGI_AuditSigner running as .\\AGI_Signer, 7/7 checks passed, Deficit A closed)",
-    "D0/D6: Restored 77/77 suites; hardened run_all.py exit code (sys.exit(1) on fail)",
-    "D1/D2/D5: Firewall attestation integrity, broker path traversal defense, operator_cli active status",
-    "D3: Signer service identity configured as AGI_Signer with pywin32 SCM wrapper",
-    "D4/B2: Remote audit replica fail-closed, signed manifest suffix truncation, retention floor",
-    "A1: Purged 641 fake entries from candidate log, added fixture guard, verified injectable regression",
-    "A2: Gap-1 fallback safety net in citecheck.py (WARNING logged, snapshot_source='live_fallback')",
-    "A3: Documented --no-sandbox trade-off in deployment guide and added code comments",
-    "B1: Authored operator runbook docs/RUNBOOK_PATH_A_THREE_IDENTITY.md with elevated steps and ACL rollback",
-    "B3: Authored quota elasticity note docs/QUOTA_ELASTICITY_SCOPING_2026-09-10.md (OmniRoute locked)",
-    "Task C: Delivered docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md (3/17 yield)",
-    "Full model-free gate green at 77/77 suites; candidate log pure; released write scope"
+    "Supervised Cohort executed (Tasks 170-173): M5 pass (task 171, facts+6), M6 content fail, M2 browser container exit 21",
+    "Deficit C Canary: live burst passed (NOT_FALSIFIED_NO_LIVE_429); induced 429 failover to local GPU model qwen3.5:2b-q4_K_M-ctx16k verified live in 21.68s",
+    "Deficit D1: fresh probe-backed attestation verified with zero unrun labels (digest cf9f8b4f5f25802724b2e0a5acf28c9773af0856ef78ea11d17c7799bd043d86)",
+    "Deficit A: Path A Three-Identity live execution verified (AGI_Signer SCM service, 36 broker socket decisions logged)",
+    "Discovery: Chromium ProcessSingleton exit 21 ceiling under Windows Job Object documented",
+    "Handoffs updated: docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md and Obsidian vault mirror",
+    "Full model-free gate verified green at 77/77 suites; ESTOP strictly engaged; write scope released"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -39,40 +40,32 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "77/77 suites green, exit 0. Citecheck 66/66, Preflight 28/28, Deployment 7/7. Zero fixture entries. ESTOP True."
+    "detail": "77/77 suites green, exit 0. Attestation verified. Zero candidate fixtures. ESTOP True."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "6011b7000c06423f4bc02bef76c6a9656dc72f4fbe15d492889faca2bd4e1213"
+      "sha256": "c7e0b812dcb6aac65b04a1fa70a25e94ac7abc197691fc9e704149d24b0fb2e4"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "a7f410353e2f568e192036ecb89e652a8dbe33d0e66528bc54f4003275cc1f9e"
+      "sha256": "f910ea93be0d3717b2ea2d8c7ae56c9ff64033f9fb56cab8d4ae54e5b78f4977"
     },
     {
-      "path": "docs/HARDENING.md",
-      "sha256": "8dd951749d3cbc88f45548167fbf6e9041b9cbe82d63dd6c173d358fd51835f8"
-    },
-    {
-      "path": "docs/INCIDENTS.md",
-      "sha256": "f90f4781892205b0c424030862da1398fb3ef4e99b8d51a598f329f1e9ab8df4"
-    },
-    {
-      "path": "docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md",
-      "sha256": "ce0518ec0dd7f0d458dad52254b9a48b6f3967c33c173051642fe56721069a1c"
+      "path": "docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md",
+      "sha256": "b825605db15141e35732ef694c82f8c0b735a447cd236f639e7bd693c5642fba"
     },
     {
       "path": "docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
       "sha256": "d7112c0e0d9f1d9099fd3d5d28e1794ce1415a3203cb9d4d6e23c92b7f681d93"
     },
     {
-      "path": "docs/reviews/GEMINI_FRONTIER_COMPARISON_AND_ENTERPRISE_AUDIT_2026-09-08.md",
-      "sha256": "030d3930beda0e74c21006096c5fb391412bd58a222951d6fe86d13281af0096"
-    },
-    {
       "path": "scripts/deploy_three_identity.ps1",
       "sha256": "eaeae331960cc97049aad3feccf8544d09635190825ff26d596d3ba979da3595"
+    },
+    {
+      "path": "scripts/enforce_worker_firewall.ps1",
+      "sha256": "f511cef258bfd1a3e056a83f8fb94b035a99d6cc0165f6c98f7f979294b3dc74"
     },
     {
       "path": "tests/test_citecheck.py",

@@ -157,8 +157,6 @@ attestation:
     - restricted_worker_identity
     - deny_direct_egress
     - broker_only_egress
-    - raw_socket_bypass_test
-    - private_address_test
   required_claims:
     - worker_identity
     - worker_program_sha256
