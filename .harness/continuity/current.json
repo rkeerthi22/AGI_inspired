@@ -1,20 +1,14 @@
 {
   "schema_version": 2,
-  "brief_revision": 99,
-  "created_at": "2026-09-11T09:43:44.086455+00:00",
+  "brief_revision": 100,
+  "created_at": "2026-09-11T09:48:34.818060+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      ".harness/egress_attestation.signed",
-      "config/egress_policy.yaml",
-      "docs/ACTIVE_WORK.json",
-      "docs/CURRENT_STATE.md",
-      "docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md"
-    ],
-    "based_on_head": "43b57d4df1c501abd7a3a55d00c42e5960d59327"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "36928b5d08b049682cc17c40ca108920f7794f8c"
   },
   "task": {
     "id": "SUPERVISED-LAUNCH-COHORT-AND-EMPIRICAL-PROOFS-2026-09-11",
