@@ -122,8 +122,21 @@ class EgressBroker(socketserver.ThreadingTCPServer):
         tid = record.get("task_id")
         attempt = record.get("attempt") or 1
         if tid is not None and self.runs_dir:
+            # D2 (Codex Astra audit): validate task_id and attempt to prevent
+            # path traversal (e.g. task_id="../../../etc/evil") that could write
+            # audit logs outside runs_dir or impersonate another task's log.
+            try:
+                tid = int(tid)
+                attempt = int(attempt)
+                if tid < 0 or attempt < 1:
+                    raise ValueError("negative task_id or non-positive attempt")
+            except (TypeError, ValueError):
+                return None, {}
+            audit_path = self.runs_dir / f"task{tid}_a{attempt}_broker.audit.jsonl"
+            if not audit_path.resolve().is_relative_to(self.runs_dir.resolve()):
+                return None, {}
             corr_meta = {"task_id": tid, "attempt": attempt}
-            return self.runs_dir / f"task{tid}_a{attempt}_broker.audit.jsonl", corr_meta
+            return audit_path, corr_meta
         if self._active_correlation and self._active_correlation.get("audit_path"):
             corr_meta = {
                 "task_id": self._active_correlation.get("task_id"),

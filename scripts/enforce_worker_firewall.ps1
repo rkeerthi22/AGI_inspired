@@ -430,6 +430,65 @@ function Invoke-TestProbe {
 function Invoke-Attest {
     Write-Host "Generating signed HARNESS_EGRESS_ATTESTATION..." -ForegroundColor Cyan
 
+    # D1 (Codex Astra audit): run actual probes BEFORE asserting evidence labels.
+    # An attestation that certifies unrun evidence is a non-repudiation hole.
+    $status = Get-RuleStatus
+    $evidenceLabels = @()
+    $probesSkipped = @()
+
+    # Check 1: Firewall rules exist and are enabled
+    if ($status.FullyEnforced) {
+        $evidenceLabels += 'deny_direct_egress'
+    } else {
+        $probesSkipped += 'deny_direct_egress'
+        Write-Host "  [SKIP] deny_direct_egress: firewall rules not fully enforced" -ForegroundColor Yellow
+    }
+
+    # Check 2: Broker loopback reachability
+    $brokerReachable = $false
+    try {
+        $client = New-Object System.Net.Sockets.TcpClient
+        $iar = $client.BeginConnect($BrokerHost, $BrokerPort, $null, $null)
+        $wait = $iar.AsyncWaitHandle.WaitOne(1000, $false)
+        if ($wait) {
+            $client.EndConnect($iar)
+            $brokerReachable = $true
+        }
+        $client.Close()
+    } catch {
+        $brokerReachable = $false
+    }
+    if ($brokerReachable) {
+        $evidenceLabels += 'broker_only_egress'
+    } else {
+        $probesSkipped += 'broker_only_egress'
+        Write-Host "  [SKIP] broker_only_egress: broker not reachable on ${BrokerHost}:${BrokerPort}" -ForegroundColor Yellow
+    }
+
+    # Check 3: restricted_worker_identity — assert only if WFP rules are enforced.
+    # The actual worker-denial is proven by test_worker_sandbox.py under the
+    # restricted token (S-1-5-12); the controller context cannot test it directly.
+    if ($status.FullyEnforced) {
+        $evidenceLabels += 'restricted_worker_identity'
+    } else {
+        $probesSkipped += 'restricted_worker_identity'
+        Write-Host "  [SKIP] restricted_worker_identity: WFP rules not enforced" -ForegroundColor Yellow
+    }
+
+    Write-Host "  Evidence labels earned: $($evidenceLabels -join ', ')" -ForegroundColor Green
+    if ($probesSkipped.Count -gt 0) {
+        Write-Host "  Probes skipped/failed: $($probesSkipped -join ', ')" -ForegroundColor Yellow
+    }
+
+    # Refuse to sign an attestation with no earned evidence
+    if ($evidenceLabels.Count -eq 0) {
+        Write-Error "Attestation REFUSED: no probes passed. Cannot sign with empty evidence."
+        return
+    }
+
+    $evidenceJson = ($evidenceLabels | ForEach-Object { "'$_'" }) -join ", "
+    $skippedJson = ($probesSkipped | ForEach-Object { "'$_'" }) -join ", "
+
     $pyCode = @"
 import sys, json, hashlib, datetime
 from pathlib import Path
@@ -449,13 +508,8 @@ payload = {
     'policy_sha256': policy.digest,
     'broker_endpoint': f'{policy.host}:{policy.port}',
     'issued_at': now,
-    'evidence': [
-        'restricted_worker_identity',
-        'deny_direct_egress',
-        'broker_only_egress',
-        'raw_socket_bypass_test',
-        'private_address_test'
-    ],
+    'evidence': [$evidenceJson],
+    'probes_skipped': [$skippedJson],
     'claims': {
         'worker_identity': r'$WorkerSid',
         'worker_program_sha256': hashlib.sha256(worker_py).hexdigest(),

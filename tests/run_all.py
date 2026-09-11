@@ -184,9 +184,15 @@ def main() -> int:
         if proc.stderr.strip():
             print("--- stderr ---")
             print(proc.stderr.strip()[-3000:])
-    print(f"\n{len(results) - len(failed)}/{len(results)} suites green "
+    passed = len(results) - len(failed)
+    print(f"\n{passed}/{len(results)} suites green "
           f"(tiers: {', '.join(tiers)})")
-    return 1 if failed else 0
+    # D6 (Codex Astra audit): fail-closed gate exit. Any failed suite MUST
+    # produce a non-zero exit code. Belt-and-suspenders: explicit sys.exit(1)
+    # rather than relying solely on the return value propagation chain.
+    if failed:
+        sys.exit(1)
+    return 0
 
 
 if __name__ == "__main__":

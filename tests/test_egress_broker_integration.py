@@ -401,6 +401,39 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace", ignore_cleanup_errors=T
         broker.server_close()
         upstream_srv.close()
 
+# ─── D2 (Codex Astra audit): broker task_id path traversal regression ────────
+print("\n[D2] Testing broker audit path traversal defense...")
+with tempfile.TemporaryDirectory() as tmpdir:
+    runs = Path(tmpdir)
+    policy_for_d2 = make_policy(runs, port=0)
+    broker_d2 = egress_broker.EgressBroker(policy_for_d2, runs_dir=runs)
+    try:
+        # Case 1: String task_id with path separators → must be REJECTED
+        traversal_record = {"task_id": "../../../etc/evil", "attempt": 1}
+        audit_path, meta = broker_d2._resolve_attempt_audit(traversal_record)
+        check("D2: path-traversal task_id rejected (audit_path=None)", audit_path is None)
+        check("D2: path-traversal task_id returns empty meta", meta == {})
+
+        # Case 2: Negative task_id → must be REJECTED
+        neg_record = {"task_id": -1, "attempt": 1}
+        audit_path, meta = broker_d2._resolve_attempt_audit(neg_record)
+        check("D2: negative task_id rejected", audit_path is None)
+
+        # Case 3: Valid integer task_id → must work normally
+        valid_record = {"task_id": 42, "attempt": 2}
+        audit_path, meta = broker_d2._resolve_attempt_audit(valid_record)
+        check("D2: valid integer task_id accepted", audit_path is not None)
+        check("D2: valid path under runs_dir", audit_path is not None and audit_path.resolve().is_relative_to(runs.resolve()))
+        check("D2: valid meta has int task_id", meta.get("task_id") == 42)
+
+        # Case 4: String-encoded valid integer → must be coerced and accepted
+        str_int_record = {"task_id": "99", "attempt": "3"}
+        audit_path, meta = broker_d2._resolve_attempt_audit(str_int_record)
+        check("D2: string-encoded integer task_id accepted", audit_path is not None)
+        check("D2: string-encoded task_id coerced to int", meta.get("task_id") == 99)
+    finally:
+        broker_d2.server_close()
+
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:
     raise SystemExit("FAILURES: " + ", ".join(failures))

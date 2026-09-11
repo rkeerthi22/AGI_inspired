@@ -224,7 +224,10 @@ def _active_work_state() -> dict:
     for agent in data.get("active_agents") or []:
         if not isinstance(agent, dict):
             continue
-        if agent.get("status") == "in_progress" and (agent.get("owned_paths") or []):
+        # D5 (Codex Astra audit): match the full active-status set, not just
+        # "in_progress". ACTIVE_WORK.json entries use "active", "running", or
+        # "in_progress" — missing any one is a release-gate hole.
+        if agent.get("status") in ("in_progress", "active", "running") and (agent.get("owned_paths") or []):
             owners.append({"agent": agent.get("agent"), "task_id": agent.get("task_id"),
                            "owned_paths": agent.get("owned_paths")})
     return {"parseable": True, "owners": owners,

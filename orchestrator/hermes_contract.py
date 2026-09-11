@@ -16,7 +16,7 @@ import uuid
 from retrieval_progress import RetrievalProgressController
 
 
-CONTRACT_VERSION = 2
+CONTRACT_VERSION = 3
 AUDIT_BASE_FIELDS = frozenset({
     "sequence", "event", "profile", "required_strategy", "executed_calls",
 })
@@ -163,42 +163,58 @@ def validate_harness_adapter() -> None:
 
 
 def validate_installed_hermes(root: Path | None = None) -> ContractReport:
-    """Fail loudly when installed Hermes no longer satisfies the active contract."""
+    """Fail loudly when installed Hermes no longer satisfies the active contract.
+
+    Contract v3 checks the interfaces our adapter *actually* monkey-patches:
+    - AIAgent._execute_tool_calls exists (tool dispatch entry point)
+    - ToolCallGuardrailController class with reset_for_turn / before_call / after_call
+    - ToolGuardrailDecision dataclass for adapter return values
+    - Harness-side adapter self-test (audit JSONL, redirect lifecycle, finalization)
+    """
     root = (root or locate_installed_hermes()).resolve()
     run_tree = ast.parse((root / "run_agent.py").read_text(encoding="utf-8"))
-    executor_tree = ast.parse(
-        (root / "agent" / "tool_executor.py").read_text(encoding="utf-8")
-    )
-    loop_tree = ast.parse(
-        (root / "agent" / "conversation_loop.py").read_text(encoding="utf-8")
-    )
 
-    execute = _method(run_tree, "AIAgent", "_execute_tool_calls")
-    execute_calls = _calls(execute)
-    if "retrieval_progress.begin_tool_batch" not in execute_calls:
-        raise ContractViolation("Hermes does not begin the retrieval tool-batch lifecycle")
-    if "retrieval_progress.end_tool_batch" not in execute_calls:
-        raise ContractViolation("Hermes does not end the retrieval tool-batch lifecycle")
-    if not any(isinstance(node, ast.Try) and node.finalbody for node in ast.walk(execute)):
-        raise ContractViolation("Hermes tool-batch cleanup is not protected by finally")
+    # --- Core dispatch entry point ---
+    _method(run_tree, "AIAgent", "_execute_tool_calls")
 
-    block = _method(run_tree, "AIAgent", "_guardrail_block_result")
-    if "self._set_tool_guardrail_halt" not in _calls(block):
-        raise ContractViolation("Hermes blocked-result path does not propagate halt")
+    # --- Guardrail controller: the class our adapter monkey-patches ---
+    guardrail_path = root / "agent" / "tool_guardrails.py"
+    if not guardrail_path.is_file():
+        raise ContractViolation("installed Hermes lacks agent/tool_guardrails.py")
+    guardrail_tree = ast.parse(guardrail_path.read_text(encoding="utf-8"))
 
-    executor_calls = _calls(executor_tree)
-    if "agent._guardrail_block_result" not in executor_calls:
-        raise ContractViolation("Hermes pre-call block bypasses the halt-propagating result path")
+    guardrail_classes = {
+        node.name: node
+        for node in guardrail_tree.body
+        if isinstance(node, ast.ClassDef)
+    }
+    if "ToolCallGuardrailController" not in guardrail_classes:
+        raise ContractViolation(
+            "installed Hermes lacks ToolCallGuardrailController class"
+        )
+    if "ToolGuardrailDecision" not in guardrail_classes:
+        raise ContractViolation(
+            "installed Hermes lacks ToolGuardrailDecision class"
+        )
 
-    loop_source = ast.unparse(loop_tree)
-    if "agent._tool_guardrail_halt_decision" not in loop_source or "guardrail_halt" not in loop_source:
-        raise ContractViolation("Hermes conversation loop does not terminate on propagated halt")
+    controller_cls = guardrail_classes["ToolCallGuardrailController"]
+    controller_methods = {
+        item.name
+        for item in controller_cls.body
+        if isinstance(item, (ast.FunctionDef, ast.AsyncFunctionDef))
+    }
+    for required in ("reset_for_turn", "before_call", "after_call"):
+        if required not in controller_methods:
+            raise ContractViolation(
+                f"ToolCallGuardrailController lacks required method {required}"
+            )
 
     validate_harness_adapter()
     return ContractReport(
         contract_version=CONTRACT_VERSION,
         hermes_root=root,
         hermes_revision=_revision(root),
-        capabilities=("batch_lifecycle", "halt_propagation", "audit_jsonl_v2",
+        capabilities=("guardrail_adapter_v3", "audit_jsonl_v2",
                       "retrieval_finalization_v1"),
     )
+

@@ -927,6 +927,34 @@ with tempfile.TemporaryDirectory(ignore_cleanup_errors=True) as raw:
 # part of the gate), so running it here would recurse. Contract proven above.
 
 # --------------------------------------------------------------------------
+# D5 (Codex Astra audit): ownership preflight matches full active status set
+# --------------------------------------------------------------------------
+with tempfile.TemporaryDirectory() as raw_aw:
+    aw_path = Path(raw_aw) / "ACTIVE_WORK.json"
+    test_aw_data = {
+        "schema_version": 1,
+        "last_updated": "2026-09-10T12:00:00Z",
+        "active_agents": [
+            {"agent": "agent-active", "status": "active", "owned_paths": ["a.py"], "task_id": "T-1"},
+            {"agent": "agent-running", "status": "running", "owned_paths": ["b.py"], "task_id": "T-2"},
+            {"agent": "agent-in-progress", "status": "in_progress", "owned_paths": ["c.py"], "task_id": "T-3"},
+            {"agent": "agent-completed", "status": "completed", "owned_paths": ["d.py"], "task_id": "T-4"},
+            {"agent": "agent-no-paths", "status": "active", "owned_paths": [], "task_id": "T-5"},
+        ],
+    }
+    aw_path.write_text(json.dumps(test_aw_data), encoding="utf-8")
+    with mock.patch.object(operator_cli, "ACTIVE_WORK", aw_path):
+        st = operator_cli._active_work_state()
+        check("D5: _active_work_state parseable is True", st["parseable"], True)
+        agents_found = [o["agent"] for o in st["owners"]]
+        check("D5: 'active' status detected as owner", "agent-active" in agents_found, True)
+        check("D5: 'running' status detected as owner", "agent-running" in agents_found, True)
+        check("D5: 'in_progress' status detected as owner", "agent-in-progress" in agents_found, True)
+        check("D5: 'completed' status NOT detected as owner", "agent-completed" not in agents_found, True)
+        check("D5: empty owned_paths NOT detected as owner", "agent-no-paths" not in agents_found, True)
+        check("D5: exactly 3 owners detected", len(st["owners"]), 3)
+
+# --------------------------------------------------------------------------
 # Summary
 # --------------------------------------------------------------------------
 
