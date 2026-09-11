@@ -51,7 +51,7 @@ def load_config() -> SignerConfig:
     path = Path(raw)
     if not path.is_absolute() or path.stat().st_size > MAX_MESSAGE:
         raise SignerError("invalid_signer_config_path")
-    data = json.loads(path.read_text(encoding="utf-8"))
+    data = json.loads(path.read_text(encoding="utf-8-sig"))
     if not isinstance(data, dict) or data.get("schema_version") != 1:
         raise SignerError("invalid_signer_config")
     pipe = data.get("pipe", "")

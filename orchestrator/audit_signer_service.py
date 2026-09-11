@@ -75,9 +75,14 @@ def _main():
             key = Ed25519PrivateKey.generate()
             private = key.private_bytes(serialization.Encoding.Raw, serialization.PrivateFormat.Raw,
                                         serialization.NoEncryption())
-            win32cred.CredWrite({"Type": win32cred.CRED_TYPE_GENERIC, "TargetName": CREDENTIAL_TARGET,
-                                "CredentialBlob": base64.b64encode(private).decode("ascii"),
-                                "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE}, 0)
+            cred_dict = {"Type": win32cred.CRED_TYPE_GENERIC, "TargetName": CREDENTIAL_TARGET,
+                         "CredentialBlob": base64.b64encode(private).decode("ascii"),
+                         "Persist": win32cred.CRED_PERSIST_LOCAL_MACHINE}
+            try:
+                win32cred.CredWrite(cred_dict, 0)
+            except Exception:
+                cred_dict["Persist"] = win32cred.CRED_PERSIST_ENTERPRISE
+                win32cred.CredWrite(cred_dict, 0)
         print(json.dumps({"public_key": base64.b64encode(public_bytes(key)).decode("ascii")}))
         return 0
     config = load_config()

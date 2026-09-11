@@ -84,6 +84,10 @@ class AuditSignerService(win32serviceutil.ServiceFramework):
         from audit_signer_protocol import load_config
         from audit_signer_pipe import current_sid, serve_pipe
 
+        default_config = root.parent / "config" / "audit_signer.json"
+        if not os.environ.get("HARNESS_AUDIT_SIGNER_CONFIG") and default_config.is_file():
+            os.environ["HARNESS_AUDIT_SIGNER_CONFIG"] = str(default_config)
+
         config = load_config()
         sid = current_sid()
         signer = AuditSigner(config, _load_key(), sid)

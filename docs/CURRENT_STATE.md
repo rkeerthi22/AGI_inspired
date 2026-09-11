@@ -5,10 +5,10 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-11 (Codex Astra audit fixes D0-D6 landed; Task A follow-up code fixes landed; Task B enterprise deficits packaged and scoped; Task C honest scorecard delivered; model-free gate 77/77 suites green; ESTOP strictly engaged)
-**Phase:** Security Path Hardening (Task D), Follow-Up Code Fixes (Task A), Enterprise Deficits (Task B), and Honest Handoff (Task C) COMPLETED (77/77 model-free gate green, 66/66 citecheck, 28/28 preflight, 7/7 three-identity deployment, 46/46 broker integration, 12/12 audit replication, 171/171 operator CLI); ESTOP strictly engaged
-**Safety Status:** ESTOP engaged (`True`) | Zero live execution active | Egress WFP deny-direct-egress rule active | OmniRoute strictly held | Active work lock released
-**Verification:** Full model-free gate: 77/77 suites green, exit 0 (7/7 three-identity deployment, 28/28 deliverable preflight, 66/66 citecheck, 46/46 egress broker integration, 12/12 audit replication, 37/37 retry artifacts, 171/171 operator cli, 11/11 egress policy, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun, 39/39 f66). Candidate log pure (0 test fixtures). ESTOP strictly engaged.
+**Last Updated:** 2026-09-11 (Path A Three-Identity deployment LIVE & ACTIVE; AGI_AuditSigner running as .\AGI_Signer; Ed25519 key pinned and verified; 7/7 verification checks pass; model-free gate 77/77 suites green; ESTOP strictly engaged)
+**Phase:** Path A Three-Identity Deployment & SCM Signer Service OPERATIONAL; Deficit A CLOSED; 77/77 model-free gate green; ESTOP strictly engaged
+**Safety Status:** ESTOP engaged (`True`) | Zero live execution active | Egress WFP deny-direct-egress rule active | AGI_AuditSigner service running as `.\AGI_Signer` | OmniRoute strictly held | Active work lock released
+**Verification:** Full model-free gate: 77/77 suites green, exit 0 (7/7 three-identity deployment, 28/28 deliverable preflight, 66/66 citecheck, 46/46 egress broker integration, 12/12 audit replication, 37/37 retry artifacts, 171/171 operator cli, 11/11 egress policy, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun, 39/39 f66). Live named-pipe IPC and Ed25519 health-check signature empirically verified. Candidate log pure (0 test fixtures). ESTOP strictly engaged.
 
 Current handoff: `docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md`, `docs/RUNBOOK_PATH_A_THREE_IDENTITY.md`, `docs/QUOTA_ELASTICITY_SCOPING_2026-09-10.md`.
 Architecture completion & enterprise deployment landings (2026-09-08):

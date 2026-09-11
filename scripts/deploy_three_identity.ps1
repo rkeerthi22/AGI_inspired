@@ -24,7 +24,8 @@ param(
     [string]$SignerUsername = "AGI_Signer",
     [string]$WorkerUsername = "AGI_Worker",
     [string]$PipeName = "\\.\pipe\AGI_like_audit_signer",
-    [string]$ConfigFile = ""
+    [string]$ConfigFile = "",
+    [System.Management.Automation.PSCredential]$Credential = $null
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,6 +58,41 @@ function Get-CurrentSid {
 function Show-Header {
     param([string]$Title)
     Write-Host "`n=== $Title ===" -ForegroundColor Cyan
+}
+
+function Grant-ServiceLogonRight {
+    param([string]$AccountSid)
+    $cfg = "$env:TEMP\secpol_$([Guid]::NewGuid().ToString('N')).cfg"
+    $sdb = "$env:TEMP\secedit_$([Guid]::NewGuid().ToString('N')).sdb"
+    try {
+        & secedit.exe /export /cfg $cfg /areas USER_RIGHTS | Out-Null
+        if (Test-Path $cfg) {
+            $lines = Get-Content $cfg
+            $found = $false
+            $newLines = foreach ($line in $lines) {
+                if ($line -match "^SeServiceLogonRight\s*=") {
+                    $found = $true
+                    if ($line -notmatch [regex]::Escape($AccountSid)) {
+                        $line + ",*$AccountSid"
+                    } else {
+                        $line
+                    }
+                } else {
+                    $line
+                }
+            }
+            if (-not $found) {
+                $newLines += "SeServiceLogonRight = *$AccountSid"
+            }
+            [System.IO.File]::WriteAllLines($cfg, $newLines, [System.Text.Encoding]::Unicode)
+            & secedit.exe /configure /db $sdb /cfg $cfg /areas USER_RIGHTS | Out-Null
+            Write-Host "Granted 'Log on as a service' right (SeServiceLogonRight) to SID $AccountSid."
+        }
+    } catch {
+        Write-Warning "Could not grant SeServiceLogonRight automatically: $_"
+    } finally {
+        Remove-Item $cfg, $sdb -Force -ErrorAction SilentlyContinue
+    }
 }
 
 function Assert-Admin {
@@ -100,10 +136,21 @@ switch ($Action) {
         Write-Host "Controller SID: $controllerSid"
 
         # 1. Provision Signer Account
+        function New-RandomPassword {
+            try {
+                Add-Type -AssemblyName System.Web -ErrorAction Stop
+                return [System.Web.Security.Membership]::GeneratePassword(24, 4)
+            } catch {
+                $bytes = New-Object byte[] 18
+                [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+                return [Convert]::ToBase64String($bytes) + "!Aa1"
+            }
+        }
+
         $signerSid = Get-UserSid -Username $SignerUsername
         if (-not $signerSid) {
             Write-Host "Creating local user account: $SignerUsername"
-            $pass = [Web.Security.Membership]::GeneratePassword(24, 4) | ConvertTo-SecureString -AsPlainText -Force
+            $pass = New-RandomPassword | ConvertTo-SecureString -AsPlainText -Force
             New-LocalUser -Name $SignerUsername -Password $pass -PasswordNeverExpires:$true -AccountNeverExpires:$true -Description "AGI_like dedicated audit signer service identity" | Out-Null
             $signerSid = Get-UserSid -Username $SignerUsername
             Write-Host "Created $SignerUsername with SID: $signerSid"
@@ -115,7 +162,7 @@ switch ($Action) {
         $workerSid = Get-UserSid -Username $WorkerUsername
         if (-not $workerSid) {
             Write-Host "Creating local user account: $WorkerUsername"
-            $pass = [Web.Security.Membership]::GeneratePassword(24, 4) | ConvertTo-SecureString -AsPlainText -Force
+            $pass = New-RandomPassword | ConvertTo-SecureString -AsPlainText -Force
             New-LocalUser -Name $WorkerUsername -Password $pass -PasswordNeverExpires:$true -AccountNeverExpires:$true -Description "AGI_like restricted research worker identity" | Out-Null
             $workerSid = Get-UserSid -Username $WorkerUsername
             Write-Host "Created $WorkerUsername with SID: $workerSid"
@@ -252,16 +299,26 @@ switch ($Action) {
             $svcWmi = Get-WmiObject Win32_Service -Filter "Name='$serviceName'"
             if ($svcWmi -and $svcWmi.StartName -notmatch 'AGI_Signer') {
                 Write-Host "  WARNING: Service running as '$($svcWmi.StartName)', not AGI_Signer." -ForegroundColor Yellow
-                Write-Host "  Reconfiguring service identity..." -ForegroundColor Yellow
+                Write-Host "  Removing obsolete LocalSystem service registration to reinstall with AGI_Signer..." -ForegroundColor Yellow
+                Stop-Service -Name $serviceName -Force -ErrorAction SilentlyContinue
+                & sc.exe delete $serviceName | Out-Null
+                Start-Sleep -Seconds 2
+                $existing = $null
             }
-        } else {
+        }
+        if (-not $existing) {
             Write-Host "Creating service: $serviceName"
             # D3: Install with AGI_Signer credential. The three-identity model
             # requires the signer to run as a DISTINCT identity from the controller
             # (LocalSystem would defeat the entire isolation boundary).
             $cfg = Get-Content $ConfigFile | ConvertFrom-Json
-            $signerAccount = ".\AGI_Signer"
-            $cred = Get-Credential -UserName $signerAccount -Message "Enter AGI_Signer password for service registration"
+            $signerAccount = "$env:COMPUTERNAME\$SignerUsername"
+            $cred = $Credential
+            if (-not $cred) {
+                $cred = Get-Credential -UserName $signerAccount -Message "Enter AGI_Signer password for service registration"
+            }
+            # Grant 'Log on as a service' right so Windows SCM allows the account to start the service
+            Grant-ServiceLogonRight -AccountSid $cfg.signer_sid
             New-Service -Name $serviceName `
                 -BinaryPathName $binPath `
                 -DisplayName "AGI_like Ed25519 Audit Signer Daemon" `

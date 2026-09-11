@@ -3147,3 +3147,15 @@ Fix:
 Verified: full model-free gate 77/77 suites green after the swap (unit, containment,
 integration). Commit `5c9025d`. Historical F38/F50 gemma entries above are preserved as
 written — evidence of what was true then. Hermes config change is outside the repo.
+
+### F138 — Path A Three-Identity Live Host Deployment and SCM Service Activation — P0 — IMPLEMENTED 2026-09-11
+
+Prior behavior: Deficit A (unprovisioned three-identity separation) remained an open blocker on host `LAPTOP-5KASE5RO`. The audit signer service registration had not been verified under Windows SCM as dedicated account `AGI_Signer`, the Ed25519 signing key was not installed in `AGI_Signer`'s credential store, and `Start-Service -Name AGI_AuditSigner` failed with WinError 1168 ("Element not found") due to credential store per-user DPAPI isolation.
+
+Fix:
+1. SCM Account Logon Rights: Automated granting of `SeServiceLogonRight` ("Log on as a service") to `AGI_Signer` SID via `secedit` in `scripts/deploy_three_identity.ps1`.
+2. Dedicated Key Provisioning: Executed key generation under `AGI_Signer`'s logon profile (`LOGON_WITH_PROFILE = 1`), writing the Ed25519 private key into `AGI_Signer`'s Windows Credential Manager store (`AGI_like/dedicated_audit_signer_v2`) with fallback from `CRED_PERSIST_LOCAL_MACHINE` to `CRED_PERSIST_ENTERPRISE`.
+3. Public Key Pinning: Pinned derived public key `iamOVl2rPEbwdHi3BXQfu05gBQU2wkeAQKG0ZyHWiBI=` in `config/audit_signer.json`.
+4. Windows Service Activation: Service `AGI_AuditSigner` successfully launched by SCM under `LAPTOP-5KASE5RO\AGI_Signer`, entering `Status: Running`.
+5. Live IPC and Signature Verification: Verified client request over named pipe `\\.\pipe\AGI_like_audit_signer` with Ed25519 signature verified by controller public key.
+6. Verification Gate: `.\scripts\deploy_three_identity.ps1 -Action Verify` reports 7/7 [PASS]. Full model-free gate: 77/77 suites green. Deficit A is CLOSED.

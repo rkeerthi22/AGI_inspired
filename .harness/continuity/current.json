@@ -1,7 +1,7 @@
 {
   "schema_version": 2,
-  "brief_revision": 97,
-  "created_at": "2026-09-11T05:00:00.000000+00:00",
+  "brief_revision": 98,
+  "created_at": "2026-09-11T10:00:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
@@ -11,12 +11,13 @@
     "based_on_head": "47013ecf3fa78003b022299880816ceecce369e1"
   },
   "task": {
-    "id": "FOLLOWUP-FIXES-ENTERPRISE-DEFICITS-2026-09-10",
-    "phase": "codex-audit-fixes-and-enterprise-deficits-completed",
+    "id": "PATH-A-THREE-IDENTITY-DEPLOYMENT-2026-09-11",
+    "phase": "three-identity-deployment-verified-live",
     "status": "completed",
-    "next_action": "Operator execution of Path A and UNC WORM share provisioning; Claude Code review."
+    "next_action": "UNC WORM share provisioning (Deficit B) and Claude Code review."
   },
   "completed": [
+    "Path A: Three-Identity live deployment verified (AGI_AuditSigner running as .\\AGI_Signer, 7/7 checks passed, Deficit A closed)",
     "D0/D6: Restored 77/77 suites; hardened run_all.py exit code (sys.exit(1) on fail)",
     "D1/D2/D5: Firewall attestation integrity, broker path traversal defense, operator_cli active status",
     "D3: Signer service identity configured as AGI_Signer with pywin32 SCM wrapper",
@@ -43,15 +44,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "c1b76edd3dbf25b35443c9311f8f75e64ac6d8239582b0c195f660412a8b8649"
+      "sha256": "6011b7000c06423f4bc02bef76c6a9656dc72f4fbe15d492889faca2bd4e1213"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "4840798f6abdb5499164c493d294c8ebd45ea3bfc94fb5588d7c3fcd93757e89"
+      "sha256": "a7f410353e2f568e192036ecb89e652a8dbe33d0e66528bc54f4003275cc1f9e"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "15ddf62a5df44c25886d7516a473790e9facbcc567df400d5a5e1971bac5fbfd"
+      "sha256": "8dd951749d3cbc88f45548167fbf6e9041b9cbe82d63dd6c173d358fd51835f8"
     },
     {
       "path": "docs/INCIDENTS.md",
@@ -71,7 +72,7 @@
     },
     {
       "path": "scripts/deploy_three_identity.ps1",
-      "sha256": "bb377a8b72ae3844282cb52eb60a6e2908e0f153ea76590760dac6dbcbf7cf05"
+      "sha256": "eaeae331960cc97049aad3feccf8544d09635190825ff26d596d3ba979da3595"
     },
     {
       "path": "tests/test_citecheck.py",

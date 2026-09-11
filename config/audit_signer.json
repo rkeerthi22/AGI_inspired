@@ -1,0 +1,8 @@
+{
+    "public_key": "iamOVl2rPEbwdHi3BXQfu05gBQU2wkeAQKG0ZyHWiBI=",
+    "controller_sid": "S-1-5-21-2276471160-3813041046-3719597640-1003",
+    "worker_sid": "S-1-5-21-2276471160-3813041046-3719597640-1015",
+    "schema_version": 1,
+    "signer_sid": "S-1-5-21-2276471160-3813041046-3719597640-1014",
+    "pipe": "\\\\.\\pipe\\AGI_like_audit_signer"
+}
