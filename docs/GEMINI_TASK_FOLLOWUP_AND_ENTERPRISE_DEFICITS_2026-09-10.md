@@ -1,9 +1,9 @@
 # Gemini Task: Follow-up Fixes + Enterprise Deficit Wiring — 2026-09-10
 
-**From:** Claude Code (final reviewer, post-commit `f7af300`, pushed to origin)
-**To:** Gemini (when credits restore)
-**Baseline:** HEAD `f7af300` == `origin/master` (synced) · tree clean · gate **77/77** (measured pre- and post-commit) · ESTOP engaged
-**Context:** Gemini out of credits 2026-09-09; Claude landed the reviewed cohort repairs (`f7af300`, 12 files, +688/−84). Hermes independent review release-blocker (uncommitted work) is now **CLOSED**. This task is the next layer.
+**From:** Claude Code (final reviewer; amended 2026-09-10 after Codex Astra independent audit)
+**To:** Gemini (back online)
+**Baseline:** committed `f7af300` == `origin/master` (synced) is 77/77. **Working tree is currently 76/77** due to Gemini's own unfinished A1 edit (empty `with` block, `tests/test_deliverable_preflight.py:502`) — see D0. Local HEAD `d42d350` (this spec) is unpushed. ESTOP engaged.
+**Context:** Gemini out of credits 2026-09-09; Claude landed the reviewed cohort repairs (`f7af300`, 12 files, +688/−84). Hermes release-blocker (uncommitted work) CLOSED. Codex Astra then ran a second independent audit (329 files, 171 Python syntax-checked, security path traced) and found 5 gaps + a gate fail-open; **Claude verified 4/5 CONFIRMED + 1 PLAUSIBLE directly against disk** before folding them in here as Task D. Four of the five are gaps this spec originally missed — Codex went deeper than Claude on the security path.
 
 ---
 
@@ -15,6 +15,62 @@ The single-host, single-kernel, Windows-native architecture choice is the **isol
 2. **Deficit C (quota elasticity) is NOT caused by the architecture choice.** BytePlus 429s + no failover tier is a provider-strategy gap, orthogonal to Windows-native. Do not attribute C to the single-host choice in any writeup. Only deficit B (off-machine audit) is a pure consequence of the architecture choice; deficit A is partially (capability progress, not isolation progress).
 
 **The real future lever** for breaking the ceiling (not in this task — future architecture decision): Docker Desktop v29.6.2 is back on this box (daemon normally stopped). A Windows or WSL2/Linux container per worker is the genuine Level-2→Level-3 jump. Big project, not a follow-up commit.
+
+---
+
+## Task D — Codex Astra audit findings (HIGHEST PRIORITY — do FIRST; verified by Claude 2026-09-10)
+
+A second independent reviewer (Codex Astra) inventoried 329 tracked files, syntax-checked all 171 Python files, and traced the release/security paths. Claude independently verified each finding below against disk — **4 of 5 CONFIRMED directly, 1 PLAUSIBLE** — before writing them here. These are security-path gaps, not polish; they outrank Task A/B/C. Four of the five are gaps this spec originally missed (Codex went deeper than Claude on the security path).
+
+### D0. Immediate: restore 76→77 (finish your own A1 edit)
+
+The working tree is currently **76/77** because your in-progress A1 edit left an empty `with` block: `tests/test_deliverable_preflight.py:502` — `with patch.object(evaluation, "RUNS", tmp_runs):` has no body → `IndentationError: expected an indented block after 'with' statement on line 502`. Finish the edit (indent the existing test body under the patch context, or restructure) so the gate returns to 77/77 before doing anything else. Nothing else in this spec is meaningful on a red tree.
+
+### D1. Attest certifies tests that never ran (attestation integrity — CONFIRMED)
+
+**Site:** `scripts/enforce_worker_firewall.ps1:430` (`Invoke-Attest`). **Verified by Claude:** the signed payload's `evidence` list asserts `'raw_socket_bypass_test'` and `'private_address_test'` (lines 456-457) without executing them — the function loads the policy and reads file bytes but runs no socket probe or worker-denial test before signing. An attestation that certifies unrun evidence is a non-repudiation hole: the signed token claims boundary properties that were never measured in that invocation.
+
+**Fix:** `Invoke-Attest` must actually RUN the denial probes (the `Test` action's socket probes: loopback-broker reachable + direct-WAN blocked) BEFORE including those evidence labels, and OMIT any evidence label whose test did not pass in that same invocation. If a probe is environment-dependent (needs the worker token), the attestation must either run it under the worker identity or DROP the label — never assert unrun evidence.
+**Pass criteria:** regression proves that when a probe fails/is-skipped, its evidence label is ABSENT from the signed attestation; attestation refuses to sign an all-probes-skipped payload (or signs with `evidence: []` + a `probes_skipped` field). Gate green.
+
+### D2. Broker audit path traversal / task impersonation (defense-in-depth — CONFIRMED)
+
+**Site:** `orchestrator/egress_broker.py:122-126` (`_resolve_attempt_audit`). **Verified by Claude:** `tid = record.get("task_id")` is interpolated into `f"task{tid}_a{attempt}_broker.audit.jsonl"` with NO int validation. A record carrying a string `task_id` with path separators (`"../"` or an absolute path) escapes `runs/` and writes the per-attempt audit to an attacker-chosen location, and/or impersonates another task's audit log. Exploitable only if an attacker controls the task_id field, but it's a real input-validation surface on the evidence path.
+
+**Fix:** coerce/validate `task_id` to `int` (reject non-int or negative); reject any resolved audit path that does not resolve UNDER `self.runs_dir` (use `Path.resolve()` + `is_relative_to(self.runs_dir)`, drop otherwise). Same for `attempt`.
+**Pass criteria:** regression proves a string/path-separator `task_id` is REJECTED (no file written outside `runs/`); integer task_id still works. Gate green.
+
+### D3. Signer service lacks identity configuration (Path A correctness — CONFIRMED)
+
+**Site:** `scripts/deploy_three_identity.ps1:238` (`InstallSignerService`). **Verified by Claude:** `New-Service -Name AGI_AuditSigner -BinaryPathName $binPath` sets NO `-Credential` → the service runs as LocalSystem, NOT as the AGI_Signer identity — defeating the entire three-identity separation (the signer is supposed to be a distinct identity from the controller). Additionally `$binPath` is a raw `python ... serve` with no service wrapper (no pywin32 `win32serviceutil`/`servicemanager`), so Windows SCM cannot manage it as a real service lifecycle.
+
+**Fix:** (a) install the service to run as the AGI_Signer account (`-Credential` / `sc.exe config ... obj= ...\AGI_Signer password= ...`), (b) author a proper service wrapper (pywin32 `ServiceFramework` subclass) so `python ... serve` is SCM-managed with start/stop/recovery, (c) the `Verify` action must assert the running service's configured identity == AGI_Signer (not LocalSystem).
+**Pass criteria:** regression asserts service identity != LocalSystem and == AGI_Signer (mockable for hermetic test; real install is operator-only). Gate green. **This is the load-bearing fix for "three-identity" being real rather than nominal.**
+
+### D4. Remote audit does not establish immutable retention (deficit B deeper — PLAUSIBLE)
+
+**Site:** `orchestrator/audit_replication.py:391` (`audit_state`). **Verified by Claude:** `minimum_retention_days` is REPORTED in the diagnostic, not ENFORCED as a floor — there is no check that the chain length/age meets the retention minimum, and `fresh` only checks the latest checkpoint age. Deleting a recent chain suffix leaves a valid prefix, so `verify_checkpoint_chain` can return ok on a truncated chain. Immutable retention requires independent storage enforcement (the WORM sink itself, operator-provisioned) AND a trusted latest-checkpoint record the code cannot rewrite.
+
+**Fix (agent-doable part):** (a) add a `retention_floor_check` that FAILS the audit state if checkpoint count or earliest-timestamp implies retention below `minimum_retention_days`, (b) require a signed latest-checkpoint manifest whose hash chain does not validate on suffix deletion (detect truncation, not just age), (c) be honest in `audit_state` output that storage-level immutability is operator-provisioned (WORM) and the code only DETECTS tampering, doesn't prevent it.
+**Pass criteria:** regression proves suffix-deletion is DETECTED (audit state ok=False on a truncated chain); retention-floor check fails on a too-short chain. Gate green. The actual WORM share is operator-only. (Deepens Task B2 — do both together.)
+
+### D5. Ownership preflight falsely passes (release-gate correctness — CONFIRMED)
+
+**Site:** `orchestrator/operator_cli.py:227` (`_active_work_state`). **Verified by Claude:** the check is `agent.get("status") == "in_progress"` ONLY. Your own current `ACTIVE_WORK.json:28` entry is `"status": "active"` — so the ownership preflight silently misses your active work and reports the tree unowned when it isn't. This is a release-gate hole: a tree with active ownership can pass the "no active owners" preflight.
+
+**Fix:** match the full active-status set (`status in ("in_progress", "active", "running")`), or normalize the registry to one canonical status. Correcting this EXPOSES your currently-active entry as a blocker (which it is — you own these files), so the preflight will correctly report ownership until you release scope.
+**Pass criteria:** regression proves an `"active"` entry is detected as an owner; `_active_work_state` returns it. Gate green.
+
+### D6. Meta: gate exits 0 with a FAILED suite (gate fail-open — CONFIRMED)
+
+**Verified by Claude:** `python -B tests/run_all.py` with a broken suite (`test_deliverable_preflight` IndentationError) printed `76/77 suites green` + a `FAILED` line AND **exited code 0**. CLAUDE.md requires "zero `[FAIL]` lines before handoff." An exit-0-on-failure is fail-open: any CI/automation that keys on exit code will greenlight a red tree.
+
+**Fix:** the gate runner in `tests/run_all.py` must exit NON-ZERO if any suite fails or any `[FAIL]`/`FAILED` line is present. One-line-bounded fix, but it's the keystone of the whole release gate's meaning.
+**Pass criteria:** deliberately break a test, run the gate, confirm exit code != 0; restore, confirm exit 0. Gate green.
+
+### D-order
+
+D0 first (restore 76→77). Then D6 (gate fail-open — so every subsequent fix is actually verifiable). Then D1/D2/D5 (security + gate correctness, independent of each other). Then D3 (Path A realness — needs D1's attestation fixes to be meaningful). Then D4 (deeper than B2 — do with Task B2). Land Task D as its own commit BEFORE A/B/C: `fix(security,gate): Codex audit — attestation integrity, broker path validation, ownership status, gate exit code`.
 
 ---
 
@@ -81,6 +137,8 @@ Path A is `scripts/deploy_three_identity.ps1`, 8 idempotent actions, 7/7 tested 
 
 **Pass criteria:** runbook exists; `Verify` action has the 3 pre-flight checks; 7/7 deployment tests still green; gate green.
 
+> **Superseded/deepened by Task D:** D1 (attest must run probes before asserting evidence) and D3 (signer service must actually run as AGI_Signer, not LocalSystem — the load-bearing three-identity fix) are deeper than B1's "re-verify idempotency." Do D1/D3 as part of this Path A packaging pass; B1's idempotency re-read is still needed but is no longer the headline.
+
 ### B2. Deficit B (off-machine audit retention) — wire the enforcement code path
 
 **Problem:** `HARNESS_AUDIT_REPLICA_ROOT` is wired but unpointed; `HARNESS_AUDIT_ENFORCE` is referenced but not enforced. Key + logs share the host → non-repudiation overstated. This **is** a consequence of the single-host choice (the one pure one).
@@ -92,6 +150,8 @@ Path A is `scripts/deploy_three_identity.ps1`, 8 idempotent actions, 7/7 tested 
 4. The operator (not you) wires the actual UNC WORM share and sets the two env vars. Your code must be correct *before* they do.
 
 **Pass criteria:** 2 new regressions pass; existing audit tests green; gate green.
+
+> **Deepened by Task D4:** D4 adds the retention-floor check + truncation-detection that B2's fail-closed-on-write-failure doesn't cover. Do B2 + D4 together — B2 handles "replica write fails → hard fail," D4 handles "replica write succeeds but chain was truncated → detect + fail." Both are needed for the immutability claim to hold.
 
 ### B3. Deficit C (quota elasticity) — scope only, no unlock
 
@@ -113,7 +173,7 @@ OmniRoute is **HELD behind 4 conditions** (constrained topology, provenance tran
 ## Verification ladder (do not skip)
 
 - Every code fix: read < run < measure. A regression test per fix.
-- Gate `python -B tests/run_all.py` green on the committed tree (read count from output, never hardcode). Current floor: **77/77**.
+- Gate `python -B tests/run_all.py` green on the committed tree (read count from output, never hardcode). Committed-tree floor: **77/77**. Working tree is currently **76/77** (D0 fixes it). A green gate means **zero `[FAIL]`/`FAILED` lines AND exit code 0** — the exit-code half is D6; until D6 lands, do NOT trust exit code alone, grep the output for `FAIL`.
 - Commit only after gate green on committed tree. Push. Verify `git log origin/master..master` empty.
 - ESTOP stays engaged. No live runs. Critic stays unrestricted. Weak-AI strategy LOCKED (mechanical, no second LLM judge). Single write scope — claim in `ACTIVE_WORK.json`, release after.
 
@@ -126,7 +186,9 @@ OmniRoute is **HELD behind 4 conditions** (constrained topology, provenance tran
 - Do NOT cite M2 as proof of the kernel ceiling (it proves the token is insufficient).
 - Do NOT attribute deficit C to the Windows-native choice.
 - Do NOT claim enterprise candidate when operator steps remain.
+- Do NOT assert attestation evidence that was not measured in the same invocation (D1).
+- Do NOT trust the gate exit code as "green" until D6 lands — grep for `FAIL`/`FAILED` lines.
 
 ---
 
-*Written by Claude Code (final reviewer), 2026-09-10. Baseline `f7af300` (synced). Engineering independently reviewed by Claude + Hermes before the commit landed.*
+*Written by Claude Code (final reviewer), 2026-09-10; amended same day after Codex Astra independent audit (Task D findings verified by Claude against disk). Committed baseline `f7af300` (synced, 77/77). Engineering independently reviewed by Claude + Hermes before the original commit landed; Codex Astra provided the second security-path review that produced Task D.*
