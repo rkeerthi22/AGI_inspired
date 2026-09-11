@@ -36,7 +36,13 @@ During the live cohort evaluation on live network traffic (Tasks 153 through 169
 ## 2. Status of the Three Enterprise Deficits
 
 ### Deficit A: Host Containment & Identity Separation (Path A)
-* **Status:** **PACKAGED & VERIFIED (Operator Execution Remains)**
+* **Status:** **DEPLOYED, ACTIVE & EMPIRICALLY VERIFIED LIVE (DEFICIT A CLOSED)**
+* **Empirical Verification (2026-09-11):**
+  - Dedicated service accounts `AGI_Signer` and `AGI_Worker` provisioned and verified.
+  - SCM Service `AGI_AuditSigner` active and in `Running` state under `LAPTOP-5KASE5RO\AGI_Signer`.
+  - Ed25519 signing key stored in `AGI_Signer`'s Windows Credential Manager store with public key pinned in `config/audit_signer.json`.
+  - Live named-pipe request over `\\.\pipe\AGI_like_audit_signer` verified with Ed25519 cryptographic token signature.
+  - `.\scripts\deploy_three_identity.ps1 -Action Verify` passed **7/7 checks**.
 * **Deliverables:**
   - `scripts/deploy_three_identity.ps1` (implements `Plan`, `ProvisionAccounts`, `ConfigureAcls`, `ConfigureFirewall`, `InstallSignerService`, `Verify`, `Remove`).
   - `orchestrator/audit_signer_scm.py` (proper pywin32 `ServiceFramework` wrapper for Windows SCM lifecycle management).
