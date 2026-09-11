@@ -115,6 +115,10 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     # user's Chrome (which requires interactive remote-debugging approval).
     env["HARNESS_UNATTENDED_BROWSER"] = "1"
     if sys.platform == "win32":
+        # A3 (Claude follow-up / M2 containment trade-off):
+        # Disabling Chrome's sandbox via --no-sandbox is an in-process restricted token
+        # workaround removed by Path A (dedicated AGI_Worker account). See
+        # docs/RUNBOOK_PATH_A_THREE_IDENTITY.md and docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md.
         env["AGENT_BROWSER_ARGS"] = "--no-sandbox,--disable-dev-shm-usage,--disable-crash-reporter,--disable-breakpad,--no-crash-upload,--disable-gpu"
     if retrieval_profile:
         # The profile is harness-owned control metadata, not model-selected

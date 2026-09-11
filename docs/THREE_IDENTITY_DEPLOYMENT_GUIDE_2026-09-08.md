@@ -212,3 +212,24 @@ python tests/test_three_identity_deployment.py
 ### Scenario C: Firewall Drops Broker Loopback (Port 8787)
 * **Check:** Verify WFP rules using `.\scripts\enforce_worker_firewall.ps1 -Action Verify`.
 * **Remediation:** Re-apply rules via `.\scripts\enforce_worker_firewall.ps1 -Action Apply`.
+
+---
+
+## 8. Containment Trade-offs: `--no-sandbox` and the Single-Kernel Ceiling
+
+### 8.1 The `--no-sandbox` In-Process Trade-off
+Under the in-process restricted token architecture (`worker_sandbox.py` using `CreateRestrictedToken` with `S-1-5-12`), Chromium fails to launch with exit code 21 (the Mission M2 empirical finding). Chrome's internal multi-process broker requires token duplication, Job Object hierarchy, and shared memory IPC that Windows restricts when running under an in-process restricted token.
+
+To allow browser-based research without crashing, `AGENT_BROWSER_ARGS` in `orchestrator/controlled_hermes.py` and `orchestrator/execution.py` sets `--no-sandbox`. Disabling Chrome's internal sandbox is a **real containment trade-off**:
+* Chrome renderer exploits are not contained by Chrome's native sandbox boundary.
+* Confinement relies entirely on the outer harness controls: the Windows restricted token, Job Object UI restrictions, and WFP network egress blocking.
+
+### 8.2 How Path A Resolves the Trade-off
+Path A provisions a dedicated, separate Windows user account (`AGI_Worker`). Because `AGI_Worker` is a standard Windows security principal (not an in-process restricted token derived from the interactive user):
+1. Chromium can allocate its full user-profile directory under `workspace/worker_home/`.
+2. Chrome's multi-process broker functions normally, allowing `--no-sandbox` to be **removed** and restoring Chrome's native renderer sandbox.
+3. Confinement is enforced externally at the OS boundary: NTFS ACLs deny access to repo code and secrets, WFP drops all direct outbound WAN packets, and Job Objects cap resources.
+
+### 8.3 Isolation Ceiling Framing
+* **M2 is a token limitation, not a kernel ceiling:** M2 proves that in-process restricted tokens cannot host complex multi-process browser brokers. Path A resolves M2 within the single-kernel paradigm.
+* **The genuine kernel ceiling:** The single-host architecture's isolation ceiling is that worker, controller, and signer share one Windows NT kernel. A kernel vulnerability could allow a compromised worker to reach the signer key or audit logs. Breaking this ceiling requires hardware-assisted isolation (containers/VMs via Docker Desktop or WSL2), which is an architectural tier decision beyond single-host hardening.

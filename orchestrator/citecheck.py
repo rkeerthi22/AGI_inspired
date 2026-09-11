@@ -16,6 +16,7 @@ that surface closed while still getting real, non-LLM-judged truth signal.
 """
 import ipaddress
 import json
+import os
 import re
 import socket
 import urllib.error
@@ -65,6 +66,7 @@ class CitationCheckResult:
     literal_found: bool | None = None
     final_url: str = ""
     redirects_followed: int = 0
+    snapshot_source: str = "frozen"    # 'frozen' | 'live_fallback' | 'none' (A2)
 
     @property
     def reachable(self) -> bool:
@@ -101,6 +103,7 @@ class CitationCheckResult:
             "literal_found": self.literal_found,
             "final_url": self.final_url,
             "redirects_followed": self.redirects_followed,
+            "snapshot_source": self.snapshot_source,
         }
 
 
@@ -409,6 +412,7 @@ def load_worker_policy_snapshot(
                     return {
                         "policy_digest": data.get("policy_digest"),
                         "allowlisted_hosts": sorted(list(set(cleaned))),
+                        "snapshot_source": "frozen",
                     }
             except Exception:
                 pass
@@ -417,6 +421,13 @@ def load_worker_policy_snapshot(
     harness_runs = (ROOT / "runs").resolve()
     if runs_canonical == harness_runs:
         try:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(
+                "Gap-1 safety net: worker usage artifact absent for task_id=%s attempt=%s; "
+                "falling back to live egress policy snapshot (snapshot_source='live_fallback')",
+                task_id, attempt,
+            )
             from egress_policy import snapshot_egress_policy
             snap = snapshot_egress_policy()
             raw_hosts = snap.get("allowlisted_hosts") or []
@@ -429,11 +440,12 @@ def load_worker_policy_snapshot(
             return {
                 "policy_digest": snap.get("policy_digest"),
                 "allowlisted_hosts": sorted(list(set(cleaned))),
+                "snapshot_source": "live_fallback",
             }
         except Exception:
             pass
 
-    return {"policy_digest": None, "allowlisted_hosts": []}
+    return {"policy_digest": None, "allowlisted_hosts": [], "snapshot_source": "none"}
 
 
 def classify_citation(
@@ -576,6 +588,7 @@ def _fetch_one(
         literal_found=result.get("literal_found"),
         final_url=result.get("final_url", cite["url"]),
         redirects_followed=result.get("redirects_followed", 0),
+        snapshot_source=(policy_snapshot.get("snapshot_source") or "frozen") if policy_snapshot else "none",
     )
 
 
@@ -625,6 +638,7 @@ def verify(
                     literal_found=None,
                     final_url=cite.get("url", ""),
                     redirects_followed=0,
+                    snapshot_source=(policy_snapshot.get("snapshot_source") or "frozen") if policy_snapshot else "none",
                 ))
     return results
 
@@ -899,6 +913,16 @@ def record_policy_expansion_candidates(
     Append-only log for candidates to consider allowlisting in egress_policy.yaml.
     """
     runs = Path(runs_dir) if runs_dir is not None else (ROOT / "runs")
+    # A1 (Claude follow-up / Hermes Flag 1): fixture-segregation guard.
+    # If running under model-free test tier (AGI_TEST_TIER set), tests MUST inject a temp runs_dir.
+    # Writing test fixtures to the production runs/ directory is strictly prohibited.
+    if os.environ.get("AGI_TEST_TIER"):
+        prod_runs = (ROOT / "runs").resolve()
+        if runs.resolve() == prod_runs:
+            raise AssertionError(
+                "Fixture-segregation guard: test suite attempted to write policy_expansion_candidates "
+                "to production runs/ directory without injecting a temporary runs_dir!"
+            )
     log_file = runs / "policy_expansion_candidates.jsonl"
     runs.mkdir(parents=True, exist_ok=True)
 

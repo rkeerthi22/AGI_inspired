@@ -133,6 +133,12 @@ def main(argv: list[str] | None = None) -> int:
         os.mkdir = _safe_mkdir
         os.makedirs = _safe_makedirs
         os.chmod = _safe_chmod
+        # A3 (Claude follow-up / M2 containment trade-off):
+        # Disabling Chrome's sandbox via --no-sandbox is an in-process restricted token
+        # workaround (M2 finding: Chrome's multi-process broker fails under the in-process
+        # restricted token). Path A (dedicated AGI_Worker account) removes this workaround
+        # and restores Chrome's real sandbox boundary. See docs/RUNBOOK_PATH_A_THREE_IDENTITY.md
+        # and docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md Section 7.
         os.environ.setdefault(
             "AGENT_BROWSER_ARGS",
             "--no-sandbox,--disable-dev-shm-usage,--disable-crash-reporter,--disable-breakpad,--no-crash-upload,--disable-gpu",

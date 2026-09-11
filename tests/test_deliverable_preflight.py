@@ -10,9 +10,12 @@ Verifies that:
 """
 from pathlib import Path
 import json
+import os
 import sys
 import tempfile
 from unittest.mock import MagicMock, patch
+
+os.environ.setdefault("AGI_TEST_TIER", "unit")
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -495,54 +498,60 @@ def test_evaluation_abuse_bounds_and_fabrication():
     row = {"task_id": 9999, "pass_criteria": "Research criteria", "spec": "Spec"}
     roles = {"critic": {"model": "critic-test", "provider": "mock"}}
 
-    # Case A: Fabrication triggers mechanical FAIL
-    fab_text = "Here is a quote \"Guaranteed 100% uptime\" from https://denied.com/sla (conf 3)."
-    fab_evidence = [
-        citecheck.CitationCheckResult(
-            url="https://denied.com/sla", host="denied.com", reachable_on_host=True, http_status=200,
-            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
-            line="from https://denied.com/sla (conf 3)."
-        )
-    ]
-    with patch.object(evaluation.citecheck, "verify", return_value=fab_evidence):
-        verdict, text = evaluation.run_critic(row, fab_text, roles, baseline=False)
-        assert verdict == "fail"
-        assert "Fabrication: worker asserted" in text
+    # Redirect RUNS to a temp dir so record_policy_expansion_candidates does NOT
+    # pollute the production runs/policy_expansion_candidates.jsonl (A1 fix).
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_runs = Path(tmpdir)
+        with patch.object(evaluation, "RUNS", tmp_runs):
 
-    # Case B: High policy denial fraction triggers needs_review escalation
-    high_denial_text = "Multiple facts: https://ok.com https://denied1.com https://denied2.com"
-    high_evidence = [
-        citecheck.CitationCheckResult(
-            url="https://ok.com", host="ok.com", reachable_on_host=True, http_status=200,
-            worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
-        ),
-        citecheck.CitationCheckResult(
-            url="https://denied1.com", host="denied1.com", reachable_on_host=True, http_status=200,
-            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
-        ),
-        citecheck.CitationCheckResult(
-            url="https://denied2.com", host="denied2.com", reachable_on_host=True, http_status=200,
-            worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
-        ),
-    ]
-    with patch.object(evaluation.citecheck, "verify", return_value=high_evidence):
-        verdict, text = evaluation.run_critic(row, high_denial_text, roles, baseline=False)
-        assert verdict in ("needs_review", "fail")
-        assert "insufficient_verified_sources" in text or "high_policy_denial" in text
+            # Case A: Fabrication triggers mechanical FAIL
+            fab_text = "Here is a quote \"Guaranteed 100% uptime\" from https://denied.com/sla (conf 3)."
+            fab_evidence = [
+                citecheck.CitationCheckResult(
+                    url="https://denied.com/sla", host="denied.com", reachable_on_host=True, http_status=200,
+                    worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+                    line="from https://denied.com/sla (conf 3)."
+                )
+            ]
+            with patch.object(evaluation.citecheck, "verify", return_value=fab_evidence):
+                verdict, text = evaluation.run_critic(row, fab_text, roles, baseline=False)
+                assert verdict == "fail"
+                assert "Fabrication: worker asserted" in text
 
-    # Case C: F135 Fabrication on UNREACHABLE triggers mechanical FAIL
-    unreach_fab_text = "Claim: \"Confidential internal metric\" at https://unattempted.com/leak (conf 3)."
-    unreach_fab_evidence = [
-        citecheck.CitationCheckResult(
-            url="https://unattempted.com/leak", host="unattempted.com", reachable_on_host=True, http_status=200,
-            worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
-            line="Claim: \"Confidential internal metric\" at https://unattempted.com/leak (conf 3)."
-        )
-    ]
-    with patch.object(evaluation.citecheck, "verify", return_value=unreach_fab_evidence):
-        verdict, text = evaluation.run_critic(row, unreach_fab_text, roles, baseline=False)
-        assert verdict == "fail"
-        assert "Fabrication: worker asserted" in text
+            # Case B: High policy denial fraction triggers needs_review escalation
+            high_denial_text = "Multiple facts: https://ok.com https://denied1.com https://denied2.com"
+            high_evidence = [
+                citecheck.CitationCheckResult(
+                    url="https://ok.com", host="ok.com", reachable_on_host=True, http_status=200,
+                    worker_policy_permitted=True, broker_attempt_verified=False, classification="OK",
+                ),
+                citecheck.CitationCheckResult(
+                    url="https://denied1.com", host="denied1.com", reachable_on_host=True, http_status=200,
+                    worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+                ),
+                citecheck.CitationCheckResult(
+                    url="https://denied2.com", host="denied2.com", reachable_on_host=True, http_status=200,
+                    worker_policy_permitted=False, broker_attempt_verified=True, classification="POLICY_DENIED",
+                ),
+            ]
+            with patch.object(evaluation.citecheck, "verify", return_value=high_evidence):
+                verdict, text = evaluation.run_critic(row, high_denial_text, roles, baseline=False)
+                assert verdict in ("needs_review", "fail")
+                assert "insufficient_verified_sources" in text or "high_policy_denial" in text
+
+            # Case C: F135 Fabrication on UNREACHABLE triggers mechanical FAIL
+            unreach_fab_text = "Claim: \"Confidential internal metric\" at https://unattempted.com/leak (conf 3)."
+            unreach_fab_evidence = [
+                citecheck.CitationCheckResult(
+                    url="https://unattempted.com/leak", host="unattempted.com", reachable_on_host=True, http_status=200,
+                    worker_policy_permitted=False, broker_attempt_verified=False, classification="UNREACHABLE",
+                    line="Claim: \"Confidential internal metric\" at https://unattempted.com/leak (conf 3)."
+                )
+            ]
+            with patch.object(evaluation.citecheck, "verify", return_value=unreach_fab_evidence):
+                verdict, text = evaluation.run_critic(row, unreach_fab_text, roles, baseline=False)
+                assert verdict == "fail"
+                assert "Fabrication: worker asserted" in text
 
 
 def test_fabrication_guard_catches_unattempted_conf3():
@@ -681,6 +690,47 @@ def test_abuse_bounds_unattempted_min_ok_fails():
         assert any("insufficient_verified_sources" in issue for issue in report.schema_issues)
 
 
+def test_candidates_log_injectable():
+    """A1 regression: candidate log path is injectable; production file is untouched."""
+    prod_path = ROOT / "runs" / "policy_expansion_candidates.jsonl"
+    prod_before = prod_path.read_bytes() if prod_path.is_file() else b""
+
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_runs = Path(tmpdir)
+        mock_evidence = [
+            citecheck.CitationCheckResult(
+                url="https://denied-injected.com/test", host="denied-injected.com",
+                reachable_on_host=True, http_status=200, worker_policy_permitted=False,
+                broker_attempt_verified=True, classification="POLICY_DENIED",
+            )
+        ]
+        candidates = citecheck.record_policy_expansion_candidates(
+            mock_evidence, task_id=8888, attempt=1, runs_dir=tmp_runs
+        )
+        assert len(candidates) == 1
+        injected_file = tmp_runs / "policy_expansion_candidates.jsonl"
+        assert injected_file.is_file()
+        assert "denied-injected.com" in injected_file.read_text(encoding="utf-8")
+
+    # Verify production file was NOT modified
+    prod_after = prod_path.read_bytes() if prod_path.is_file() else b""
+    assert prod_before == prod_after, "Production candidates log was modified during test!"
+
+
+def test_production_candidates_log_segregation_guard():
+    """A1 gate guard: production candidate log has ZERO test-fixture entries."""
+    prod_path = ROOT / "runs" / "policy_expansion_candidates.jsonl"
+    if not prod_path.is_file():
+        return
+    for idx, line in enumerate(prod_path.read_text(encoding="utf-8").splitlines()):
+        if not line.strip():
+            continue
+        record = json.loads(line)
+        assert record.get("task_id") != 9999, f"Line {idx} in production log has test fixture task_id=9999"
+        host = record.get("host", "")
+        assert not host.startswith("denied"), f"Line {idx} in production log has test fixture host: {host}"
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -708,5 +758,7 @@ if __name__ == "__main__":
     test_fabrication_guard_catches_unattempted_verbatim_quotes()
     test_fabrication_guard_allows_unattempted_conf1_and_unquoted()
     test_abuse_bounds_unattempted_min_ok_fails()
-    print("ALL 26 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_candidates_log_injectable()
+    test_production_candidates_log_segregation_guard()
+    print("ALL 28 DELIVERABLE PREFLIGHT TESTS PASSED!")
 

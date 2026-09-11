@@ -16,6 +16,7 @@ Core Architectural Rules (Incorporating Independent Peer Review):
    budget checks, and token spend accumulation.
 """
 from dataclasses import dataclass, field
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -151,13 +152,15 @@ def run_preflight(
     cite_failed = citecheck.is_hard_fail(summary) or len(dead_urls) > 0
 
     # 2. F134: Record policy expansion candidates for operator review (append-only)
+    # In test tiers, only record if an explicit runs_dir was injected to prevent polluting production log (A1).
     if summary.get("policy_denied", 0) > 0:
-        try:
-            citecheck.record_policy_expansion_candidates(
-                evidence, task_id=task_id, attempt=attempt, runs_dir=runs_dir
-            )
-        except Exception:
-            pass
+        if runs_dir is not None or not os.environ.get("AGI_TEST_TIER"):
+            try:
+                citecheck.record_policy_expansion_candidates(
+                    evidence, task_id=task_id, attempt=attempt, runs_dir=runs_dir
+                )
+            except Exception:
+                pass
 
     # 3. F134: Strict Mechanical Fabrication Guard
     try:

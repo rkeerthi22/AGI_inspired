@@ -8,6 +8,9 @@ Validates that:
 from __future__ import annotations
 
 import sys
+import json
+import tempfile
+from unittest import mock
 import urllib.error
 from pathlib import Path
 
@@ -448,6 +451,30 @@ quoted_res = citecheck.CitationCheckResult(
 fab_captured = citecheck.detect_fabrication(quote_detected_text, [quoted_res])
 check("Offending quote captured in fabrications list", len(fab_captured), 1)
 check("Offending quote text preserved", '"exact stolen phrase"' in fab_captured[0].get("offending_quotes", []), True)
+
+# Test 9 (A2): Gap-1 fallback guard in load_worker_policy_snapshot
+print("\n--- Test 9 (A2): Gap-1 fallback guard ---")
+with tempfile.TemporaryDirectory() as tmpdir:
+    tmp_runs = Path(tmpdir)
+    # Happy path: artifact present -> frozen
+    usage_file = tmp_runs / "task555_a1_worker.usage.json"
+    usage_file.write_text(json.dumps({
+        "policy_digest": "sha256:abc123frozen",
+        "allowlisted_hosts": ["frozen.example.com"],
+    }), encoding="utf-8")
+    happy_snap = citecheck.load_worker_policy_snapshot(555, 1, runs_dir=tmp_runs)
+    check("Happy path returns frozen snapshot_source", happy_snap.get("snapshot_source"), "frozen")
+    check("Happy path returns frozen policy_digest", happy_snap.get("policy_digest"), "sha256:abc123frozen")
+
+    # Fallback path: artifact absent and runs_dir is harness runs -> fallback used, WARNING logged
+    with mock.patch("egress_policy.snapshot_egress_policy", return_value={
+        "policy_digest": "sha256:livefallback123",
+        "allowlisted_hosts": ["live.example.com"],
+    }):
+        with mock.patch("logging.Logger.warning") as mock_warn:
+            fallback_snap = citecheck.load_worker_policy_snapshot(99999, 1, runs_dir=Path("runs"))
+            check("Fallback snapshot_source is live_fallback", fallback_snap.get("snapshot_source"), "live_fallback")
+            check("Fallback logged WARNING", mock_warn.called, True)
 
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:
