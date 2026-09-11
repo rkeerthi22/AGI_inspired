@@ -8,7 +8,7 @@
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "3d3854582ab67082dbe26a4409291653df212f99"
+    "based_on_head": "47013ecf3fa78003b022299880816ceecce369e1"
   },
   "task": {
     "id": "FOLLOWUP-FIXES-ENTERPRISE-DEFICITS-2026-09-10",
@@ -47,7 +47,7 @@
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "972973885fea9c8a15a3711b661c587f66062f1b3824dd9d0adb5b85267e833f"
+      "sha256": "4840798f6abdb5499164c493d294c8ebd45ea3bfc94fb5588d7c3fcd93757e89"
     },
     {
       "path": "docs/HARDENING.md",

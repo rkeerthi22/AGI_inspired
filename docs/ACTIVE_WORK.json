@@ -4,16 +4,16 @@
   "active_agents": [
     {
       "agent": "gemini-cli",
-      "role": "Follow-up fixes + enterprise deficit wiring (Tasks D, A, B, C from Claude spec 2026-09-10)",
-      "task_id": "FOLLOWUP-FIXES-ENTERPRISE-DEFICITS-2026-09-10",
+      "role": "Scorecard correction & honest ledger reconciliation",
+      "task_id": "SCORECARD-LEDGER-RECONCILIATION-2026-09-11",
       "mode": "completed",
       "owned_paths": [],
-      "started_at": "2026-09-10T12:07:00Z",
-      "last_update": "2026-09-11T05:00:00Z",
+      "started_at": "2026-09-11T05:40:00Z",
+      "last_update": "2026-09-11T05:50:00Z",
       "status": "completed",
       "blocked_by": null,
       "handoff_path": "docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md",
-      "notes": "COMPLETED. Landed Codex Astra security audit fixes (D0-D6), Task A carry-forward fixes (A1 candidate log, A2 Gap-1 guard, A3 --no-sandbox docs), Task B enterprise deficit packaging & scoping (B1 runbook, B2 fail-closed replica + D4 truncation detection, B3 quota scoping), and Task C honest handoff (3/17 cohort yield, deficit status). 77/77 model-free test gate green. Write scope released."
+      "notes": "COMPLETED. Reconciled scorecard to ledger ground truth: passes = 162, 166, 167; 13 fails = real content + caught fabrication failures with real token spend (e.g. Task 159 burned 116k in / 27k out); Task 169 = needs_review. Updated repo handoff and Obsidian vault mirror. Released write scope."
     },
     {
       "agent": "gemini-cli",

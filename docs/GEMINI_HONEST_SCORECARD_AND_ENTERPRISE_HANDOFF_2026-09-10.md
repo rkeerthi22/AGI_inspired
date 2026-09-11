@@ -12,25 +12,24 @@
 ## 1. Honest Empirical Cohort Scorecard (3/17 Yield)
 
 ### 1.1 Live Cohort Ground Truth
-During the live cohort evaluation on live network traffic (Tasks 153 through 169), the empirical results are as follows:
+During the live cohort evaluation on live network traffic (Tasks 153 through 169), the empirical results recorded in `ledger/ledger.db` are as follows:
 
 | Metric | Empirical Count | Notes |
 | :--- | :---: | :--- |
 | **Total Tasks Attempted** | **17** | Tasks 153 through 169 |
-| **Genuine Research Passes** | **3** | Tasks 161, 163, 165 passed independent critic under Option B+ |
-| **Mechanical Fabrications Blocked** | **1** | Task 169 worker attempted citation fabrication; Option B+ caught and escalated |
-| **Schema Preflight Rejections** | **1** | Task 168 deliverable preflight detected mandatory table/disclaimer omission |
-| **Quota Cascade Failures (HTTP 429)** | **12** | Tasks 153–158 and retries hit upstream BytePlus Ark rate limits / concurrency caps |
-| **Honest Cohort Yield** | **3/17 (17.6%)** | **NOT a clean sweep.** |
+| **Genuine Research Passes** | **3** | Tasks 162 (M6, facts+10), 166 (M5, facts+5), 167 (M7, facts+18) passed independent critic under Option B+ |
+| **Integrity Escalations (`needs_review`)** | **1** | Task 169 (F134 abuse bounds caught 4 policy-denied citations → escalated to `needs_review`) |
+| **Content & Fabrication Failures** | **13** | Tasks 153–161, 163–165, 168 failed on content / caught fabrications with real token spend |
+| **Honest Cohort Yield** | **3/17 (17.6%)** | **3 pass / 1 needs_review / 13 fail. NOT a clean sweep.** |
 
 ### 1.2 What Actually Succeeded
-* **Option B+ Validation:** Option B+ is no longer purely model-free theory. On live network traffic, Option B+ successfully caught worker citation fabrications, refused unverified policy relief, and graded 3 genuine research tasks with empirical verification against live endpoints.
-* **Mechanical Fabrication Guard:** The mechanical citecheck and fabrication detector prevented fabricated claims from reaching the final deliverable.
+* **Option B+ Validation:** Option B+ is no longer purely model-free theory. On live network traffic, Option B+ successfully caught worker citation fabrications, refused unverified policy relief, and graded 3 genuine research passes (Tasks 162, 166, 167) with empirical verification against live endpoints under independent critic (`glm-5.2:cloud`).
+* **Mechanical Fabrication & Abuse Guard:** The mechanical citecheck and fabrication detector (F134/F135) prevented fabricated claims from reaching deliverables and escalated Task 169 to `needs_review` when 4 policy-denied citations were asserted. Ground truth was preserved without containing the critic.
 
 ### 1.3 What Failed
-* **Task 169:** The worker fabricated a quotation attributing it to a blocked URL; Option B+ correctly identified the fabrication and triggered an integrity escalation.
-* **Task 168:** The worker omitted a required disclaimer cell ("not publicly disclosed"); deliverable preflight schema linting blocked it.
-* **Tasks 153–158:** Upstream provider quota exhaustion (BytePlus HTTP 429) caused cascade failures when multiple concurrent requests were submitted.
+* **Worker Content Quality & Caught Fabrications (13 Tasks):** Tasks 153, 154, 155, 156, 157, 158, 159, 160, 161, 163, 164, 165, and 168 all recorded `status=failed`, `critic_verdict=fail` in `ledger/ledger.db`. Every single one ran with substantial token spend (e.g., Task 159 burned 116,287 in / 27,127 out; Task 163 burned 85,541 in / 22,466 out; Task 154 burned 78,946 in / 28,690 out). These were real worker execution runs producing failing deliverables or caught fabrications, not quota blocks.
+* **Integrity Escalation (Task 169):** The worker attempted citation fabrication attributing claims to a denied URL; Option B+ F134 abuse bounds detected 4 policy denials and escalated to `needs_review` (`critic_verdict=needs_review`, 59,265 in / 17,517 out).
+* **Summary Reality:** The architecture worked (caught real fabrications, escalated correctly, verified genuine passes); worker content quality and model hallucinations remain the primary bottleneck.
 
 ---
 
