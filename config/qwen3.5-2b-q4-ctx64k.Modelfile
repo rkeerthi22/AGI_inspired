@@ -1,0 +1,14 @@
+# qwen3.5:2b-q4_K_M-ctx64k — interactive Hermes sessions model.
+#
+# WHY: Hermes refuses models reporting <64K context for interactive sessions
+# (system prompt + memory + skills + conversation need the room). The -ctx16k
+# variant (fallback-rung model) fails that floor; this variant reports 64K.
+# KV cache math: ~2.8GB total at 64K — fits 4GB VRAM, but tight; verify 100% GPU
+# placement after create. If it spills, the fallback is Q8 KV cache or ctx32k
+# (below Hermes's floor, so cloud-only for interactive chat).
+#
+# REBUILD: ollama create qwen3.5:2b-q4_K_M-ctx64k -f config/qwen3.5-2b-q4-ctx64k.Modelfile
+
+FROM qwen3.5:2b-q4_K_M
+
+PARAMETER num_ctx 65536

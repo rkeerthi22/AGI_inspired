@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-10T08:32:30Z",
+  "last_updated": "2026-09-10T12:07:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Follow-up fixes + enterprise deficit wiring (Tasks D, A, B, C from Claude spec 2026-09-10)",
+      "task_id": "FOLLOWUP-FIXES-ENTERPRISE-DEFICITS-2026-09-10",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-10T12:07:00Z",
+      "last_update": "2026-09-11T05:00:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md",
+      "notes": "COMPLETED. Landed Codex Astra security audit fixes (D0-D6), Task A carry-forward fixes (A1 candidate log, A2 Gap-1 guard, A3 --no-sandbox docs), Task B enterprise deficit packaging & scoping (B1 runbook, B2 fail-closed replica + D4 truncation detection, B3 quota scoping), and Task C honest handoff (3/17 cohort yield, deficit status). 77/77 model-free test gate green. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Live Validation Cohort (Missions M3\u2013M7 Execution under Controlled Window)",

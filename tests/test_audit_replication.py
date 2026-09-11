@@ -206,5 +206,67 @@ minimum_retention_days: 365
                          "remote_audit_replication_failure")
 
 
+    def test_audit_replica_fail_closed(self) -> None:
+        """B2: ENFORCE=1 + root set + write fails -> hard fail (AuditReplicationError)."""
+        source = self._trajectory()
+        # Mock destination copy failure (e.g. WORM reject or UNC unreachable)
+        with mock.patch.object(audit_replication, "_copy_immutable", side_effect=PermissionError("WORM_LOCK_DENIED")):
+            with self.assertRaises(audit_replication.AuditReplicationError) as ctx:
+                audit_replication.replicate_if_enforced(source, self.config, self.environment)
+            self.assertIn("replica_write_failed:PermissionError", str(ctx.exception))
+
+    def test_audit_replica_enforce_off(self) -> None:
+        """B2: ENFORCE unset + root unset -> local-only, returns None without error."""
+        source = self._trajectory()
+        env_off = {"HARNESS_TEST_AUDIT_ENFORCE": "0"}
+        result = audit_replication.replicate_if_enforced(source, self.config, env_off)
+        self.assertIsNone(result)
+
+    def test_suffix_deletion_detected(self) -> None:
+        """D4: Truncation of chain suffix is detected via signed latest-checkpoint manifest."""
+        source1 = self._trajectory(1)
+        audit_replication.replicate_trajectory(source1, self.config, self.environment, _sign, _verify)
+        source2 = self._trajectory(2)
+        audit_replication.replicate_trajectory(source2, self.config, self.environment, _sign, _verify)
+
+        # Before deletion: state is valid
+        state = self._state()
+        self.assertTrue(state["ok"])
+        self.assertEqual(state["checkpoints"], 2)
+        self.assertFalse(state["truncation_detected"])
+
+        # Attacker deletes last line from checkpoint chain (suffix deletion)
+        checkpoint_path = self.replica / "trajectory-checkpoints.jsonl"
+        lines = checkpoint_path.read_text(encoding="utf-8").splitlines()
+        self.assertEqual(len(lines), 2)
+        checkpoint_path.write_text(lines[0] + "\n", encoding="utf-8")
+
+        # After suffix deletion: truncation detected, state ok is False
+        state = self._state()
+        self.assertFalse(state["ok"])
+        self.assertTrue(state["truncation_detected"])
+        self.assertEqual(state["error"], "checkpoint_suffix_truncated")
+
+    def test_retention_floor_check_fails_on_too_short_chain(self) -> None:
+        """D4: retention_floor_check fails when chain span is below minimum_retention_days."""
+        source = self._trajectory()
+        audit_replication.replicate_trajectory(source, self.config, self.environment, _sign, _verify)
+
+        # 1 checkpoint = 0 days span < 365 days
+        checkpoint_path = self.replica / "trajectory-checkpoints.jsonl"
+        cfg = audit_replication.load_config(self.config)
+        chain = audit_replication.verify_checkpoint_chain(checkpoint_path, cfg, _verify, replica_root=self.replica)
+        floor = audit_replication.retention_floor_check(chain, cfg)
+        self.assertFalse(floor["ok"])
+        self.assertEqual(floor["error"], "chain_retention_below_minimum")
+
+        # In audit_state with enforce_retention_floor=True, state fails
+        state = audit_replication.audit_state(
+            self.config, self.environment, verify_checkpoint=_verify,
+            signing_state=lambda: {"ok": True}, enforce_retention_floor=True)
+        self.assertFalse(state["ok"])
+        self.assertEqual(state["error"], "chain_retention_below_minimum")
+
+
 if __name__ == "__main__":
     unittest.main()

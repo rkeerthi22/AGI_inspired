@@ -1,31 +1,33 @@
 {
   "schema_version": 2,
-  "brief_revision": 96,
-  "created_at": "2026-09-09T00:24:14.664550+00:00",
+  "brief_revision": 97,
+  "created_at": "2026-09-11T05:00:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "afb6605914d0b49ed81134e0d2c89a2c0ed6f41b"
+    "based_on_head": "3d3854582ab67082dbe26a4409291653df212f99"
   },
   "task": {
-    "id": "LIVE-VALIDATION-COHORT-2026-09-08",
-    "phase": "live-validation-cohort-option-b-completed",
+    "id": "FOLLOWUP-FIXES-ENTERPRISE-DEFICITS-2026-09-10",
+    "phase": "codex-audit-fixes-and-enterprise-deficits-completed",
     "status": "completed",
-    "next_action": "Claude Code independent review & Operator release sign-off; Operator execution of Path A (deploy_three_identity.ps1) for M2 browser support."
+    "next_action": "Operator execution of Path A and UNC WORM share provisioning; Claude Code review."
   },
   "completed": [
-    "Option B+ live network interception (F132-F135) empirically verified in real traffic (Tasks 153-169)",
-    "Triple cohort clean pass achieved under live broker and independent critic: M5 (Task 166, facts+5), M6 (Task 162, facts+10), M7 (Task 167, facts+18)",
-    "Repaired fabrication false-positive bug in citecheck.py (standalone URL regex, item boundary scoping, multi-URL table cell sentence-scoping) with 4 regression tests (62/62 citecheck green)",
-    "Repaired worker home mode=0o700 ACL inheritance trap in controlled_hermes.py",
-    "Diagnosed Chromium multi-process IPC containment boundary under in-process restricted tokens (M2 Tasks 155-158)",
-    "Verified F134 abuse bounds escalation on live traffic (Task 169 needs_review)",
-    "Delivered docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
-    "Full model-free test gate green at 77/77 suites",
-    "Released write scope in docs/ACTIVE_WORK.json"
+    "D0/D6: Restored 77/77 suites; hardened run_all.py exit code (sys.exit(1) on fail)",
+    "D1/D2/D5: Firewall attestation integrity, broker path traversal defense, operator_cli active status",
+    "D3: Signer service identity configured as AGI_Signer with pywin32 SCM wrapper",
+    "D4/B2: Remote audit replica fail-closed, signed manifest suffix truncation, retention floor",
+    "A1: Purged 641 fake entries from candidate log, added fixture guard, verified injectable regression",
+    "A2: Gap-1 fallback safety net in citecheck.py (WARNING logged, snapshot_source='live_fallback')",
+    "A3: Documented --no-sandbox trade-off in deployment guide and added code comments",
+    "B1: Authored operator runbook docs/RUNBOOK_PATH_A_THREE_IDENTITY.md with elevated steps and ACL rollback",
+    "B3: Authored quota elasticity note docs/QUOTA_ELASTICITY_SCOPING_2026-09-10.md (OmniRoute locked)",
+    "Task C: Delivered docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md (3/17 yield)",
+    "Full model-free gate green at 77/77 suites; candidate log pure; released write scope"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -36,20 +38,20 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "77/77 model-free suites green, exit 0. Citecheck 62/62 green. Preflight 26/26 green. Three-identity deployment 7/7 green. Worker readiness 6/6 pass. ESTOP strictly engaged (True)."
+    "detail": "77/77 suites green, exit 0. Citecheck 66/66, Preflight 28/28, Deployment 7/7. Zero fixture entries. ESTOP True."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "f5555b7f441795c1b435f165d73995eba27d73a0d2d083ea851da86fadb3d80b"
+      "sha256": "c1b76edd3dbf25b35443c9311f8f75e64ac6d8239582b0c195f660412a8b8649"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "613266388e2c47b79fb1f4b091410aa3118cc83dab8883bb59ec63cce70e137f"
+      "sha256": "972973885fea9c8a15a3711b661c587f66062f1b3824dd9d0adb5b85267e833f"
     },
     {
       "path": "docs/HARDENING.md",
-      "sha256": "cffcbb7635b214bb41a6c344b1d168d968b34ce75a610dd6b772fdace551eed2"
+      "sha256": "15ddf62a5df44c25886d7516a473790e9facbcc567df400d5a5e1971bac5fbfd"
     },
     {
       "path": "docs/INCIDENTS.md",
@@ -57,7 +59,7 @@
     },
     {
       "path": "docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md",
-      "sha256": "242f4755b24e8ca912b43974036ac6b0868ef6f069954ea00e62781e4957c134"
+      "sha256": "ce0518ec0dd7f0d458dad52254b9a48b6f3967c33c173051642fe56721069a1c"
     },
     {
       "path": "docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
@@ -69,11 +71,11 @@
     },
     {
       "path": "scripts/deploy_three_identity.ps1",
-      "sha256": "0b3308e978908809db215507e7a758907fe6acc20f22fa657a9b3bedf9c3980d"
+      "sha256": "bb377a8b72ae3844282cb52eb60a6e2908e0f153ea76590760dac6dbcbf7cf05"
     },
     {
       "path": "tests/test_citecheck.py",
-      "sha256": "595f167a6c547218825c83e757c163b9d6b040c25428bfdb644a48dc7df17658"
+      "sha256": "2f61243b5201d8460ff78278d87d2ff077fdc94eff65cf5c952d5335c3c56c69"
     },
     {
       "path": "tests/test_three_identity_deployment.py",

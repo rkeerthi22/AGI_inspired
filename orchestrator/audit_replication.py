@@ -260,30 +260,68 @@ def verify_checkpoint_chain(
             "error": None}
 
 
-def _copy_immutable(source: Path, destination: Path, expected_digest: str) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    if destination.exists():
-        if _sha256_file(destination) != expected_digest:
-            raise AuditReplicationError("replica_artifact_tampered")
-        return
-    temporary = destination.with_name(destination.name + f".{os.getpid()}.tmp")
+def _latest_manifest_path(root: Path) -> Path:
+    return root / "latest-checkpoint.json"
+
+
+def _write_latest_manifest(
+    root: Path,
+    checkpoint: dict[str, Any],
+    signature: str,
+    count: int,
+    sign_checkpoint: Callable[[dict[str, Any]], str],
+) -> None:
+    """Write signed latest-checkpoint manifest to detect chain suffix truncation (D4)."""
+    manifest_path = _latest_manifest_path(root)
+    payload = {
+        "schema_version": 1,
+        "checkpoint_hash": checkpoint["checkpoint_hash"],
+        "count": count,
+        "latest_checkpoint": checkpoint,
+        "signature": signature,
+        "written_at": datetime.now(timezone.utc).isoformat(),
+    }
+    manifest_signature = sign_checkpoint(payload)
+    data = json.dumps({"manifest": payload, "signature": manifest_signature},
+                      sort_keys=True, separators=(",", ":"))
     try:
-        shutil.copyfile(source, temporary)
-        if _sha256_file(temporary) != expected_digest:
-            raise AuditReplicationError("replica_copy_digest_mismatch")
-        os.replace(temporary, destination)
-    finally:
-        if temporary.exists():
-            temporary.unlink(missing_ok=True)
+        temp = manifest_path.with_name(manifest_path.name + f".{os.getpid()}.tmp")
+        temp.write_text(data, encoding="utf-8")
+        os.replace(temp, manifest_path)
+    except OSError as exc:
+        raise AuditReplicationError(f"replica_manifest_write_failed:{type(exc).__name__}") from exc
+
+
+def _copy_immutable(source: Path, destination: Path, expected_digest: str) -> None:
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if destination.exists():
+            if _sha256_file(destination) != expected_digest:
+                raise AuditReplicationError("replica_artifact_tampered")
+            return
+        temporary = destination.with_name(destination.name + f".{os.getpid()}.tmp")
+        try:
+            shutil.copyfile(source, temporary)
+            if _sha256_file(temporary) != expected_digest:
+                raise AuditReplicationError("replica_copy_digest_mismatch")
+            os.replace(temporary, destination)
+        finally:
+            if temporary.exists():
+                temporary.unlink(missing_ok=True)
+    except OSError as exc:
+        raise AuditReplicationError(f"replica_write_failed:{type(exc).__name__}") from exc
 
 
 def _append_checkpoint(path: Path, checkpoint: dict[str, Any], signature: str) -> None:
     record = json.dumps({"checkpoint": checkpoint, "signature": signature},
                         sort_keys=True, separators=(",", ":")) + "\n"
-    with path.open("a", encoding="utf-8") as handle:
-        handle.write(record)
-        handle.flush()
-        os.fsync(handle.fileno())
+    try:
+        with path.open("a", encoding="utf-8") as handle:
+            handle.write(record)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as exc:
+        raise AuditReplicationError(f"replica_checkpoint_write_failed:{type(exc).__name__}") from exc
 
 
 def replicate_trajectory(
@@ -323,7 +361,10 @@ def replicate_trajectory(
             checkpoint_path, config, verify_checkpoint, replica_root=root)
         if chain.get("ok") is not True:
             raise AuditReplicationError(f"remote_checkpoint_invalid:{chain.get('error')}")
-        _copy_immutable(source, destination, digest)
+        try:
+            _copy_immutable(source, destination, digest)
+        except OSError as exc:
+            raise AuditReplicationError(f"replica_write_failed:{type(exc).__name__}") from exc
         checkpoint = {
             "schema_version": 1,
             "task_id": int(re.search(r"task(\d+)", source.name).group(1))
@@ -338,16 +379,58 @@ def replicate_trajectory(
         checkpoint["checkpoint_hash"] = _checkpoint_hash(checkpoint)
         signature = sign_checkpoint(checkpoint)
         _append_checkpoint(checkpoint_path, checkpoint, signature)
+        _write_latest_manifest(root, checkpoint, signature, chain.get("count", 0) + 1, sign_checkpoint)
     return {"artifact_relative_path": artifact_relative.as_posix(),
             "trajectory_sha256": digest, "checkpoint_hash": checkpoint["checkpoint_hash"]}
 
 
-def replicate_if_enforced(trajectory_path: Path) -> dict[str, Any] | None:
-    """Replicate only in an explicitly provisioned release environment."""
-    config = load_config()
-    if not enforcement_requested(config):
+def replicate_if_enforced(
+    trajectory_path: Path,
+    config_path: Path = CONFIG_PATH,
+    environment: dict[str, str] | None = None,
+) -> dict[str, Any] | None:
+    """Replicate only in an explicitly provisioned release environment.
+
+    Fail-closed invariant (B2):
+    When enforcement is enabled (HARNESS_AUDIT_ENFORCE=1), replication errors
+    (unreachable UNC, WORM reject, write failure) FAIL HARD. Silently falling
+    back to local-only is strictly forbidden when enforcement is configured.
+    """
+    config = load_config(config_path)
+    if not enforcement_requested(config, environment):
         return None
-    return replicate_trajectory(trajectory_path)
+    return replicate_trajectory(trajectory_path, config_path=config_path, environment=environment)
+
+
+def retention_floor_check(
+    chain: dict[str, Any],
+    config: AuditRetentionConfig,
+    now: datetime | None = None,
+) -> dict[str, Any]:
+    """Verify that retained checkpoint history spans at least minimum_retention_days (D4)."""
+    checkpoints = chain.get("checkpoints") or []
+    if not checkpoints:
+        return {"ok": False, "error": "checkpoint_chain_empty", "chain_days": 0.0,
+                "minimum_retention_days": config.minimum_retention_days}
+    earliest_ts = _parse_timestamp(checkpoints[0].get("replicated_at"))
+    latest_ts = _parse_timestamp(checkpoints[-1].get("replicated_at"))
+    if not earliest_ts or not latest_ts:
+        return {"ok": False, "error": "checkpoint_timestamps_unparseable", "chain_days": 0.0,
+                "minimum_retention_days": config.minimum_retention_days}
+    chain_days = (latest_ts - earliest_ts).total_seconds() / 86400.0
+    if chain_days < config.minimum_retention_days:
+        return {
+            "ok": False,
+            "error": "chain_retention_below_minimum",
+            "chain_days": chain_days,
+            "minimum_retention_days": config.minimum_retention_days,
+        }
+    return {
+        "ok": True,
+        "error": None,
+        "chain_days": chain_days,
+        "minimum_retention_days": config.minimum_retention_days,
+    }
 
 
 def audit_state(
@@ -356,6 +439,7 @@ def audit_state(
     verify_checkpoint: Callable[[str], dict[str, Any] | None] | None = None,
     signing_state: Callable[[], dict[str, Any]] | None = None,
     now: datetime | None = None,
+    enforce_retention_floor: bool | None = None,
 ) -> dict[str, Any]:
     """Read-only release diagnostic for remote audit durability."""
     try:
@@ -380,7 +464,53 @@ def audit_state(
         fresh = timestamp is not None and timestamp <= current and \
             current - timestamp <= timedelta(hours=config.checkpoint_max_age_hours)
         all_artifacts_ok = chain.get("ok") is True and chain.get("count", 0) > 0
-        ok = all_artifacts_ok and fresh
+
+        # D4(b): Truncation detection via signed latest-checkpoint manifest
+        manifest_path = _latest_manifest_path(root)
+        truncation_detected = False
+        if chain.get("ok") is True and manifest_path.is_file():
+            try:
+                manifest_record = json.loads(manifest_path.read_text(encoding="utf-8"))
+                manifest_payload = manifest_record.get("manifest")
+                manifest_sig = manifest_record.get("signature")
+                if not isinstance(manifest_payload, dict):
+                    return {"ok": False, "error": "manifest_invalid"}
+                trusted_manifest = verify_checkpoint(manifest_sig) if isinstance(manifest_sig, str) else None
+                if trusted_manifest != manifest_payload:
+                    return {"ok": False, "error": "manifest_signature_invalid"}
+                expected_hash = manifest_payload.get("checkpoint_hash")
+                expected_count = manifest_payload.get("count")
+                actual_hash = (latest or {}).get("checkpoint_hash")
+                actual_count = chain.get("count", 0)
+                if actual_count < expected_count or actual_hash != expected_hash:
+                    truncation_detected = True
+            except Exception as exc:
+                return {"ok": False, "error": f"manifest_read_error:{type(exc).__name__}"}
+
+        # D4(a): Retention floor check
+        floor = retention_floor_check(chain, config, now=current)
+        env = os.environ if environment is None else environment
+        should_enforce_floor = (
+            enforce_retention_floor
+            if enforce_retention_floor is not None
+            else (str(env.get("HARNESS_AUDIT_ENFORCE_RETENTION_FLOOR") or "").strip() == "1")
+        )
+
+        ok = all_artifacts_ok and fresh and not truncation_detected
+        if should_enforce_floor and not floor["ok"]:
+            ok = False
+
+        error = None
+        if not ok:
+            if not chain.get("ok"):
+                error = chain.get("error") or "checkpoint_missing_or_stale"
+            elif truncation_detected:
+                error = "checkpoint_suffix_truncated"
+            elif should_enforce_floor and not floor["ok"]:
+                error = floor.get("error") or "retention_floor_not_met"
+            else:
+                error = "checkpoint_missing_or_stale"
+
         return {
             "ok": ok,
             "replica_root": str(root),
@@ -388,8 +518,14 @@ def audit_state(
             "latest": chain.get("latest"),
             "fresh": fresh,
             "artifact_ok": all_artifacts_ok,
+            "truncation_detected": truncation_detected,
+            "retention_floor_ok": floor["ok"],
+            "retention_floor_days": floor["chain_days"],
             "minimum_retention_days": config.minimum_retention_days,
-            "error": None if ok else (chain.get("error") or "checkpoint_missing_or_stale"),
+            # D4(c): honest immutability claim — code detects tampering,
+            # but storage-level write protection requires operator WORM provisioning.
+            "immutability_guarantee": "detection_only_storage_worm_required",
+            "error": error,
         }
     except AuditReplicationError as exc:
         return {"ok": False, "error": str(exc)}
