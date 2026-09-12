@@ -1,21 +1,14 @@
 {
   "schema_version": 2,
-  "brief_revision": 111,
-  "created_at": "2026-09-12T19:33:13.167308+00:00",
+  "brief_revision": 112,
+  "created_at": "2026-09-12T19:34:36.849819+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": false,
-    "changed_paths": [
-      "config/policy.yaml",
-      "docs/ACTIVE_WORK.json",
-      "orchestrator/policy.py",
-      "tests/test_f58.py",
-      "docs/GEMINI_TASK_TRIGGER_FIX_VENTURE_UNBLOCK_2026-09-12.md",
-      "docs/reviews/CLAUDE_VERIFICATION_HERMES_ROUND2_REMEDIATION_2026-09-12.md"
-    ],
-    "based_on_head": "003660bf9f243d9867ec7e9942e5570c252b510d"
+    "tree_clean": true,
+    "changed_paths": [],
+    "based_on_head": "7e1559be2afe0fcbf3950162d7b8e57dc52390b1"
   },
   "task": {
     "id": "TRIGGER-FIX-VENTURE-UNBLOCK-2026-09-12",
