@@ -1,27 +1,27 @@
 {
   "schema_version": 2,
-  "brief_revision": 113,
-  "created_at": "2026-09-12T19:52:22.020715+00:00",
+  "brief_revision": 114,
+  "created_at": "2026-09-12T20:25:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "99999f98cdf03ee9dcf80a43e42013a619ae91e3"
+    "based_on_head": "af54e62ee1729a117bcd24ec1fada65b1f78b37f"
   },
   "task": {
-    "id": "VENTURE-EXECUTION-PHASE-2026-09-12",
-    "phase": "venture-ready",
+    "id": "VENTURE-M2-DISPATCH-2026-09-12",
+    "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Execute first venture task with browser component under controlled window."
+    "next_action": "Ready for operator review and continuous venture mission execution."
   },
   "completed": [
-    "Added model_infrastructure_failure to policy.py:VALID_TRIGGERS and policy.yaml",
-    "Added hermetic test in tests/test_f58.py (8e) pinning trigger and escalate handling",
-    "Reconciled Task 184 zombie in ledger to status=infra_failed (critic_verdict=None)",
-    "Verified Task 184 live browser egress: 10 aiprm rows parsed in broker audit",
-    "Full gate green at 79/79 suites (exit 0); ESTOP strictly engaged"
+    "Executed first venture mission M2 under controlled window (Task 185)",
+    "Verified live browser navigation and proxy broker interception (94 rows total, 6 aiprm rows [4 allow, 2 deny])",
+    "Empirically proved model_infrastructure_failure escalation on offline critic socket failure with zero zombies",
+    "Ledger status=infra_failed honest token spend (43,771 in / 11,813 out) recorded cleanly",
+    "Model-free test gate verified 79/79 green; ESTOP strictly re-engaged (True)"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -37,11 +37,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "96408058cdca48db7a2ebb1f78d01cef58a87b1f7d96857a14f30c15c02da996"
+      "sha256": "183f6b80ff56fcf60a3a6a7bc212d9bb4935b5237cfe8c96d5921fd713fd570b"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "3a79196b9bf046302efddb034b5e593ddf93181890ca78c08a5fa4d2e1e29074"
+      "sha256": "842e4078dff5aada22fd3f5e62647701fa278b3ed628f5216cad25dffcd80d06"
+    },
+    {
+      "path": "docs/reviews/GEMINI_VENTURE_TASK185_DISPATCH_AND_INFRA_VERIFICATION_2026-09-12.md",
+      "sha256": "1224508dc594be8ead443d522a8aa463a06e025827641bd2259ce673c1128023"
     },
     {
       "path": "docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md",
