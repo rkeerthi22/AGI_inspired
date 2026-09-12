@@ -1,30 +1,30 @@
 {
   "schema_version": 2,
-  "brief_revision": 102,
-  "created_at": "2026-09-12T02:57:23.221615+00:00",
+  "brief_revision": 103,
+  "created_at": "2026-09-12T04:48:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "b55eb01eba9b70b7e016cb4bed1312568a64e293"
+    "based_on_head": "e60f73ea022bfba7962ee3c776826e10904d9608"
   },
   "task": {
-    "id": "SUPERVISED-COHORT-OPENAI-LIVE-2026-09-11",
-    "phase": "enterprise-candidate-achieved",
+    "id": "M2-BROWSER-CDP-DAEMON-BRIDGE-2026-09-12",
+    "phase": "m2-browser-ceiling-unblocked",
     "status": "completed",
-    "next_action": "Claude Code final independent verification and sign-off on Enterprise Candidate."
+    "next_action": "Plan and implement S3/B2 WORM audit replication backend (Deficit B)."
   },
   "completed": [
+    "Mission M2 browser automation ceiling UNBLOCKED: host-managed headless Chrome CDP daemon bridge implemented (orchestrator/browser_daemon.py)",
+    "Wired ActiveBrowserDaemon into orchestrator/execution.py for dynamic_browser_required profiles and BROWSER_CDP_URL env injection",
+    "Added 11 hermetic unit tests in tests/test_browser_daemon.py registered in tests/tiers.json ('unit' tier)",
     "Deficit C empirically CLOSED: induced 429 failed over to capable cloud secondary openai/gpt-4o in 3.43s (output: Paris, 21 in / 1 out)",
     "Deficit A re-verified live: AGI_AuditSigner running as .\\AGI_Signer, 21 broker socket decisions logged in Task 175 (19 allow, 2 deny)",
     "Deficit D1 re-verified live: fresh attestation signed and verified with zero unrun labels (digest cf9f8b4f5f25802724b2e0a5acf28c9773af0856ef78ea11d17c7799bd043d86)",
-    "Cohort missions 174-175 executed: Task 174 (caught fabrication fail, 48.6k in / 8.1k out), Task 175 (M7 pass, facts+16, 31.4k in / 11.3k out)",
-    "Corrected RUNBOOK_PATH_A_THREE_IDENTITY.md section 1.1 and Task 171 broker count (35 records) per Claude review",
     "Enterprise Candidate Status: ACHIEVED (A live, D1 live, C capable failover proven)",
-    "Handoffs authored: docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md and Obsidian vault mirror updated",
-    "Gate green 77/77 suites; ESTOP engaged (True); write scope released"
+    "Gate green 78/78 suites; ESTOP engaged (True); write scope released"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -35,16 +35,16 @@
   ],
   "gate": {
     "status": "passed",
-    "detail": "77/77 suites green, exit 0. Attestation verified. Zero candidate fixtures. ESTOP True."
+    "detail": "78/78 suites green, exit 0. Attestation verified. Zero candidate fixtures. ESTOP True."
   },
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "2335b8aef7ab8ff8bbbd652bbb4862ae6bad71d705a84ebdf7b32b14ebd0d06a"
+      "sha256": "28e1c20b866eac63ee42db54d6d04ef9b781bb1d4b87fa5e294e082ce401d81c"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "0f31ec15d822b6a16281d355e13877b3a1326976feff75283ba6406a71958f0d"
+      "sha256": "a09b3b21acdf8c2b6e526d3b23e6566f698eb9776f6a38911230baeea4cd4221"
     },
     {
       "path": "docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md",
@@ -80,7 +80,7 @@
     },
     {
       "path": "tests/tiers.json",
-      "sha256": "53c97a7668a28cd1b3bfe5ec949f0a7799e3ce75026e6341ebf82c156bf2b01e"
+      "sha256": "ac02a13e30d8e8ea58e3c521e2b1a5640f18e4f954f3c9434da094372ee4459d"
     }
   ]
 }
