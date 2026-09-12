@@ -4,6 +4,19 @@
   "active_agents": [
     {
       "agent": "gemini-cli",
+      "role": "M2 Browser Automation: Headless Chrome CDP Daemon Bridge",
+      "task_id": "M2-BROWSER-CDP-DAEMON-BRIDGE-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T03:40:00Z",
+      "last_update": "2026-09-12T04:45:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETED. Implemented host-managed headless Chrome CDP daemon bridge (orchestrator/browser_daemon.py) on loopback port 9222 to resolve Chromium ProcessSingleton exit 21 for Mission M2 under Windows Job Object UI restrictions. Wired into orchestrator/execution.py for dynamic_browser_required profiles. Added 11 hermetic unit tests (tests/test_browser_daemon.py) registered in tests/tiers.json ('unit' tier). Full model-free test gate green at 78/78 suites, exit code 0. Write scope released."
+    },
+    {
+      "agent": "gemini-cli",
       "role": "Supervised-Launch Cohort & Empirical Proof of Deficit C via Live OpenAI Rung",
       "task_id": "SUPERVISED-COHORT-OPENAI-LIVE-2026-09-11",
       "mode": "completed",

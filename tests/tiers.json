@@ -14,7 +14,8 @@
     "test_runtime_admission",
     "test_deliverable_preflight",
     "test_retry_artifacts",
-    "test_three_identity_deployment"
+    "test_three_identity_deployment",
+    "test_browser_daemon"
   ],
   "containment": [
     "test_worker_sandbox",
