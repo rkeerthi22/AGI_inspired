@@ -999,6 +999,32 @@ finally:
     mp.undo()
     cleanup()
 
+# 8e: model_infrastructure_failure trigger is declared and accepted by integrity.escalate
+check("model_infrastructure_failure in policy.VALID_TRIGGERS",
+      "model_infrastructure_failure" in policy.VALID_TRIGGERS, True)
+_val_err = None
+try:
+    policy.validate_trigger("model_infrastructure_failure")
+except Exception as e:
+    _val_err = e
+check("policy.validate_trigger('model_infrastructure_failure') does not raise",
+      _val_err, None)
+
+mp = _P()
+tmp_root, cleanup = temp_root_with_ledger()
+try:
+    mp.set(integrity, "ESCALATIONS", tmp_root / "ESCALATIONS.md")
+    with silence_log():
+        integrity.escalate("critic infrastructure unavailable",
+                           trigger="model_infrastructure_failure", task_id=None)
+    check("integrity.escalate with model_infrastructure_failure writes without raising",
+          (tmp_root / "ESCALATIONS.md").exists(), True)
+    check("escalation log records trigger tag",
+          "[model_infrastructure_failure]" in (tmp_root / "ESCALATIONS.md").read_text(encoding="utf-8"), True)
+finally:
+    mp.undo()
+    cleanup()
+
 # ── §9 dependency-shape assertions ─────────────────────────────────────
 
 print("\n=== 9. dependency-shape assertions ===")

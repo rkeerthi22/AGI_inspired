@@ -28,10 +28,12 @@ LEDGER_DB = ROOT / "ledger" / "ledger.db"
 STATE_PATH = ROOT / "runs" / "policy_state.json"
 
 # Escalation triggers policy.yaml itself declares (escalation.triggers). Any
-# escalate(trigger=...) call in batch_runner.py must use one of these names --
-# keeps policy.yaml authoritative instead of parallel decoration.
+# escalate(trigger=...) call in batch_runner.py / task_runner.py must use one of
+# these names -- keeps policy.yaml authoritative instead of parallel decoration.
+# model_infrastructure_failure covers critic-side infra failure (distinct from
+# model_failover, which is worker-side fallback-to-secondary completion).
 VALID_TRIGGERS = {"deny_list_match", "pass_criteria_ambiguous", "cost_cap_breach",
-                  "repeated_task_failure", "model_failover"}
+                  "repeated_task_failure", "model_failover", "model_infrastructure_failure"}
 
 
 def load() -> dict:

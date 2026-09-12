@@ -64,6 +64,8 @@ escalation:
     - model_failover          # F9: task completed on a fallback model after quota
                               # exhaustion on the primary -- flags the deliverable for
                               # spot-check priority (degraded model, not a free pass)
+    - model_infrastructure_failure   # critic-side infra failure (cloud critic 429/unreachable);
+                                      # parks task as infra_failed instead of zombieing
   behavior: park_task_continue_queue   # never idle behind a question
 
 compliance_floor:            # hard-coded refusals (§2.5)

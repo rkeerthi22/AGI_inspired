@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T12:30:00Z",
+  "last_updated": "2026-09-12T19:20:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Fix model_infrastructure_failure Trigger Crash + Clean Task 184 Zombie (Venture-Unblock)",
+      "task_id": "TRIGGER-FIX-VENTURE-UNBLOCK-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T19:20:00Z",
+      "last_update": "2026-09-12T19:35:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETED. Fixed model_infrastructure_failure escalation trigger: added to orchestrator/policy.py:VALID_TRIGGERS and config/policy.yaml:escalation.triggers; added hermetic regression test in tests/test_f58.py (8e, passes 100%); cleaned up Task 184 zombie in ledger/ledger.db to status='infra_failed' with honest notes (critic_verdict=None). Full model-free test gate 79/79 suites green, exit 0. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Hermes Round 2 Remediation (S3 Durability Cluster, Linter M4 False Positive, Ownership Token Cleanup, Live M2 Proof)",
