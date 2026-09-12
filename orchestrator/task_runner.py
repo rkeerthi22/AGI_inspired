@@ -566,6 +566,7 @@ def _run_research_task(context: _TaskContext) -> str:
             spec=context.row.get("spec", ""),
             task_id=tid,
             attempt=attempt,
+            pass_criteria=context.row.get("pass_criteria", ""),
         )
         if preflight_report.passed or not preflight_report.repair_feedback:
             break

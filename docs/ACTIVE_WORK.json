@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T09:00:00Z",
+  "last_updated": "2026-09-12T09:50:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Pre-Submit Citation & Content Linter Hardening (M1, M5, M7)",
+      "task_id": "PRE-SUBMIT-CITATION-LINTER-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T09:40:00Z",
+      "last_update": "2026-09-12T09:50:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETED. Enhanced deliverable_preflight.py and task_runner.py with pre-submit citation linter hardening. Added check_citation_metadata() targeting M1 (retrieval date & confidence level validation on all cited sources and fetch attempts). Enhanced check_schema() and wired pass_criteria from task row into run_preflight targeting M7 ('not publicly disclosed' enforcement and detection of speculative placeholders like 'Bootstrapped', 'Unknown', or empty cells). Enhanced format_repair_feedback targeting M5 with pinpoint un-attempted URL citations and structured remediation instructions. Added 5 hermetic unit tests to tests/test_deliverable_preflight.py (33/33 pass). Full model-free test gate 79/79 suites green, exit 0. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Full M1-M7 Cohort Execution & Honest Yield Measurement",

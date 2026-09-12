@@ -26,6 +26,7 @@ import deliverable_preflight
 from deliverable_preflight import (
     PreflightReport,
     build_repair_prompt,
+    check_citation_metadata,
     check_schema,
     format_repair_feedback,
     run_preflight,
@@ -731,6 +732,111 @@ def test_production_candidates_log_segregation_guard():
         assert not host.startswith("denied"), f"Line {idx} in production log has test fixture host: {host}"
 
 
+def test_citation_metadata_linter_m1_missing_date_and_confidence():
+    """M1 regression: linter detects missing retrieval date and confidence level."""
+    text = (
+        "# PromptHero Weekly Brief\n\n"
+        "## Review Sentiment\n"
+        "- Attempted review pages:\n"
+        "  - https://aisotools.com/blog/prompthero-review-2026 - returned 403\n"
+        "  - https://www.stork.ai/en/prompthero - returned 403\n\n"
+        "## MAU\n"
+        "- Gap: Attempted https://www.similarweb.com/website/prompthero.com/ but empty.\n"
+    ) * 3
+    criteria = "- [ ] Every fact has: source URL + retrieval date + confidence 1-3"
+    issues = check_citation_metadata(text, pass_criteria=criteria)
+    assert len(issues) >= 3
+    assert any("missing an explicit retrieval date" in iss for iss in issues)
+    assert any("missing an explicit confidence rating" in iss for iss in issues)
+
+    # Test via run_preflight
+    mock_evidence = [
+        {"url": "https://aisotools.com/blog/prompthero-review-2026", "reachable": True, "http_status": 200, "literal": None, "error": None},
+        {"url": "https://www.stork.ai/en/prompthero", "reachable": True, "http_status": 200, "literal": None, "error": None},
+        {"url": "https://www.similarweb.com/website/prompthero.com/", "reachable": True, "http_status": 200, "literal": None, "error": None},
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="Research PromptHero", pass_criteria=criteria)
+        assert report.passed is False
+        assert any("Citation formatting" in iss for iss in report.schema_issues)
+        assert "Citation Formatting" in report.repair_feedback
+
+
+def test_citation_metadata_linter_passes_when_formatted():
+    """M1 regression: deliverable passes when retrieval date and confidence are provided."""
+    text = (
+        "# PromptHero Weekly Brief\n\n"
+        "## Review Sentiment\n"
+        "- Attempted review pages:\n"
+        "  - https://aisotools.com/blog/prompthero-review-2026 (retrieved 2026-09-12, confidence 1) - returned 403\n"
+        "  - https://www.stork.ai/en/prompthero (retrieved 2026-09-12, confidence 1) - returned 403\n\n"
+        "## MAU\n"
+        "- Gap: Attempted https://www.similarweb.com/website/prompthero.com/ (retrieved 2026-09-12, confidence 1) but empty.\n"
+    ) * 3
+    criteria = "- [ ] Every fact has: source URL + retrieval date + confidence 1-3"
+    issues = check_citation_metadata(text, pass_criteria=criteria)
+    assert len(issues) == 0
+
+    mock_evidence = [
+        {"url": "https://aisotools.com/blog/prompthero-review-2026", "reachable": True, "http_status": 200, "literal": None, "error": None},
+        {"url": "https://www.stork.ai/en/prompthero", "reachable": True, "http_status": 200, "literal": None, "error": None},
+        {"url": "https://www.similarweb.com/website/prompthero.com/", "reachable": True, "http_status": 200, "literal": None, "error": None},
+    ]
+    with patch.object(deliverable_preflight.citecheck, "verify", return_value=mock_evidence):
+        report = run_preflight(text, spec="Research PromptHero", pass_criteria=criteria)
+        assert report.passed is True
+        assert len(report.schema_issues) == 0
+
+
+def test_schema_linter_m7_catches_speculative_bootstrapped_cell():
+    """M7 regression: catches speculative 'Bootstrapped' when 'not publicly disclosed' is required."""
+    text = (
+        "# AI Prompt Marketplace Landscape\n\n"
+        "| Marketplace | Founding Year | Funding Status | Operational Status |\n"
+        "| :--- | :--- | :--- | :--- |\n"
+        "| PromptBase | 2021 | Bootstrapped (no public funding found) | Active |\n"
+        "| AIPRM | 2022 | not publicly disclosed | Active |\n"
+    ) * 3
+    criteria = "- [ ] Where data is NOT publicly available: explicit 'not publicly disclosed' per cell, not fabricated"
+    issues = check_schema(text, spec="Produce structured overview", pass_criteria=criteria)
+    assert any("speculative placeholder" in iss for iss in issues)
+    assert any("Bootstrapped" in iss for iss in issues)
+
+
+def test_schema_linter_m7_passes_with_not_publicly_disclosed_cell():
+    """M7 regression: passes when all unavailable data points use 'not publicly disclosed'."""
+    text = (
+        "# AI Prompt Marketplace Landscape\n\n"
+        "| Marketplace | Founding Year | Funding Status | Operational Status |\n"
+        "| :--- | :--- | :--- | :--- |\n"
+        "| PromptBase | 2021 | not publicly disclosed | Active |\n"
+        "| AIPRM | 2022 | not publicly disclosed | Active |\n"
+    ) * 3
+    criteria = "- [ ] Where data is NOT publicly available: explicit 'not publicly disclosed' per cell, not fabricated"
+    issues = check_schema(text, spec="Produce structured overview", pass_criteria=criteria)
+    assert len(issues) == 0
+
+
+def test_pinpoint_unattempted_url_repair_feedback_m5():
+    """M5 regression: pinpoint repair feedback lists un-attempted URLs and remediation."""
+    fabrications = [
+        {
+            "url": "https://flowgpt.com/",
+            "classification": "UNREACHABLE",
+            "offending_quotes": ["50M+ prompts served"],
+        }
+    ]
+    feedback = format_repair_feedback(
+        dead_urls=[],
+        schema_issues=["Fabrication detected: worker asserted verbatim quotes for un-attempted source."],
+        fabrications=fabrications,
+    )
+    assert "Un-Attempted / Policy-Denied Sources (Fabrication Guard):" in feedback
+    assert "`https://flowgpt.com/` (un-attempted)" in feedback
+    assert "50M+ prompts served" in feedback
+    assert "REMOVE these URL citations" in feedback
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -760,5 +866,10 @@ if __name__ == "__main__":
     test_abuse_bounds_unattempted_min_ok_fails()
     test_candidates_log_injectable()
     test_production_candidates_log_segregation_guard()
-    print("ALL 28 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_citation_metadata_linter_m1_missing_date_and_confidence()
+    test_citation_metadata_linter_passes_when_formatted()
+    test_schema_linter_m7_catches_speculative_bootstrapped_cell()
+    test_schema_linter_m7_passes_with_not_publicly_disclosed_cell()
+    test_pinpoint_unattempted_url_repair_feedback_m5()
+    print("ALL 33 DELIVERABLE PREFLIGHT TESTS PASSED!")
 

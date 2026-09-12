@@ -29,9 +29,22 @@ except ImportError:
 
 MAX_REPAIR_ATTEMPTS = 2
 
-# Regex patterns for markdown tables
+# Regex patterns for markdown tables and citations
 _TABLE_ROW_RE = re.compile(r"^\s*\|.*\|\s*$", re.MULTILINE)
 _TABLE_SEPARATOR_RE = re.compile(r"^\s*\|(?:\s*:?-+:?\s*\|)+\s*$", re.MULTILINE)
+_SPECULATIVE_CELL_RE = re.compile(
+    r"^\s*(?:bootstrapped(?:\s*\(.*?\))?|self-funded|unknown|undisclosed|n/a|\?|tbd)\s*$",
+    re.I
+)
+_DATE_RE = re.compile(
+    r"\b(?:20\d\d-\d\d-\d\d|retrieved\s+20\d\d|attempted\s+20\d\d|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2},?\s+20\d\d)\b",
+    re.I
+)
+_CONFIDENCE_RE = re.compile(
+    r"\bconfidence(?:\s*(?::|\*\*|\*|-|\b)\s*(?:high|medium|low|[1-3])|\s+level\s*(?::|\*\*|\*|-|\b)\s*(?:high|medium|low|[1-3]))\b",
+    re.I
+)
+_URL_RE = re.compile(r"https?://[^\s)\]>\"'`]+")
 
 
 @dataclass
@@ -46,41 +59,60 @@ class PreflightReport:
         return not self.passed
 
 
-def check_schema(text: str, spec: str = "") -> list[str]:
-    """Examine text against mission specification for mechanical schema omissions.
+def check_schema(text: str, spec: str = "", pass_criteria: str = "") -> list[str]:
+    """Examine text against mission specification and pass_criteria for mechanical omissions (M3, M7).
     
     Targeting M3 & M7 failure modes:
-    - M3: Omitting required sections / platforms specified in the task prompt.
-    - M7: Omitting mandatory disclaimers ('not publicly disclosed') in data tables.
+    - M3: Omitting required sections / platforms specified in the task prompt or criteria.
+    - M7: Omitting mandatory disclaimers ('not publicly disclosed') in data tables, or
+          using speculative placeholders ('Bootstrapped', 'Unknown', 'N/A', empty cells).
     """
     issues: list[str] = []
-    spec_lower = spec.lower() if spec else ""
+    combined = f"{spec}\n{pass_criteria}"
+    combined_lower = combined.lower()
     text_lower = text.lower()
 
-    # 1. Check for required markdown tables if spec mandates a table / matrix / comparison
-    requires_table = any(kw in spec_lower for kw in [
+    # 1. Check for required markdown tables if spec/criteria mandates a table / matrix / comparison
+    requires_table = any(kw in combined_lower for kw in [
         "table", "matrix", "comparison grid", "tabular", "structured comparison"
     ])
     has_table = bool(_TABLE_SEPARATOR_RE.search(text))
     if requires_table and not has_table:
         issues.append("Specification requires a comparison table/matrix, but no valid markdown table was found.")
 
-    # 2. Check for mandatory 'not publicly disclosed' disclaimer when spec requires it
-    requires_npd = "not publicly disclosed" in spec_lower or "disclose" in spec_lower
-    if requires_npd and "not publicly disclosed" not in text_lower:
-        # Check if table rows have empty cells '| |' or placeholder dashes '| - |'
-        # which should explicitly say 'not publicly disclosed'
-        empty_cell_match = re.search(r"\|\s*(?:|-|n/a|\?)\s*\|", text, re.IGNORECASE)
-        if empty_cell_match or "not publicly disclosed" not in text_lower:
+    # 2. Check for mandatory 'not publicly disclosed' disclaimer when spec/criteria requires it
+    requires_npd = any(kw in combined_lower for kw in [
+        "not publicly disclosed", "disclose", "not available"
+    ])
+    if requires_npd:
+        has_npd = "not publicly disclosed" in text_lower
+        if not has_npd:
             issues.append(
                 "Missing mandatory 'not publicly disclosed' cell entries for unavailable data points in table."
             )
 
+        # Scan table rows for speculative fillers or empty cells (M7)
+        table_lines = [l for l in text.splitlines() if _TABLE_ROW_RE.match(l) and not _TABLE_SEPARATOR_RE.match(l)]
+        if len(table_lines) > 1:
+            for r_idx, row in enumerate(table_lines[1:]):
+                cells = [c.strip() for c in row.split('|')[1:-1]]
+                for c in cells:
+                    m = _SPECULATIVE_CELL_RE.match(c)
+                    if m and "not publicly disclosed" not in c.lower() and "http" not in c.lower():
+                        issues.append(
+                            f"Table cell '{c}' uses speculative placeholder '{m.group(0)}'. Where data is not publicly available, pass criteria mandates explicit 'not publicly disclosed' per cell, not fabricated or guessed."
+                        )
+                        break
+                    elif c in ("", "-"):
+                        issues.append(
+                            "Table contains empty or dash cell. For unavailable data points, explicitly enter 'not publicly disclosed'."
+                        )
+                        break
+
     # 3. Check for specific platform / competitor mentions if explicitly enumerated in spec
     # Targets M3 failure where specific required platforms were dropped
-    if "platform" in spec_lower or "review" in spec_lower:
-        # If spec explicitly asks to review or compare multiple named subjects
-        matches = re.findall(r"\b(?:compare|review|analyze|platforms?)\s*:\s*([^.]+)", spec, re.IGNORECASE)
+    if "platform" in combined_lower or "review" in combined_lower:
+        matches = re.findall(r"\b(?:compare|review|analyze|platforms?)\s*:\s*([^.]+)", combined, re.IGNORECASE)
         if matches:
             candidates = [c.strip() for c in re.split(r"[,;/]|and\b", matches[0]) if len(c.strip()) > 2]
             missing_candidates = [c for c in candidates if c.lower() not in text_lower]
@@ -90,6 +122,65 @@ def check_schema(text: str, spec: str = "") -> list[str]:
                 )
 
     return issues
+
+
+def check_citation_metadata(text: str, spec: str = "", pass_criteria: str = "") -> list[str]:
+    """Examine deliverable for citation metadata completeness (M1).
+    
+    Verifies that cited sources and source attempts include:
+    - Explicit retrieval / attempt date (YYYY-MM-DD or standard date format)
+    - Explicit confidence level (confidence 1-3, high/medium/low)
+    when mandated by pass_criteria or mission specification.
+    """
+    combined = f"{spec}\n{pass_criteria}".lower()
+    requires_dates = bool(
+        re.search(r"\b(?:retrieval\s+date|retrieved|date\s+per\s+fact|every\s+fact\s+has.*?date)\b", combined)
+    )
+    requires_confidence = bool(
+        re.search(r"\b(?:confidence(?:\s+level|\s+1-3|\s+per\s+cell|\s+rating)?|every\s+fact\s+has.*?confidence)\b", combined)
+    )
+
+    if not requires_dates and not requires_confidence:
+        return []
+
+    lines = text.splitlines()
+    issues: list[str] = []
+    seen_urls: set[str] = set()
+
+    for i, line in enumerate(lines):
+        found_urls = _URL_RE.findall(line)
+        if not found_urls:
+            continue
+
+        # Look at line context and immediate siblings in bullet/table block
+        context = line
+        if i > 0 and lines[i - 1].strip().startswith(("-", "*", "|")):
+            context = lines[i - 1] + " " + context
+        if i < len(lines) - 1 and (
+            lines[i + 1].strip().startswith(("-", "*", "|", "Source:", "Confidence:"))
+            or not lines[i + 1].strip().startswith("#")
+        ):
+            context = context + " " + lines[i + 1]
+
+        has_date = bool(_DATE_RE.search(context))
+        has_conf = bool(_CONFIDENCE_RE.search(context))
+
+        for u in found_urls:
+            u_clean = u.rstrip(".,;:)]>")
+            if u_clean in seen_urls:
+                continue
+            seen_urls.add(u_clean)
+
+            if requires_dates and not has_date:
+                issues.append(
+                    f"Citation formatting: source '{u_clean}' is missing an explicit retrieval date (e.g. 'retrieved YYYY-MM-DD')."
+                )
+            if requires_confidence and not has_conf:
+                issues.append(
+                    f"Citation formatting: source '{u_clean}' is missing an explicit confidence rating (e.g. 'confidence: 1-3' or 'confidence: high/medium/low')."
+                )
+
+    return issues[:10]
 
 
 def is_infra_error(text: str) -> bool:
@@ -111,6 +202,7 @@ def run_preflight(
     task_id: int | None = None,
     attempt: int | None = 1,
     runs_dir: Path | None = None,
+    pass_criteria: str = "",
 ) -> PreflightReport:
     """Run mechanical preflight checks on deliverable text (F126, F134).
     
@@ -174,8 +266,12 @@ def run_preflight(
     except Exception:
         passed_bounds, bounds_reason = True, None
 
-    # 5. Schema & Disclaimer Linter
-    schema_issues = check_schema(text, spec)
+    # 5. Schema & Disclaimer Linter (M3, M7)
+    schema_issues = check_schema(text, spec, pass_criteria=pass_criteria)
+
+    # 6. Citation Metadata Linter (M1)
+    metadata_issues = check_citation_metadata(text, spec, pass_criteria=pass_criteria)
+    schema_issues.extend(metadata_issues)
 
     if fabrications:
         for fab in fabrications:
@@ -192,7 +288,7 @@ def run_preflight(
     repair_feedback = None
 
     if not passed:
-        repair_feedback = format_repair_feedback(dead_urls, schema_issues)
+        repair_feedback = format_repair_feedback(dead_urls, schema_issues, fabrications=fabrications)
 
     return PreflightReport(
         passed=passed,
@@ -202,7 +298,11 @@ def run_preflight(
     )
 
 
-def format_repair_feedback(dead_urls: list[dict[str, Any]], schema_issues: list[str]) -> str:
+def format_repair_feedback(
+    dead_urls: list[dict[str, Any]],
+    schema_issues: list[str],
+    fabrications: list[dict[str, Any]] | None = None,
+) -> str:
     """Build structured, injection-safe feedback for worker auto-repair.
     
     Adheres strictly to F10 rule: Only structured metadata and instructions,
@@ -221,18 +321,35 @@ def format_repair_feedback(dead_urls: list[dict[str, Any]], schema_issues: list[
             err = d.get("error", "unreachable")
             lines.append(f"- `{url}`: {err}")
 
+    if fabrications:
+        lines.append("\n**Un-Attempted / Policy-Denied Sources (Fabrication Guard):**")
+        lines.append("The following URLs were NEVER loaded via the network proxy during this session:")
+        for fab in fabrications:
+            url = fab.get("url", "")
+            desc = "policy-denied" if fab.get("classification") == citecheck.CLASSIFICATION_POLICY_DENIED else "un-attempted"
+            quotes_info = f" Offending quotes: {', '.join(fab.get('offending_quotes', [])[:2])}." if fab.get("offending_quotes") else ""
+            lines.append(f"- `{url}` ({desc}).{quotes_info}")
+        lines.append("CRITICAL: You must either (1) REMOVE these URL citations completely, or (2) rewrite the text in your own words without ANY quotation marks (\"\", '', “”, >) and set confidence to 1, stating that the page was not directly fetched.")
+
     if schema_issues:
         lines.append("\n**Specification / Formatting Deficiencies:**")
         for s in schema_issues:
             lines.append(f"- {s}")
 
     lines.append("\n**Action Required:**")
-    has_fabrication = any("Fabrication detected" in s for s in schema_issues)
+    has_fabrication = any("Fabrication detected" in s for s in schema_issues) or bool(fabrications)
     has_policy_bounds = any("Policy denial bounds exceeded" in s for s in schema_issues)
+    has_citation_metadata = any("Citation formatting" in s for s in schema_issues)
+    has_speculative = any("speculative" in s.lower() or "not publicly disclosed" in s.lower() for s in schema_issues)
+
     if has_fabrication:
-        lines.append("- For Fabrication: You MUST remove all quotation marks (including double quotes \"\", curly quotes “”, single quotes '', and blockquotes >) around any text citing sources that were policy-denied, un-attempted, or search snippets. Express the facts entirely in your own words without quotation marks, or omit the citation.")
+        lines.append("- For Fabrication / Un-attempted URLs: You MUST remove all quotation marks (including double quotes \"\", curly quotes “”, single quotes '', and blockquotes >) around any text citing sources that were policy-denied, un-attempted, or search snippets. Express the facts entirely in your own words without quotation marks, or remove the un-attempted URL citations.")
     if has_policy_bounds:
         lines.append("- For Policy Denial bounds: You MUST cite at most 2 policy-denied / aggregator sources. Remove extraneous aggregator links to satisfy the <=25% and <=2 policy denial ceiling.")
+    if has_citation_metadata:
+        lines.append("- For Citation Formatting: Ensure EVERY cited source, URL, and fetch attempt includes BOTH an explicit retrieval date (e.g. 'retrieved YYYY-MM-DD') and an explicit confidence level (e.g. 'confidence: 2' or 'confidence: high/medium/low').")
+    if has_speculative:
+        lines.append("- For Missing / Speculative Data: For unavailable data points (especially funding or financial metrics), you MUST explicitly write 'not publicly disclosed' per cell. Do NOT guess 'Bootstrapped', 'Unknown', 'N/A', or leave cells blank.")
     lines.append("- Regenerate the COMPLETE, corrected final deliverable addressing every item above. Ensure all tables are complete and all citations point to active pages.")
 
     return "\n".join(lines)
