@@ -1,27 +1,27 @@
 {
   "schema_version": 2,
-  "brief_revision": 105,
-  "created_at": "2026-09-12T07:55:00.000000+00:00",
+  "brief_revision": 106,
+  "created_at": "2026-09-12T09:00:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "2774edcb945598e2fbbb705828098aca67076bce"
+    "based_on_head": "ba3047570a08f0a3cd4e387bc0ad2ce59ded6efe"
   },
   "task": {
-    "id": "M2-LIVE-BROWSER-CHECK-2026-09-12",
-    "phase": "m2-live-browser-empirically-proven",
+    "id": "FULL-COHORT-M1-M7-2026-09-12",
+    "phase": "cohort-yield-measured-4pass-3fail",
     "status": "completed",
-    "next_action": "Claude Code review and operator production mission authorization."
+    "next_action": "Claude Code review of full cohort yield report and strategic planning on worker content improvements."
   },
   "completed": [
-    "Mission M2 browser automation EMPIRICALLY PROVEN LIVE in Task 176 (done/pass, facts+15, 144.5s, 19.8k in/6.1k out)",
-    "Live React pricing page https://app.aiprm.com/pricing?lang=en rendered; 4 tiers, promo banner, countdown captured",
-    "Host-managed Chrome CDP bridge resolved ProcessSingleton exit 21; Hermes --cdp connection verified live",
-    "Deficit B CLOSED: S3/B2 Object Lock WORM audit replication implemented (orchestrator/s3_audit_replication.py)",
-    "Gate green 79/79 suites; Deficits A, C, D1, M2 proven live; Deficit B code-ready; ESTOP True; write scope released"
+    "Full M1-M7 validation cohort executed under single controlled window (Tasks 177-183): 4 PASS / 3 FAIL (57.1% yield)",
+    "M2 browser automation verified second consecutive live pass (facts+13, live React pricing table captured)",
+    "M6 named cc-hindsight without hedging; M3 passed on honest bounded failure; M4 passed clean synthesis",
+    "Failures (M1, M5, M7) verified as worker citation/content quality caught by preflight/critic, not harness",
+    "Post-cohort gate green 79/79 suites; ESTOP True; active work scope released"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -37,11 +37,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "65fbeb413ad082cb1c3d732334c0c2273950edc6039e060ca20ddbb96f0978a6"
+      "sha256": "6b3eaf808f054bb06bb50db01aebd5fad984242dbdb4129092b0f4308ad2e615"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "fde703e744361a4ea8f65f4576597c9118a2ef105e55bd7af48bc9675936d814"
+      "sha256": "7a11445f3d846ce18e7780665849c3013efb9f2d0fee8dd0180999973b7e2b47"
+    },
+    {
+      "path": "docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md",
+      "sha256": "ad1c3fad1dd21c88c5f31bcda5b2aa520f021593fb204085d0b1f4fb018db710"
     },
     {
       "path": "docs/reviews/GEMINI_M2_LIVE_VERIFICATION_EMPIRICAL_PASS_2026-09-12.md",

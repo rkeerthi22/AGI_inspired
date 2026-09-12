@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T07:50:00Z",
+  "last_updated": "2026-09-12T09:00:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Full M1-M7 Cohort Execution & Honest Yield Measurement",
+      "task_id": "FULL-COHORT-M1-M7-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T08:30:00Z",
+      "last_update": "2026-09-12T09:00:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md",
+      "notes": "COMPLETED. Executed full 7-mission cohort (M1-M7, Tasks 177-183) under single controlled window. Empirical yield: 4 PASS / 3 FAIL (57.1%). M2 browser automation succeeded second consecutive time (facts+13, live React pricing table). M6 named cc-hindsight without hedging. Fails (M1, M5, M7) verified as worker citation/content quality caught by preflight/critic, not harness infrastructure. Post-run test gate 79/79 green. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "M2 Live Browser Automation Empirical Verification",
