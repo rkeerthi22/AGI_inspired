@@ -303,13 +303,18 @@ def replicate_trajectory_s3(
     all_lines = existing_lines + [new_record]
     new_checkpoint_content = "\n".join(all_lines) + "\n"
 
+    ckpt_kwargs: dict[str, Any] = {
+        "Bucket": s3_config.bucket,
+        "Key": s3_config.checkpoint_key,
+        "Body": new_checkpoint_content.encode("utf-8"),
+        "ContentType": "application/x-jsonlines",
+    }
+    if s3_config.retention_mode in ("COMPLIANCE", "GOVERNANCE"):
+        ckpt_kwargs["ObjectLockMode"] = s3_config.retention_mode
+        ckpt_kwargs["ObjectLockRetainUntilDate"] = retain_until
+
     try:
-        client.put_object(
-            Bucket=s3_config.bucket,
-            Key=s3_config.checkpoint_key,
-            Body=new_checkpoint_content.encode("utf-8"),
-            ContentType="application/x-jsonlines",
-        )
+        client.put_object(**ckpt_kwargs)
     except Exception as exc:
         raise S3AuditReplicationError(f"s3_checkpoint_write_failed:{type(exc).__name__}") from exc
 
@@ -329,13 +334,18 @@ def replicate_trajectory_s3(
         separators=(",", ":"),
     )
 
+    manifest_kwargs: dict[str, Any] = {
+        "Bucket": s3_config.bucket,
+        "Key": s3_config.manifest_key,
+        "Body": manifest_data.encode("utf-8"),
+        "ContentType": "application/json",
+    }
+    if s3_config.retention_mode in ("COMPLIANCE", "GOVERNANCE"):
+        manifest_kwargs["ObjectLockMode"] = s3_config.retention_mode
+        manifest_kwargs["ObjectLockRetainUntilDate"] = retain_until
+
     try:
-        client.put_object(
-            Bucket=s3_config.bucket,
-            Key=s3_config.manifest_key,
-            Body=manifest_data.encode("utf-8"),
-            ContentType="application/json",
-        )
+        client.put_object(**manifest_kwargs)
     except Exception as exc:
         raise S3AuditReplicationError(f"s3_manifest_write_failed:{type(exc).__name__}") from exc
 

@@ -140,11 +140,18 @@ class TestS3AuditReplication(unittest.TestCase):
             self.assertEqual(artifact_put["ObjectLockMode"], "COMPLIANCE")
             self.assertIsNotNone(artifact_put["ObjectLockRetainUntilDate"])
 
-            # Verify checkpoint record exists in S3
+            # Verify checkpoint record exists in S3 and has ObjectLock
+            checkpoint_put = next(c for c in put_calls if c["Key"] == self.config.checkpoint_key)
+            self.assertEqual(checkpoint_put["ObjectLockMode"], "COMPLIANCE")
+            self.assertIsNotNone(checkpoint_put["ObjectLockRetainUntilDate"])
+
             checkpoints = s3_rep.fetch_s3_checkpoints(self.mock_client, self.config)
             self.assertEqual(len(checkpoints), 1)
 
-            # Verify latest-checkpoint manifest exists in S3
+            # Verify latest-checkpoint manifest exists in S3 and has ObjectLock
+            manifest_put = next(c for c in put_calls if c["Key"] == self.config.manifest_key)
+            self.assertEqual(manifest_put["ObjectLockMode"], "COMPLIANCE")
+            self.assertIsNotNone(manifest_put["ObjectLockRetainUntilDate"])
             self.assertIn(self.config.manifest_key, self.mock_client.objects)
 
     def test_replicate_fails_closed_on_invalid_local_trajectory(self):

@@ -111,11 +111,31 @@ result is claimed.
 
 ## 1. Executive Summary
 
-On September 7, 2026, the frozen real-world validation cohort (`workspace/validation/cohort_missions.json`) achieved 100% pass yield across all 7 missions under Windows Restricted Token containment (`S-1-5-12`) and independent critic review (`glm-5.2:cloud`):
+### Canonical Single-Window Full Cohort Yield (September 12, 2026)
 
-| Scope | Status | Evidence |
+On September 12, 2026, the complete M1–M7 benchmark cohort was dispatched in a single controlled window (`workspace/validation/run_cohort.py --controlled-window`, Tasks 177–183). Yield: **4 PASS / 3 FAIL (57.1% single-window yield)**:
+
+| Scope | Status | Evidence & Details |
 | :--- | :---: | :--- |
-| Full Cohort Yield (7/7) | PASSED LIVE | **100% (7/7) pass yield** across frozen benchmark cohort (M1-M7) under Windows Restricted Token containment & independent critic |
+| **Single-Window Cohort (7 missions)** | **4/7 (57.1%)** | Tasks 177–183 dispatched under unified window with active WFP egress containment and live CDP browser daemon |
+| M1 / task 177 (PromptHero) | FAILED | Citation date formatting gap (resolved post-cohort by pre-submit linter) |
+| M2 / task 178 (AIPRM Pricing) | **PASSED** | Live browser navigation via host CDP bridge; 4 tiers + promo extracted (facts+13, 92.4s) |
+| M3 / task 179 (PromptBase Reviews) | **PASSED** | Honest bounded failure declaration on blocked source (facts+21, 98.2s) |
+| M4 / task 180 (Competitor Synthesis)| **PASSED** | 4-competitor synthesis snapshot table verified |
+| M5 / task 181 (FlowGPT Claim) | FAILED | Caught un-attempted URL citation (resolved post-cohort by pre-submit linter) |
+| M6 / task 182 (HN Citation Count) | **PASSED** | Explicitly surfaced `cc-hindsight` leading tool (facts+8, 114.5s) |
+| M7 / task 183 (Marketplace Landscape)| FAILED | Speculative placeholder funding values (resolved post-cohort by pre-submit linter) |
+| Full model-free test gate | **VERIFIED** | 79/79 test suites green (exit 0) |
+| Host Browser & Egress Security | **HARDENED** | Host Chrome routed via proxy broker (127.0.0.1:8787); remote origins restricted; CDP port squatting rejected |
+| Audit Replication & WORM | **HARDENED** | S3 / Backblaze B2 Object Lock enforced in COMPLIANCE mode on artifacts, checkpoints, and manifests |
+
+### Historical Milestone: Cumulative Frozen Benchmark (September 7, 2026)
+
+Prior historical multi-window composite pass yield achieved across all 7 missions under Windows Restricted Token containment (`S-1-5-12`) and critic review (`glm-5.2:cloud`):
+
+| Historical Scope (2026-09-07) | Status | Evidence |
+| :--- | :---: | :--- |
+| Historical Benchmark Cohort (M1-M7) | ARCHIVED PASS | **100% (7/7) composite pass yield** across historical runs (tasks 106, 109, 140, 115, 137, 145, 150) |
 | M1 / task 106 | PASSED | PromptHero community intel; MAU, categories, split, sources verified (done/pass) |
 | M2 / task 109 | PASSED | Canonical AIPRM pricing table; 4 tiers, monthly/annual, discounts (done/pass) |
 | M3 / task 140 | PASSED | PromptBase review sentiment; blocked-source declaration, ratings, 3 themes, 6-mo trend (done/pass) |
@@ -123,9 +143,6 @@ On September 7, 2026, the frozen real-world validation cohort (`workspace/valida
 | M5 / task 137 | PASSED | FlowGPT hero claim verification; verbatim quote, independent sources, unconfirmed verdict (done/pass) |
 | M6 / task 145 | PASSED | Hacker News AI prompt library citation count; cc-hindsight leading tool, independent blogs (done/pass) |
 | M7 / task 150 | PASSED | AI prompt marketplace landscape; 6 marketplaces, 5 columns, verified 2+ sources per subject (done/pass) |
-| Full model-free gate | VERIFIED | `75/75` suites green across unit, containment, and integration tiers |
-| Step 2 WFP Hardening | ENFORCED | Both WFP rules verified active; Ed25519 attestation signed and verified |
-| Supervised BytePlus canary | VERIFIED LIVE | `ok=true`, provider `byteplus_coding`, model `ark-code-latest` |
 
 ---
 

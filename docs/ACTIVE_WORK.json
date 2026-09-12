@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T09:50:00Z",
+  "last_updated": "2026-09-12T10:55:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Hermes Audit Remediation (Browser Egress Proxy, CDP Origins, S3 Object Lock, Stale Headlines)",
+      "task_id": "HERMES-AUDIT-REMEDIATION-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T10:55:00Z",
+      "last_update": "2026-09-12T11:05:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": null,
+      "notes": "COMPLETED. Remediated 4 Hermes audit findings verified by Claude & Gemini: (1) Browser Egress Gap: host Chrome in browser_daemon.py now launches with --proxy-server=http://127.0.0.1:8787 and --proxy-bypass-list=127.0.0.1;localhost, routing all browser navigations through the egress broker and WFP boundary; (2) CDP Remote Origins: removed wildcard --remote-allow-origins=*, restricted strictly to loopback host/port; (3) CDP Port Squatting: ActiveBrowserDaemon rejects unverified external processes listening on port 9222 by default unless explicitly allowed; (4) S3 Checkpoint WORM Lock: s3_audit_replication.py now enforces ObjectLockMode and ObjectLockRetainUntilDate on both checkpoint.jsonl and latest-checkpoint.json manifest uploads in COMPLIANCE mode; (5) Stale Headline: Section 1 of docs/CURRENT_STATE.md updated to headline the single-window 4/7 (57.1%) cohort yield with historical 7/7 table archived. Full model-free test gate 79/79 suites green, exit 0. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Pre-Submit Citation & Content Linter Hardening (M1, M5, M7)",

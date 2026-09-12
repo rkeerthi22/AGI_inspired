@@ -83,7 +83,10 @@ class TestBrowserDaemon(unittest.TestCase):
             mock_popen.assert_called_once()
             args = mock_popen.call_args[0][0]
             self.assertIn("--remote-debugging-port=9222", args)
-            self.assertIn("--remote-allow-origins=*", args)
+            self.assertIn("--remote-allow-origins=http://127.0.0.1:9222,http://localhost:9222", args)
+            self.assertNotIn("--remote-allow-origins=*", args)
+            self.assertIn("--proxy-server=http://127.0.0.1:8787", args)
+            self.assertIn("--proxy-bypass-list=127.0.0.1;localhost", args)
             self.assertIn("--headless=new", args)
 
             daemon.stop()
@@ -109,8 +112,18 @@ class TestBrowserDaemon(unittest.TestCase):
     def test_active_browser_daemon_reuses_existing(self):
         with mock.patch("browser_daemon.is_cdp_ready", return_value=True), \
              mock.patch("browser_daemon.BrowserDaemon") as mock_cls:
-            with browser_daemon.ActiveBrowserDaemon(port=9222) as cdp_url:
+            with browser_daemon.ActiveBrowserDaemon(port=9222, allow_external_reuse=True) as cdp_url:
                 self.assertEqual(cdp_url, "http://127.0.0.1:9222")
+            mock_cls.assert_not_called()
+
+    def test_active_browser_daemon_rejects_unmanaged_external_squatter(self):
+        with mock.patch("browser_daemon.is_cdp_ready", return_value=True), \
+             mock.patch.dict(os.environ, {"AGI_LIVE_EXECUTION_ALLOWED": "1"}), \
+             mock.patch("browser_daemon.BrowserDaemon") as mock_cls:
+            with self.assertRaises(RuntimeError) as ctx:
+                with browser_daemon.ActiveBrowserDaemon(port=9222, allow_external_reuse=False):
+                    pass
+            self.assertIn("already in use by an external process", str(ctx.exception))
             mock_cls.assert_not_called()
 
     def test_active_browser_daemon_launches_managed(self):

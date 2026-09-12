@@ -1,27 +1,35 @@
 {
   "schema_version": 2,
-  "brief_revision": 107,
-  "created_at": "2026-09-12T09:50:00.000000+00:00",
+  "brief_revision": 108,
+  "created_at": "2026-09-12T11:10:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "558e15c7f32ce12c58d8477f8b3f348a8ce01678"
+    "tree_clean": false,
+    "changed_paths": [
+      "orchestrator/browser_daemon.py",
+      "orchestrator/s3_audit_replication.py",
+      "tests/test_browser_daemon.py",
+      "tests/test_s3_audit_replication.py",
+      "docs/CURRENT_STATE.md",
+      "docs/ACTIVE_WORK.json"
+    ],
+    "based_on_head": "19181339db666b867b2f75f9950a8ddda609639a"
   },
   "task": {
-    "id": "PRE-SUBMIT-CITATION-LINTER-2026-09-12",
-    "phase": "citation-linter-hardened-m1-m5-m7",
+    "id": "HERMES-AUDIT-REMEDIATION-2026-09-12",
+    "phase": "hermes-audit-remediation-completed",
     "status": "completed",
-    "next_action": "Deploy hardened harness to venture production tasks or run validation cohort to verify elevated yield."
+    "next_action": "Run validation cohort under hardened egress proxy and S3 WORM to verify elevated yield, or proceed with venture production."
   },
   "completed": [
-    "Pre-submit citation and content linter hardened in deliverable_preflight.py and task_runner.py",
-    "Added check_citation_metadata() targeting M1 (retrieval dates & confidence levels on all cited sources and attempts)",
-    "Enhanced check_schema() and wired pass_criteria into preflight targeting M7 ('not publicly disclosed' & anti-speculation)",
-    "Enhanced format_repair_feedback() targeting M5 with pinpoint un-attempted URL citations and structured remediation",
-    "Added 5 hermetic unit tests to test_deliverable_preflight.py (33/33 pass); full gate green 79/79 suites; ESTOP True"
+    "Closed browser egress gap: host Chrome routed via --proxy-server=http://127.0.0.1:8787 and --proxy-bypass-list=127.0.0.1;localhost",
+    "Restricted CDP remote origins: dropped wildcard --remote-allow-origins=*, pinned to loopback host/port",
+    "Guarded CDP port squatting: ActiveBrowserDaemon rejects unverified external processes on port 9222",
+    "Enforced S3 WORM Compliance Lock on checkpoint.jsonl and latest-checkpoint.json manifest uploads",
+    "Reconciled CURRENT_STATE.md executive summary to headline canonical 4/7 (57.1%) single-window yield and archive 7/7 table",
+    "Full model-free test gate green at 79/79 suites (exit 0); ESTOP strictly engaged"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -37,11 +45,11 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "060d6e564689e1b893a3ae2baf498ebc11ca9d6c1f40639adbeb9acfa6ea45a1"
+      "sha256": "3884bcd31ed5ababf3f84ede44eaedb11deee8652923bed51beb32b37416f9d5"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "03fe599ecdfa5cd1902bdfe296f067f588f0e4f0a30ad49a1eb77dffe79ae85b"
+      "sha256": "810a4fddbd0a75f2addc1f2abc8cc0cff7a5652e2f8613683636a6582aae82ae"
     },
     {
       "path": "docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md",
