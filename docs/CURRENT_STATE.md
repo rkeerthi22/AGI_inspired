@@ -5,12 +5,12 @@
 > are implemented. Deployment evidence remains required; no live execution is
 > authorized.
 
-**Last Updated:** 2026-09-12 (Venture Task 185 executed under controlled window; live browser egress intercepted via proxy broker with 94 broker rows / 6 aiprm rows; model_infrastructure_failure escalation proven live without crash or zombies; full gate 79/79 green; ESTOP strictly engaged)
-**Phase:** Venture Execution Phase Initiated; Enterprise Candidate Status ACHIEVED; M2 Browser Automation Ceiling EMPIRICALLY UNBLOCKED; Pre-Submit Citation Linter Hardened (M1, M5, M7); Deficit B Cloud WORM Landed & Tested; Deficits A, C, D1 Closed Live; ESTOP strictly engaged
+**Last Updated:** 2026-09-12 (Full Venture Cohort M1–M7 Executed [Tasks 187–193: 3 PASS / 4 FAIL, 42.9% yield]; Phase 1 Task 186 verified loop; Linter M4 fix proven live on real traffic; 100% critic availability; zero zombies; full gate 79/79 green; ESTOP strictly engaged)
+**Phase:** Venture Execution Phase Active; Full Graded Venture Cohort Executed; Enterprise Candidate Status ACHIEVED; M2 Browser Automation Ceiling EMPIRICALLY UNBLOCKED; Pre-Submit Citation Linter Hardened (M1, M5, M7); Deficit B Cloud WORM Landed & Tested; Deficits A, C, D1 Closed Live; ESTOP strictly engaged
 **Safety Status:** ESTOP engaged (`True`) | Zero live execution active | Egress WFP deny-direct-egress rule active | AGI_AuditSigner service running as `.\AGI_Signer` | OmniRoute strictly held | Active work lock released
 **Verification:** Full model-free gate: 79/79 suites green, exit 0 (6/6 s3 audit replication, 11/11 browser daemon, 7/7 three-identity deployment, 33/33 deliverable preflight, 66/66 citecheck, 46/46 egress broker integration, 12/12 audit replication, 37/37 retry artifacts, 171/171 operator cli, 11/11 egress policy, 17/17 worker sandbox, 19/19 audit signer, 16/16 pty daemon, 2/2 m5 dryrun, 39/39 f66). Fresh signed attestation digest `cf9f8b4f5f25802724b2e0a5acf28c9773af0856ef78ea11d17c7799bd043d86`. Candidate log pure (0 test fixtures). ESTOP strictly engaged.
 
-Current handoff: `docs/reviews/GEMINI_VENTURE_TASK185_DISPATCH_AND_INFRA_VERIFICATION_2026-09-12.md`, `docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md`, `docs/reviews/GEMINI_M2_LIVE_VERIFICATION_EMPIRICAL_PASS_2026-09-12.md`, `docs/reviews/GEMINI_M2_BROWSER_AND_DEFICIT_B_S3_HANDOFF_2026-09-12.md`, `docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md`, `docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md`, `docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md`, `docs/RUNBOOK_PATH_A_THREE_IDENTITY.md`.
+Current handoff: `docs/reviews/GEMINI_VENTURE_FULL_COHORT_REPORT_2026-09-12.md`, `docs/reviews/GEMINI_VENTURE_TASK185_DISPATCH_AND_INFRA_VERIFICATION_2026-09-12.md`, `docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md`, `docs/reviews/GEMINI_M2_LIVE_VERIFICATION_EMPIRICAL_PASS_2026-09-12.md`, `docs/reviews/GEMINI_M2_BROWSER_AND_DEFICIT_B_S3_HANDOFF_2026-09-12.md`, `docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md`, `docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md`, `docs/GEMINI_HONEST_SCORECARD_AND_ENTERPRISE_HANDOFF_2026-09-10.md`, `docs/RUNBOOK_PATH_A_THREE_IDENTITY.md`.
 Recent Landings (2026-09-12):
 1. Pre-Submit Citation & Content Linter Hardening (`orchestrator/deliverable_preflight.py`, `orchestrator/task_runner.py`): Directly resolved the root causes of the 3 cohort failures (M1, M5, M7) before authoritative critic grading. Added `check_citation_metadata()` validating that all cited sources and fetch attempts contain explicit retrieval dates and confidence ratings (M1). Enhanced `check_schema()` and wired `pass_criteria` from the database task row into `run_preflight`, enforcing mandatory 'not publicly disclosed' entries and intercepting speculative placeholders like 'Bootstrapped', 'Unknown', or empty cells in financial/funding tables (M7). Enhanced `format_repair_feedback()` with pinpoint un-attempted URL citations and actionable remediation instructions (M5). Added 5 hermetic unit tests to `tests/test_deliverable_preflight.py` (33/33 pass). Full gate 79/79 green.
 2. Full M1–M7 Cohort Execution & Yield Measurement (Tasks 177–183): Dispatched all 7 validation missions under a single controlled window (`run_cohort.py --controlled-window`). Results: 4 PASS / 3 FAIL (57.1% single-window yield; cumulative 10/31 passes = 32.3%). M2 (Task 178) passed cleanly again (facts+13, 92.4s) via host headless Chrome CDP daemon. M3 (Task 179) passed (facts+21, 98.2s) on honest bounded failure. M4 (Task 180) passed on multi-source synthesis. M6 (Task 182) passed (facts+8, 114.5s) explicitly naming `cc-hindsight`. M1 failed on citation formatting dates; M5 failed on caught un-attempted URL fabrication; M7 failed on ungrounded funding claims. Total tokens: 253.6k in / 57.0k out (310.6k total).
@@ -113,7 +113,23 @@ result is claimed.
 
 ### Canonical Single-Window Full Cohort Yield (September 12, 2026)
 
-On September 12, 2026, the complete M1–M7 benchmark cohort was dispatched in a single controlled window (`workspace/validation/run_cohort.py --controlled-window`, Tasks 177–183). Yield: **4 PASS / 3 FAIL (57.1% single-window yield)**:
+On September 12, 2026, the complete M1–M7 venture cohort was dispatched in a single controlled window (`workspace/validation/run_cohort.py --controlled-window`, Tasks 187–193), following Phase 1 kill-assumption verification (Task 186 PASS). Yield: **3 PASS / 4 FAIL (42.9% single-window yield)**:
+
+| Scope | Status | Evidence & Details |
+| :--- | :---: | :--- |
+| **Venture Cohort (7 missions)** | **3/7 (42.9%)** | Tasks 187–193 dispatched under unified controlled window; 100% critic uptime via local Ollama gateway; 0 zombies |
+| M1 / task 187 (PromptHero) | **PASSED** | Pre-submit linter resolved previous citation metadata gap; dates & confidence grounded (facts+7, 273.1s) |
+| M2 / task 188 (AIPRM Pricing) | **PASSED** | Live browser navigation via host CDP bridge; 97 broker rows (6 AIPRM); 4 tiers captured (facts+10, 206.3s) |
+| M3 / task 189 (PromptBase Reviews) | FAILED | Caught by citecheck abuse bound: 3 policy-denied citations > max 2 allowed (`needs_review`) |
+| M4 / task 190 (Competitor Synthesis)| **PASSED** | 4-competitor synthesis table verified; **Linter M4 fix proven live**: 0 repair cycles, 0 false positives |
+| M5 / task 191 (FlowGPT Claim) | FAILED | Caught by citecheck abuse bound: 2/6 (33%) policy-denied citations > 25% ceiling (`needs_review`) |
+| M6 / task 192 (HN Citation Count) | FAILED | Missing Algolia search query URL and single prominent tool identification |
+| M7 / task 193 (Marketplace Landscape)| FAILED | Speculative placeholder funding values on platforms |
+| Phase 1 Kill-Assumption (Task 186) | **PASSED** | Single M2 dispatch; verified critic grading loop, 145 broker rows (9 AIPRM) (facts+12, 257.7s) |
+
+### Prior Cohort Run (September 12, 2026 — Tasks 177–183)
+
+The complete M1–M7 benchmark cohort was previously dispatched in a single controlled window (`workspace/validation/run_cohort.py --controlled-window`, Tasks 177–183). Yield: **4 PASS / 3 FAIL (57.1% single-window yield)**:
 
 | Scope | Status | Evidence & Details |
 | :--- | :---: | :--- |

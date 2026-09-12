@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T20:20:00Z",
+  "last_updated": "2026-09-12T22:25:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Execute Venture Cohort Plan: Phase 1 (Kill-Assumption Single M2 Dispatch) & Phase 2 (Full M1-M7 Cohort)",
+      "task_id": "VENTURE-COHORT-EXECUTION-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T21:40:00Z",
+      "last_update": "2026-09-12T22:25:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_VENTURE_FULL_COHORT_REPORT_2026-09-12.md",
+      "notes": "COMPLETED. Executed full venture cohort per docs/GEMINI_TASK_FULL_VENTURE_COHORT_PLAN_2026-09-12.md. (1) Phase 1 Kill-Assumption (Task 186): Single M2 dispatch verified grading loop, 145 broker rows (9 AIPRM), facts+12, pass; (2) Phase 2 Full Cohort (Tasks 187-193): 3 PASS / 4 FAIL (42.9% single-window yield). M1 (Task 187) pass (facts+7) on grounded citation dates; M2 (Task 188) pass (facts+10) with 97 broker rows (6 AIPRM); M4 (Task 190) pass on attempt 1, empirically proving linter M4 fix on live traffic without false positives. Fails honestly attributed: M3 & M5 caught by citecheck abuse bounds, M6 & M7 on content. 100% critic uptime with local Ollama active; 0 zombies; real token spend (307,890 in / 86,828 out). Gate 79/79 green. ESTOP strictly re-engaged. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "First Browser-Enabled Venture Task Execution under Controlled Window (M2 AIPRM Pricing)",
