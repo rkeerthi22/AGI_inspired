@@ -837,6 +837,35 @@ def test_pinpoint_unattempted_url_repair_feedback_m5():
     assert "REMOVE these URL citations" in feedback
 
 
+def test_schema_linter_m4_passes_with_not_available_placeholder():
+    """M4: passes when criteria mandates 'not available' and honest 'not available' cells are used."""
+    text = (
+        "# Competitor Synthesis Matrix\n\n"
+        "| Competitor | Market Share | Pricing Tier | Free Trial |\n"
+        "| :--- | :--- | :--- | :--- |\n"
+        "| Tool A | 45% (https://example.com/share) | $29/mo (https://example.com/pricing) | 14 days |\n"
+        "| Tool B | not available | $49/mo (https://example.com/pricing2) | not available |\n"
+    ) * 3
+    # M4 pass criteria mandates 'not available' without asking for 'not publicly disclosed'
+    criteria = "every cell either has source URL or 'not available'; all 4 competitors analyzed"
+    issues = check_schema(text, spec="Analyze 4 competitors", pass_criteria=criteria)
+    assert len(issues) == 0, f"Expected no schema issues for M4 deliverable, got: {issues}"
+
+
+def test_schema_linter_m7_regression_fails_with_bootstrapped_no_npd():
+    """M7: fails when criteria mandates 'not publicly disclosed' but table has Bootstrapped and no NPD phrase."""
+    text = (
+        "# Marketplace Landscape\n\n"
+        "| Marketplace | Founding | Funding |\n"
+        "| :--- | :--- | :--- |\n"
+        "| MarketA | 2020 | Bootstrapped |\n"
+    ) * 3
+    criteria = "- [ ] Where data is NOT publicly available: explicit 'not publicly disclosed' per cell"
+    issues = check_schema(text, spec="Landscape overview", pass_criteria=criteria)
+    assert any("Missing mandatory 'not publicly disclosed'" in iss for iss in issues)
+    assert any("Bootstrapped" in iss for iss in issues)
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -871,5 +900,7 @@ if __name__ == "__main__":
     test_schema_linter_m7_catches_speculative_bootstrapped_cell()
     test_schema_linter_m7_passes_with_not_publicly_disclosed_cell()
     test_pinpoint_unattempted_url_repair_feedback_m5()
-    print("ALL 33 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_schema_linter_m4_passes_with_not_available_placeholder()
+    test_schema_linter_m7_regression_fails_with_bootstrapped_no_npd()
+    print("ALL 35 DELIVERABLE PREFLIGHT TESTS PASSED!")
 

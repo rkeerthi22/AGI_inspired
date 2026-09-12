@@ -1,35 +1,39 @@
 {
   "schema_version": 2,
-  "brief_revision": 108,
-  "created_at": "2026-09-12T11:10:00.000000+00:00",
+  "brief_revision": 109,
+  "created_at": "2026-09-12T16:49:59.314909+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": false,
     "changed_paths": [
-      "orchestrator/browser_daemon.py",
-      "orchestrator/s3_audit_replication.py",
-      "tests/test_browser_daemon.py",
-      "tests/test_s3_audit_replication.py",
+      "docs/ACTIVE_WORK.json",
       "docs/CURRENT_STATE.md",
-      "docs/ACTIVE_WORK.json"
+      "docs/review_request_hermes_deep_audit.md",
+      "orchestrator/audit_replication.py",
+      "orchestrator/browser_daemon.py",
+      "orchestrator/deliverable_preflight.py",
+      "orchestrator/s3_audit_replication.py",
+      "tests/test_deliverable_preflight.py",
+      "tests/test_s3_audit_replication.py",
+      "docs/GEMINI_TASK_HERMES_ROUND2_REMEDIATION_2026-09-12.md"
     ],
-    "based_on_head": "19181339db666b867b2f75f9950a8ddda609639a"
+    "based_on_head": "27d026b6c73f095cd0e097686c86e89a1203ce6b"
   },
   "task": {
-    "id": "HERMES-AUDIT-REMEDIATION-2026-09-12",
-    "phase": "hermes-audit-remediation-completed",
+    "id": "HERMES-ROUND2-REMEDIATION-2026-09-12",
+    "phase": "hermes-round2-remediation-completed",
     "status": "completed",
-    "next_action": "Run validation cohort under hardened egress proxy and S3 WORM to verify elevated yield, or proceed with venture production."
+    "next_action": "Submit report to Claude Code with Task 184 live proof and 79/79 gate."
   },
   "completed": [
-    "Closed browser egress gap: host Chrome routed via --proxy-server=http://127.0.0.1:8787 and --proxy-bypass-list=127.0.0.1;localhost",
-    "Restricted CDP remote origins: dropped wildcard --remote-allow-origins=*, pinned to loopback host/port",
-    "Guarded CDP port squatting: ActiveBrowserDaemon rejects unverified external processes on port 9222",
-    "Enforced S3 WORM Compliance Lock on checkpoint.jsonl and latest-checkpoint.json manifest uploads",
-    "Reconciled CURRENT_STATE.md executive summary to headline canonical 4/7 (57.1%) single-window yield and archive 7/7 table",
-    "Full model-free test gate green at 79/79 suites (exit 0); ESTOP strictly engaged"
+    "S3 durability: If-Match guard, body hash check, retention floor, routing & subclass fixes",
+    "Linter M4: dropped not-available from NPD trigger; whitelisted valid placeholders",
+    "Deleted unused browser daemon ownership token",
+    "Verified Task 184 live browser egress: 10 aiprm rows parsed in broker audit",
+    "Updated CURRENT_STATE.md line 129 with Task 184 verification",
+    "Full gate green at 79/79 suites (exit 0); ESTOP engaged"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -45,11 +49,11 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "3884bcd31ed5ababf3f84ede44eaedb11deee8652923bed51beb32b37416f9d5"
+      "sha256": "96408058cdca48db7a2ebb1f78d01cef58a87b1f7d96857a14f30c15c02da996"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "810a4fddbd0a75f2addc1f2abc8cc0cff7a5652e2f8613683636a6582aae82ae"
+      "sha256": "2b6e60d58c495ed9216bc98430ad4f7e2fe08e54aab521b0ec950a36cce6a061"
     },
     {
       "path": "docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md",

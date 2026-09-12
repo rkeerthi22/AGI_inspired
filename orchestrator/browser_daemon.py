@@ -25,7 +25,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_CDP_PORT = 9222
 DEFAULT_CDP_HOST = "127.0.0.1"
 DEFAULT_PROXY_SERVER = "http://127.0.0.1:8787"
-DAEMON_OWNERSHIP_FILE = ".agi_browser_daemon_token"
 
 
 def find_browser_executable() -> Optional[str]:
@@ -100,7 +99,6 @@ class BrowserDaemon:
             self.user_data_dir = Path(self._temp_dir.name)
 
         self.process: Optional[subprocess.Popen] = None
-        self.ownership_token: Optional[str] = None
 
     @property
     def cdp_url(self) -> str:
@@ -118,9 +116,6 @@ class BrowserDaemon:
             )
 
         self.user_data_dir.mkdir(parents=True, exist_ok=True)
-        import secrets
-        self.ownership_token = secrets.token_hex(16)
-        (self.user_data_dir / DAEMON_OWNERSHIP_FILE).write_text(self.ownership_token, encoding="utf-8")
 
         origins_str = ",".join(self.allowed_origins)
         cmd = [

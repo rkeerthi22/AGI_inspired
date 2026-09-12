@@ -82,7 +82,7 @@ def check_schema(text: str, spec: str = "", pass_criteria: str = "") -> list[str
 
     # 2. Check for mandatory 'not publicly disclosed' disclaimer when spec/criteria requires it
     requires_npd = any(kw in combined_lower for kw in [
-        "not publicly disclosed", "disclose", "not available"
+        "not publicly disclosed", "disclose"
     ])
     if requires_npd:
         has_npd = "not publicly disclosed" in text_lower
@@ -91,21 +91,33 @@ def check_schema(text: str, spec: str = "", pass_criteria: str = "") -> list[str
                 "Missing mandatory 'not publicly disclosed' cell entries for unavailable data points in table."
             )
 
-        # Scan table rows for speculative fillers or empty cells (M7)
+    # Allowed placeholders: detect phrases mandated by the criteria
+    allowed_placeholders: list[str] = []
+    if "not publicly disclosed" in combined_lower or requires_npd:
+        allowed_placeholders.append("not publicly disclosed")
+    if "not available" in combined_lower:
+        allowed_placeholders.append("not available")
+
+    # If any specific placeholder is mandated, scan table rows for speculative fillers or empty cells
+    if allowed_placeholders:
         table_lines = [l for l in text.splitlines() if _TABLE_ROW_RE.match(l) and not _TABLE_SEPARATOR_RE.match(l)]
         if len(table_lines) > 1:
             for r_idx, row in enumerate(table_lines[1:]):
                 cells = [c.strip() for c in row.split('|')[1:-1]]
                 for c in cells:
+                    c_lower = c.lower()
+                    is_whitelisted = any(ph in c_lower for ph in allowed_placeholders) or "http" in c_lower
                     m = _SPECULATIVE_CELL_RE.match(c)
-                    if m and "not publicly disclosed" not in c.lower() and "http" not in c.lower():
+                    if m and not is_whitelisted:
+                        primary_ph = allowed_placeholders[0]
                         issues.append(
-                            f"Table cell '{c}' uses speculative placeholder '{m.group(0)}'. Where data is not publicly available, pass criteria mandates explicit 'not publicly disclosed' per cell, not fabricated or guessed."
+                            f"Table cell '{c}' uses speculative placeholder '{m.group(0)}'. Where data is not publicly available, pass criteria mandates explicit '{primary_ph}' per cell, not fabricated or guessed."
                         )
                         break
-                    elif c in ("", "-"):
+                    elif c in ("", "-") and not is_whitelisted:
+                        primary_ph = allowed_placeholders[0]
                         issues.append(
-                            "Table contains empty or dash cell. For unavailable data points, explicitly enter 'not publicly disclosed'."
+                            f"Table contains empty or dash cell. For unavailable data points, explicitly enter '{primary_ph}'."
                         )
                         break
 

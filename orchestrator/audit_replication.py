@@ -342,7 +342,7 @@ def replicate_trajectory(
         raise AuditReplicationError("local_trajectory_chain_invalid")
     env = os.environ if environment is None else environment
     backend = str(env.get("HARNESS_AUDIT_BACKEND") or "").strip().lower()
-    if backend == "s3" or env.get("HARNESS_AUDIT_S3_BUCKET"):
+    if backend == "s3":
         import s3_audit_replication
         s3_cfg = s3_audit_replication.load_s3_config_from_env(env)
         return s3_audit_replication.replicate_trajectory_s3(
@@ -460,7 +460,7 @@ def audit_state(
             return {"ok": False, "error": "audit_enforcement_not_enabled"}
         env = os.environ if environment is None else environment
         backend = str(env.get("HARNESS_AUDIT_BACKEND") or "").strip().lower()
-        if backend == "s3" or env.get("HARNESS_AUDIT_S3_BUCKET"):
+        if backend == "s3":
             import s3_audit_replication
             return s3_audit_replication.s3_audit_state(
                 environment=env,

@@ -126,7 +126,7 @@ On September 12, 2026, the complete M1–M7 benchmark cohort was dispatched in a
 | M6 / task 182 (HN Citation Count) | **PASSED** | Explicitly surfaced `cc-hindsight` leading tool (facts+8, 114.5s) |
 | M7 / task 183 (Marketplace Landscape)| FAILED | Speculative placeholder funding values (resolved post-cohort by pre-submit linter) |
 | Full model-free test gate | **VERIFIED** | 79/79 test suites green (exit 0) |
-| Host Browser & Egress Security | **HARDENED** | Host Chrome routed via proxy broker (127.0.0.1:8787); remote origins restricted; CDP port squatting rejected |
+| Host Browser & Egress Security | **HARDENED** | Host Chrome routed via proxy broker (127.0.0.1:8787); remote origins restricted; CDP port squatting rejected; verified live on Task 184 (10 aiprm broker audit rows parsed) |
 | Audit Replication & WORM | **HARDENED** | S3 / Backblaze B2 Object Lock enforced in COMPLIANCE mode on artifacts, checkpoints, and manifests |
 
 ### Historical Milestone: Cumulative Frozen Benchmark (September 7, 2026)

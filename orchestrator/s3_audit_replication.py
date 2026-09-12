@@ -23,7 +23,14 @@ logger = logging.getLogger(__name__)
 GENESIS_HASH = "GENESIS"
 
 
-class S3AuditReplicationError(RuntimeError):
+try:
+    from audit_replication import AuditReplicationError
+except ImportError:
+    class AuditReplicationError(RuntimeError):
+        pass
+
+
+class S3AuditReplicationError(AuditReplicationError):
     """An audit artifact cannot be durably replicated to S3 Object Lock storage."""
 
 
@@ -40,6 +47,7 @@ class S3AuditConfig:
     checkpoint_key: str = "trajectory-checkpoints.jsonl"
     manifest_key: str = "latest-checkpoint.json"
     checkpoint_max_age_hours: int = 24
+    minimum_retention_days: int = 0
 
 
 def _canonical_bytes(value: dict[str, Any]) -> bytes:
@@ -85,9 +93,18 @@ def load_s3_config_from_env(env: Optional[dict[str, str]] = None) -> S3AuditConf
     except ValueError:
         max_age = 24
 
-    retention_mode = e.get("HARNESS_AUDIT_RETENTION_MODE", "COMPLIANCE").strip().upper()
-    if retention_mode not in ("COMPLIANCE", "GOVERNANCE"):
+    try:
+        min_retention = int(e.get("HARNESS_AUDIT_MINIMUM_RETENTION_DAYS", "0"))
+    except ValueError:
+        min_retention = 0
+
+    mode_raw = e.get("HARNESS_AUDIT_RETENTION_MODE")
+    if mode_raw is None or not str(mode_raw).strip():
         retention_mode = "COMPLIANCE"
+    else:
+        retention_mode = str(mode_raw).strip().upper()
+        if retention_mode not in ("COMPLIANCE", "GOVERNANCE"):
+            raise S3AuditReplicationError(f"invalid_retention_mode:{retention_mode}")
 
     return S3AuditConfig(
         bucket=bucket,
@@ -98,6 +115,7 @@ def load_s3_config_from_env(env: Optional[dict[str, str]] = None) -> S3AuditConf
         retention_mode=retention_mode,
         retention_days=retention_days,
         checkpoint_max_age_hours=max_age,
+        minimum_retention_days=min_retention,
     )
 
 
@@ -127,16 +145,27 @@ def get_s3_client(config: S3AuditConfig):
         raise S3AuditReplicationError(f"s3_client_initialization_failed:{type(exc).__name__}") from exc
 
 
-def fetch_s3_checkpoints(s3_client, config: S3AuditConfig) -> list[str]:
+def fetch_s3_checkpoints(
+    s3_client,
+    config: S3AuditConfig,
+    *,
+    return_etag: bool = False,
+) -> list[str] | tuple[list[str], Optional[str]]:
     """Retrieve raw checkpoint lines from S3, returning an empty list if not found."""
     from botocore.exceptions import ClientError
     try:
         resp = s3_client.get_object(Bucket=config.bucket, Key=config.checkpoint_key)
         content = resp["Body"].read().decode("utf-8")
-        return [line for line in content.splitlines() if line.strip()]
+        lines = [line for line in content.splitlines() if line.strip()]
+        etag = resp.get("ETag")
+        if return_etag:
+            return lines, etag
+        return lines
     except ClientError as exc:
         code = exc.response.get("Error", {}).get("Code")
         if code in ("NoSuchKey", "404", "NotFound"):
+            if return_etag:
+                return [], None
             return []
         raise S3AuditReplicationError(f"s3_get_checkpoints_failed:{code}") from exc
     except Exception as exc:
@@ -197,9 +226,12 @@ def verify_s3_checkpoint_chain(
         if verify_artifacts:
             from botocore.exceptions import ClientError
             try:
-                head = s3_client.head_object(Bucket=config.bucket, Key=relative)
-                if head.get("ContentLength") != checkpoint["source_bytes"]:
+                resp = s3_client.get_object(Bucket=config.bucket, Key=relative)
+                body = resp["Body"].read()
+                if len(body) != checkpoint["source_bytes"]:
                     return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "replica_artifact_size_mismatch"}
+                if hashlib.sha256(body).hexdigest() != digest:
+                    return {"ok": False, "count": count, "checkpoints": checkpoints, "error": "replica_artifact_hash_mismatch"}
             except ClientError as exc:
                 code = exc.response.get("Error", {}).get("Code")
                 if code in ("NoSuchKey", "404", "NotFound"):
@@ -297,8 +329,8 @@ def replicate_trajectory_s3(
     checkpoint["checkpoint_hash"] = _checkpoint_hash(checkpoint)
     signature = sign_checkpoint(checkpoint)
 
-    # 4. Fetch existing checkpoints and append new record
-    existing_lines = fetch_s3_checkpoints(client, s3_config)
+    # 4. Fetch existing checkpoints and append new record with lost-update protection
+    existing_lines, checkpoint_etag = fetch_s3_checkpoints(client, s3_config, return_etag=True)
     new_record = json.dumps({"checkpoint": checkpoint, "signature": signature}, sort_keys=True, separators=(",", ":"))
     all_lines = existing_lines + [new_record]
     new_checkpoint_content = "\n".join(all_lines) + "\n"
@@ -309,12 +341,23 @@ def replicate_trajectory_s3(
         "Body": new_checkpoint_content.encode("utf-8"),
         "ContentType": "application/x-jsonlines",
     }
+    if checkpoint_etag:
+        ckpt_kwargs["IfMatch"] = checkpoint_etag
+    else:
+        ckpt_kwargs["IfNoneMatch"] = "*"
+
     if s3_config.retention_mode in ("COMPLIANCE", "GOVERNANCE"):
         ckpt_kwargs["ObjectLockMode"] = s3_config.retention_mode
         ckpt_kwargs["ObjectLockRetainUntilDate"] = retain_until
 
+    from botocore.exceptions import ClientError
     try:
         client.put_object(**ckpt_kwargs)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code in ("PreconditionFailed", "412"):
+            raise S3AuditReplicationError("s3_checkpoint_concurrency_conflict") from exc
+        raise S3AuditReplicationError(f"s3_checkpoint_write_failed:{code}") from exc
     except Exception as exc:
         raise S3AuditReplicationError(f"s3_checkpoint_write_failed:{type(exc).__name__}") from exc
 
@@ -340,12 +383,29 @@ def replicate_trajectory_s3(
         "Body": manifest_data.encode("utf-8"),
         "ContentType": "application/json",
     }
+    manifest_etag = None
+    try:
+        m_head = client.head_object(Bucket=s3_config.bucket, Key=s3_config.manifest_key)
+        manifest_etag = m_head.get("ETag")
+    except Exception:
+        pass
+
+    if manifest_etag:
+        manifest_kwargs["IfMatch"] = manifest_etag
+    else:
+        manifest_kwargs["IfNoneMatch"] = "*"
+
     if s3_config.retention_mode in ("COMPLIANCE", "GOVERNANCE"):
         manifest_kwargs["ObjectLockMode"] = s3_config.retention_mode
         manifest_kwargs["ObjectLockRetainUntilDate"] = retain_until
 
     try:
         client.put_object(**manifest_kwargs)
+    except ClientError as exc:
+        code = exc.response.get("Error", {}).get("Code")
+        if code in ("PreconditionFailed", "412"):
+            raise S3AuditReplicationError("s3_checkpoint_concurrency_conflict") from exc
+        raise S3AuditReplicationError(f"s3_manifest_write_failed:{code}") from exc
     except Exception as exc:
         raise S3AuditReplicationError(f"s3_manifest_write_failed:{type(exc).__name__}") from exc
 
@@ -356,12 +416,64 @@ def replicate_trajectory_s3(
     }
 
 
+def s3_retention_floor_check(
+    chain: dict[str, Any],
+    config: S3AuditConfig,
+    now: Optional[datetime] = None,
+) -> dict[str, Any]:
+    """Verify that retained S3 checkpoint history spans at least minimum_retention_days (D4)."""
+    checkpoints = chain.get("checkpoints") or []
+    if not checkpoints:
+        return {
+            "ok": False,
+            "error": "checkpoint_chain_empty",
+            "chain_days": 0.0,
+            "minimum_retention_days": config.minimum_retention_days,
+        }
+
+    def _parse_ts(val: Optional[str]) -> Optional[datetime]:
+        if not val or not isinstance(val, str):
+            return None
+        try:
+            ts = datetime.fromisoformat(val.replace("Z", "+00:00"))
+            if not ts.tzinfo:
+                ts = ts.replace(tzinfo=timezone.utc)
+            return ts
+        except ValueError:
+            return None
+
+    earliest_ts = _parse_ts(checkpoints[0].get("replicated_at"))
+    latest_ts = _parse_ts(checkpoints[-1].get("replicated_at"))
+    if not earliest_ts or not latest_ts:
+        return {
+            "ok": False,
+            "error": "checkpoint_timestamps_unparseable",
+            "chain_days": 0.0,
+            "minimum_retention_days": config.minimum_retention_days,
+        }
+    chain_days = (latest_ts - earliest_ts).total_seconds() / 86400.0
+    if config.minimum_retention_days > 0 and chain_days < config.minimum_retention_days:
+        return {
+            "ok": False,
+            "error": "retention_floor_violation",
+            "chain_days": chain_days,
+            "minimum_retention_days": config.minimum_retention_days,
+        }
+    return {
+        "ok": True,
+        "error": None,
+        "chain_days": chain_days,
+        "minimum_retention_days": config.minimum_retention_days,
+    }
+
+
 def s3_audit_state(
     environment: Optional[dict[str, str]] = None,
     verify_checkpoint: Optional[Callable[[str], dict[str, Any] | None]] = None,
     signing_state: Optional[Callable[[], dict[str, Any]]] = None,
     now: Optional[datetime] = None,
     s3_client=None,
+    enforce_retention_floor: Optional[bool] = None,
 ) -> dict[str, Any]:
     """Read-only release diagnostic for S3 / Backblaze B2 Object Lock audit durability."""
     try:
@@ -419,7 +531,20 @@ def s3_audit_state(
             if code not in ("NoSuchKey", "404", "NotFound"):
                 return {"ok": False, "error": f"manifest_read_error:{code}"}
 
-        ok = all_artifacts_ok and fresh and not truncation_detected
+        # Retention floor check (D4)
+        floor = s3_retention_floor_check(chain, config, now=current)
+        env = os.environ if environment is None else environment
+        should_enforce_floor = (
+            enforce_retention_floor
+            if enforce_retention_floor is not None
+            else (
+                (str(env.get("HARNESS_AUDIT_ENFORCE_RETENTION_FLOOR") or "").strip() == "1")
+                or (config.minimum_retention_days > 0)
+            )
+        )
+        floor_ok = floor.get("ok") is True if should_enforce_floor else True
+
+        ok = all_artifacts_ok and fresh and not truncation_detected and floor_ok
         error = None
         if not ok:
             if not chain.get("ok"):
@@ -428,6 +553,8 @@ def s3_audit_state(
                 error = "checkpoint_suffix_truncated"
             elif not fresh:
                 error = "checkpoint_missing_or_stale"
+            elif not floor_ok:
+                error = floor.get("error") or "retention_floor_violation"
             else:
                 error = "checkpoint_empty_or_invalid"
 
@@ -440,6 +567,9 @@ def s3_audit_state(
             "fresh": fresh,
             "artifact_ok": all_artifacts_ok,
             "truncation_detected": truncation_detected,
+            "retention_floor_ok": floor.get("ok") is True,
+            "chain_days": floor.get("chain_days", 0.0),
+            "minimum_retention_days": config.minimum_retention_days,
             "retention_mode": config.retention_mode,
             "retention_days": config.retention_days,
             "immutability_guarantee": f"s3_object_lock_{config.retention_mode.lower()}",

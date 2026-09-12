@@ -20,6 +20,22 @@ verify the fix actually closes the gap, by parsing the artifacts (not reading th
 - If Gemini claims the fix is verified but the broker JSONL still has no browser rows, that is the SAME
   bug class (citing a file without parsing it). Say so.
 
+**Note (Claude-verified 2026-09-12, HEAD `27d026b`):** As of this commit, NO post-fix live browser
+mission exists (max task_id in ledger = 183; the broker JSONL for Tasks 176/178 is PRE-FIX and contains
+zero browser rows by the original regression). Gemini verified bug #1 **hermetically** — i.e.
+`test_browser_daemon.py` asserts `--proxy-server` is present in the cmd list. A unit test asserting the
+flag is *present in the cmd list* does NOT prove the broker logs browser rows on live traffic: Chrome
+could ignore the flag, the proxy could fail to intercept, or the broker could still not log browser rows.
+So for Target 1's *live* proof you must either:
+  (a) request the operator authorize a single `--controlled-window` browser mission and parse the fresh
+      `runs/taskNNN_a1_broker.audit.jsonl` for browser rows + `broker_attempt_verified=True` for the
+      browser-fetched URL; OR
+  (b) explicitly return Target 1-live as **UNVERIFIED-PENDING-LIVE-RUN** and verify only the code-level
+      portion (flag present, wildcard removed, port-squat check) now.
+Do NOT certify bug #1 as CLOSED on unit-test assertions alone — that is the exact bug class you caught
+last round (citing a file without parsing it). The code-level fix is real; the live-traffic proof is not
+yet collected. State both honestly.
+
 ### Target 2: chase the S3 durability cluster you flagged (#3-#6) — these block B provisioning
 Re-read `orchestrator/s3_audit_replication.py` and confirm/refute each, with file:line:
 - #3 checkpoint_key + manifest_key put_object (lines ~307-338) carry NO ObjectLockMode — chain of
