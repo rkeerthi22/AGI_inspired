@@ -1,27 +1,29 @@
 {
   "schema_version": 2,
-  "brief_revision": 114,
-  "created_at": "2026-09-12T20:25:00.000000+00:00",
+  "brief_revision": 115,
+  "created_at": "2026-09-12T22:30:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "af54e62ee1729a117bcd24ec1fada65b1f78b37f"
+    "based_on_head": "784d1ea33517ce551b5392f1a8aff7c75bf79f6f"
   },
   "task": {
-    "id": "VENTURE-M2-DISPATCH-2026-09-12",
+    "id": "VENTURE-COHORT-EXECUTION-2026-09-12",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Ready for operator review and continuous venture mission execution."
+    "next_action": "Ready for operator review and ongoing venture task dispatch."
   },
   "completed": [
-    "Executed first venture mission M2 under controlled window (Task 185)",
-    "Verified live browser navigation and proxy broker interception (94 rows total, 6 aiprm rows [4 allow, 2 deny])",
-    "Empirically proved model_infrastructure_failure escalation on offline critic socket failure with zero zombies",
-    "Ledger status=infra_failed honest token spend (43,771 in / 11,813 out) recorded cleanly",
-    "Model-free test gate verified 79/79 green; ESTOP strictly re-engaged (True)"
+    "Phase 1 single M2 dispatch (Task 186): PASS (facts+12), grading loop proven, 145 broker rows (9 AIPRM)",
+    "Phase 2 full venture cohort M1-M7 (Tasks 187-193): 3 PASS / 4 FAIL (42.9% yield)",
+    "M1 passed (facts+7), proving pre-submit citation metadata linter on live research",
+    "M2 passed (facts+10) with 97 broker rows (6 AIPRM), proving live browser navigation",
+    "M4 passed on attempt 1, empirically proving linter M4 fix without false positives",
+    "All 7 deliverables verified on disk; honest tokens (307,890 in / 86,828 out) reconciled to ledger",
+    "Zero zombies; 100% critic uptime with local Ollama active; gate 79/79 green; ESTOP strictly re-engaged"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -37,27 +39,27 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "183f6b80ff56fcf60a3a6a7bc212d9bb4935b5237cfe8c96d5921fd713fd570b"
+      "sha256": "a3dfc3020f4767fb7d45cbe593a07e2ba4e33e9da4275313894355af590b3f67"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "842e4078dff5aada22fd3f5e62647701fa278b3ed628f5216cad25dffcd80d06"
+      "sha256": "595280706357f7f532ffcd5f2e2230af58db253c8b0846ca1814d2c25327dcfc"
+    },
+    {
+      "path": "docs/reviews/GEMINI_VENTURE_FULL_COHORT_REPORT_2026-09-12.md",
+      "sha256": "ba1b029067e5ead9dcd74ed92bca3f364a47ec5f42e7e2a34bf669d671b18ae6"
     },
     {
       "path": "docs/reviews/GEMINI_VENTURE_TASK185_DISPATCH_AND_INFRA_VERIFICATION_2026-09-12.md",
       "sha256": "1224508dc594be8ead443d522a8aa463a06e025827641bd2259ce673c1128023"
     },
     {
-      "path": "docs/reviews/GEMINI_FULL_COHORT_M1_M7_REPORT_2026-09-12.md",
-      "sha256": "ad1c3fad1dd21c88c5f31bcda5b2aa520f021593fb204085d0b1f4fb018db710"
+      "path": "docs/reviews/CLAUDE_VERIFICATION_TASK185_FIRST_VENTURE_DISPATCH_2026-09-12.md",
+      "sha256": "e5e6c27b178fdd69b6ca814e8310f1248a865ae5a026b0a2877c7589a48815e6"
     },
     {
-      "path": "docs/reviews/GEMINI_M2_LIVE_VERIFICATION_EMPIRICAL_PASS_2026-09-12.md",
-      "sha256": "fbf3f74c872e8e8d9f5d2acdd5ca64557eb31110fb03cb2a234bf955807e6710"
-    },
-    {
-      "path": "docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md",
-      "sha256": "f43a956873da2d48082b010a01a1f33a418f3bb1d39e5dfc24b42d7969277751"
+      "path": "docs/GEMINI_TASK_FULL_VENTURE_COHORT_PLAN_2026-09-12.md",
+      "sha256": "c3501c5549d2abe08ccf5eb4dd088a21dc9d982db767e7affe900260ae4e7f89"
     },
     {
       "path": "docs/RUNBOOK_PATH_A_THREE_IDENTITY.md",
