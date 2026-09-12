@@ -1,29 +1,37 @@
 {
   "schema_version": 2,
-  "brief_revision": 100,
-  "created_at": "2026-09-11T09:48:34.818060+00:00",
+  "brief_revision": 101,
+  "created_at": "2026-09-11T23:09:41.926782+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
-    "tree_clean": true,
-    "changed_paths": [],
-    "based_on_head": "36928b5d08b049682cc17c40ca108920f7794f8c"
+    "tree_clean": false,
+    "changed_paths": [
+      ".harness/egress_attestation.signed",
+      "docs/ACTIVE_WORK.json",
+      "docs/CURRENT_STATE.md",
+      "docs/RUNBOOK_PATH_A_THREE_IDENTITY.md",
+      "docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md",
+      "docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md"
+    ],
+    "based_on_head": "79e874283b8724189dd0107ffdd0f232e68721f5"
   },
   "task": {
-    "id": "SUPERVISED-LAUNCH-COHORT-AND-EMPIRICAL-PROOFS-2026-09-11",
-    "phase": "supervised-cohort-and-empirical-proofs-completed",
+    "id": "SUPERVISED-COHORT-OPENAI-LIVE-2026-09-11",
+    "phase": "enterprise-candidate-achieved",
     "status": "completed",
-    "next_action": "Claude Code independent verification of supervised cohort & candidate deferral."
+    "next_action": "Claude Code final independent verification and sign-off on Enterprise Candidate."
   },
   "completed": [
-    "Supervised Cohort executed (Tasks 170-173): M5 pass (task 171, facts+6), M6 content fail, M2 browser container exit 21",
-    "Deficit C Canary: live burst passed (NOT_FALSIFIED_NO_LIVE_429); induced 429 failover to local GPU model qwen3.5:2b-q4_K_M-ctx16k verified live in 21.68s",
-    "Deficit D1: fresh probe-backed attestation verified with zero unrun labels (digest cf9f8b4f5f25802724b2e0a5acf28c9773af0856ef78ea11d17c7799bd043d86)",
-    "Deficit A: Path A Three-Identity live execution verified (AGI_Signer SCM service, 36 broker socket decisions logged)",
-    "Discovery: Chromium ProcessSingleton exit 21 ceiling under Windows Job Object documented",
-    "Handoffs updated: docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md and Obsidian vault mirror",
-    "Full model-free gate verified green at 77/77 suites; ESTOP strictly engaged; write scope released"
+    "Deficit C empirically CLOSED: induced 429 failed over to capable cloud secondary openai/gpt-4o in 3.43s (output: Paris, 21 in / 1 out)",
+    "Deficit A re-verified live: AGI_AuditSigner running as .\\AGI_Signer, 21 broker socket decisions logged in Task 175 (19 allow, 2 deny)",
+    "Deficit D1 re-verified live: fresh attestation signed and verified with zero unrun labels (digest cf9f8b4f5f25802724b2e0a5acf28c9773af0856ef78ea11d17c7799bd043d86)",
+    "Cohort missions 174-175 executed: Task 174 (caught fabrication fail, 48.6k in / 8.1k out), Task 175 (M7 pass, facts+16, 31.4k in / 11.3k out)",
+    "Corrected RUNBOOK_PATH_A_THREE_IDENTITY.md section 1.1 and Task 171 broker count (35 records) per Claude review",
+    "Enterprise Candidate Status: ACHIEVED (A live, D1 live, C capable failover proven)",
+    "Handoffs authored: docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md and Obsidian vault mirror updated",
+    "Gate green 77/77 suites; ESTOP engaged (True); write scope released"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -39,19 +47,27 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "c7e0b812dcb6aac65b04a1fa70a25e94ac7abc197691fc9e704149d24b0fb2e4"
+      "sha256": "2335b8aef7ab8ff8bbbd652bbb4862ae6bad71d705a84ebdf7b32b14ebd0d06a"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "f910ea93be0d3717b2ea2d8c7ae56c9ff64033f9fb56cab8d4ae54e5b78f4977"
+      "sha256": "0f31ec15d822b6a16281d355e13877b3a1326976feff75283ba6406a71958f0d"
     },
     {
-      "path": "docs/reviews/GEMINI_SUPERVISED_COHORT_AND_EMPIRICAL_PROOFS_2026-09-11.md",
-      "sha256": "b825605db15141e35732ef694c82f8c0b735a447cd236f639e7bd693c5642fba"
+      "path": "docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md",
+      "sha256": "f43a956873da2d48082b010a01a1f33a418f3bb1d39e5dfc24b42d7969277751"
     },
     {
-      "path": "docs/reviews/GEMINI_COHORT_VALIDATION_AND_CONTAINMENT_BOUNDARY_2026-09-08.md",
-      "sha256": "d7112c0e0d9f1d9099fd3d5d28e1794ce1415a3203cb9d4d6e23c92b7f681d93"
+      "path": "docs/RUNBOOK_PATH_A_THREE_IDENTITY.md",
+      "sha256": "554da336de83dc05243265f5e8fcb6542b39df8850183a94ecf2d50f7aaf4f26"
+    },
+    {
+      "path": "workspace/validation/failover_canary.result.json",
+      "sha256": "1a8aa58245a4a10ab26b5c405018aa7e74b00a3aaffb97fb5c6e161cffb278df"
+    },
+    {
+      "path": "workspace/validation/failover_live_canary.py",
+      "sha256": "613215c62a3da33c1953e1771d832786d685e64ee964b528984d64f619eed624"
     },
     {
       "path": "scripts/deploy_three_identity.ps1",

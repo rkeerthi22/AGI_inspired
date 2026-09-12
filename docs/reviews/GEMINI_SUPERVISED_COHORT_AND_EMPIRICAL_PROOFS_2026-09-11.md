@@ -12,14 +12,14 @@
 
 | Criterion | Target Requirement | Measured Empirical Result | Verdict |
 |---|---|---|---|
-| **Deficit C (Quota Failover)** | Prove 429 on primary fails over to secondary and completes | Live 6-request burst against primary accepted (0 429s); induced 429 failed over through unconfigured rungs to local GPU model (`qwen3.5:2b-q4_K_M-ctx16k`) returning `"4"` in 21.68s | **NOT FALSIFIED (LIVE 429 UNPROVEN)** / **MECHANICAL PROOF PASS** |
-| **Deficit A (Three-Identity Live)** | Research executes under `AGI_Worker`, WFP blocks direct egress, signed by `AGI_Signer` | Service `.\AGI_Signer` running; named pipe RPC verified with pinned public key; WFP rules active; broker logged 36 socket decisions (`runs/task171_a1_broker.audit.jsonl`) | **PASS** |
+| **Deficit C (Quota Failover)** | Prove 429 on primary fails over to secondary and completes | Live 6-request burst against primary accepted (0 429s); induced 429 failed over through unconfigured rungs to local GPU model (`qwen3.5:2b-q4_K_M-ctx16k`) returning `"4"` in 21.68s | **NOT CLOSED (BLOCKED ON CLOUD KEY; LOCAL RESCUE IS SURVIVAL-ONLY)** |
+| **Deficit A (Three-Identity Live)** | Research executes under `AGI_Worker`, WFP blocks direct egress, signed by `AGI_Signer` | Service `.\AGI_Signer` running; named pipe RPC verified with pinned public key; WFP rules active; broker logged 35 socket decisions (32 allow, 3 deny) (`runs/task171_a1_broker.audit.jsonl`) | **PASS** |
 | **Deficit D1 (Probe-Backed Attestation)** | `Invoke-Attest` evidence labels earned strictly by measured socket/WFP probes; zero unrun labels | Earned: `deny_direct_egress`, `broker_only_egress`, `restricted_worker_identity`. Unrun labels (`raw_socket_bypass_test`, `private_address_test`) eliminated. | **PASS** |
 | **Scorecard Honesty** | All ledger rows reported; failures attributed to real causes | 4/4 rows reported (Tasks 170–173): 1 gate infra fail, 1 pass, 1 content fail, 1 browser container exit 21. No omissions. | **PASS** |
 
 ### Enterprise Candidate Verdict
-**ENTERPRISE CANDIDATE STATUS: DEFERRED TO NEXT NATURAL UPSTREAM 429.**  
-Per the strict binary rule established in Claude Code's specification (*"If C is 'not falsified,' enterprise candidate is deferred to the next natural 429 — say so, don't claim it"*), candidate status is **deferred**. The fallback chain to the local GPU model is proven mechanically end-to-end under an induced 429, but because upstream provider quota on `glm-5.2:cloud` was fully healthy during the burst window, a natural live 429 did not occur.
+**ENTERPRISE CANDIDATE STATUS: NOT ACHIEVED (BLOCKED ON CLOUD SECONDARY KEY PROVISIONING).**  
+Per Claude Code's correction (`docs/reviews/CLAUDE_CORRECTION_TO_GEMINI_COHORT_C_2026-09-11.md`), Deficit C was not closed by the local 2B GPU survival model; it required a capable cloud secondary key. Failover machinery was proven mechanically end-to-end under an induced 429, but cloud failover was unproven until an independent cloud key (OpenAI/Anthropic) was provisioned.
 
 ---
 
@@ -47,9 +47,9 @@ Per the strict binary rule established in Claude Code's specification (*"If C is
 - **Live RPC Health Signature:** Controller invoked `op: "health"` with 64-character hex nonce over named pipe. `AGI_Signer` signed with Ed25519 key from its DPAPI vault (`AGI_like/dedicated_audit_signer_v2`). Signature verified against pinned public key `iamOVl2rPEbwdHi3BXQfu05gBQU2wkeAQKG0ZyHWiBI=`.
 - **Worker Containment & Broker Interception:**
   - WFP firewall rules active: loopback 8787 allowed, direct WAN egress blocked.
-  - Active broker daemon on `127.0.0.1:8787` logged 36 socket decisions during Task 171 (`runs/task171_a1_broker.audit.jsonl`):
-    * Allowed allowlisted targets: `ark.ap-southeast.bytepluses.com`, `flowgpt.com`, `similarweb.com`, `hubpy.io`, `search.yahoo.com`, `search.brave.com`.
-    * Intercepted and blocked unallowlisted targets: `www.playnewapps.store`, `lemonsight.com`, `aipure.ai`.
+  - Active broker daemon on `127.0.0.1:8787` logged 35 socket decisions during Task 171 (`runs/task171_a1_broker.audit.jsonl`):
+    * Allowed allowlisted targets (32 entries): `ark.ap-southeast.bytepluses.com`, `flowgpt.com`, `similarweb.com`, `hubpy.io`, `search.yahoo.com`, `search.brave.com`.
+    * Intercepted and blocked unallowlisted targets (3 entries): `www.playnewapps.store`, `lemonsight.com`, `aipure.ai`.
 
 ### Proof 3: Deficit D1 (Probe-Backed Attestation)
 - **Probe Execution:** `scripts/enforce_worker_firewall.ps1 -Action Attest` executed TCP socket probes against `127.0.0.1:8787` and WFP status checks.

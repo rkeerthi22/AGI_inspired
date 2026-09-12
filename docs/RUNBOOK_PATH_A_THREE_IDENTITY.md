@@ -11,11 +11,12 @@
 
 ## 1. Architectural Scope & Isolation Ceiling Framing
 
-### 1.1 What Path A Delivers (Capability Progress)
+### 1.1 What Path A Delivers (Identity & Filesystem Separation)
 Path A provisions dedicated, least-privilege Windows user accounts (`AGI_Worker`, `AGI_Controller`, `AGI_Signer`) to replace the prototype in-process restricted token (`BUILTIN\Users` stripped, `S-1-5-12`).
 
-* **Resolves Mission M2 (Chromium exit 21):** Chromium's multi-process broker fails under in-process restricted tokens because it cannot perform token duplication or create standard Job Objects. A dedicated `AGI_Worker` account has a native user profile (`workspace/worker_home/`), allowing Chrome's multi-process architecture to initialize cleanly.
-* **Removes `--no-sandbox`:** Enables Chrome's native multi-process renderer sandbox to be restored, eliminating the in-process compromise documented in Section 7 of [`docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md`](docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md).
+* **Dedicated Identity & Access Control:** Real OS account separation with distinct SIDs, protected DACLs, and WFP firewall filtering enforcing broker-only egress.
+* **Dedicated Worker Profile:** Native filesystem writability under `workspace/worker_home/`.
+* **Does NOT Resolve Mission M2 (Chromium exit 21):** Empirically disproved by Task 173 (which ran under Path A and still exited with code 21 `Failed to create a ProcessSingleton`). Chromium's multi-process named mutex fails across Windows restricted token / Job Object UI boundaries even with a dedicated profile. Running headless Chrome requires `--no-sandbox` (documented in Section 7 of [`docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md`](docs/THREE_IDENTITY_DEPLOYMENT_GUIDE_2026-09-08.md)) or an out-of-process browser daemon. Path A is isolation/identity progress, not browser-capability progress.
 
 ### 1.2 What Path A Does NOT Deliver (Isolation Ceiling Discipline)
 * **Path A is capability progress, not an isolation jump past the kernel.**
