@@ -340,6 +340,18 @@ def replicate_trajectory(
     import trajectory
     if not trajectory.verify_chain(source):
         raise AuditReplicationError("local_trajectory_chain_invalid")
+    env = os.environ if environment is None else environment
+    backend = str(env.get("HARNESS_AUDIT_BACKEND") or "").strip().lower()
+    if backend == "s3" or env.get("HARNESS_AUDIT_S3_BUCKET"):
+        import s3_audit_replication
+        s3_cfg = s3_audit_replication.load_s3_config_from_env(env)
+        return s3_audit_replication.replicate_trajectory_s3(
+            trajectory_path,
+            s3_cfg,
+            sign_checkpoint=sign_checkpoint,
+            verify_checkpoint=verify_checkpoint,
+            now=now,
+        )
     root = _replica_root(config, environment)
     digest = _sha256_file(source)
     task_name = source.name[:-len(".trajectory.jsonl")]
@@ -446,6 +458,16 @@ def audit_state(
         config = load_config(config_path)
         if not enforcement_requested(config, environment):
             return {"ok": False, "error": "audit_enforcement_not_enabled"}
+        env = os.environ if environment is None else environment
+        backend = str(env.get("HARNESS_AUDIT_BACKEND") or "").strip().lower()
+        if backend == "s3" or env.get("HARNESS_AUDIT_S3_BUCKET"):
+            import s3_audit_replication
+            return s3_audit_replication.s3_audit_state(
+                environment=env,
+                verify_checkpoint=verify_checkpoint,
+                signing_state=signing_state,
+                now=now,
+            )
         if signing_state is None:
             import audit_signing
             signing_state = audit_signing.signer_state

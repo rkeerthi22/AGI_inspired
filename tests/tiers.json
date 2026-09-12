@@ -15,7 +15,8 @@
     "test_deliverable_preflight",
     "test_retry_artifacts",
     "test_three_identity_deployment",
-    "test_browser_daemon"
+    "test_browser_daemon",
+    "test_s3_audit_replication"
   ],
   "containment": [
     "test_worker_sandbox",
