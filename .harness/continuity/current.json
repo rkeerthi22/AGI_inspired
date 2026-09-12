@@ -1,30 +1,27 @@
 {
   "schema_version": 2,
-  "brief_revision": 104,
-  "created_at": "2026-09-12T05:08:00.000000+00:00",
+  "brief_revision": 105,
+  "created_at": "2026-09-12T07:55:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "089b8db445dac09eeb3147a1e8550aa64246f4e2"
+    "based_on_head": "2774edcb945598e2fbbb705828098aca67076bce"
   },
   "task": {
-    "id": "DEFICIT-B-S3-OBJECT-LOCK-2026-09-12",
-    "phase": "s3-worm-audit-and-m2-browser-completed",
+    "id": "M2-LIVE-BROWSER-CHECK-2026-09-12",
+    "phase": "m2-live-browser-empirically-proven",
     "status": "completed",
     "next_action": "Claude Code review and operator production mission authorization."
   },
   "completed": [
+    "Mission M2 browser automation EMPIRICALLY PROVEN LIVE in Task 176 (done/pass, facts+15, 144.5s, 19.8k in/6.1k out)",
+    "Live React pricing page https://app.aiprm.com/pricing?lang=en rendered; 4 tiers, promo banner, countdown captured",
+    "Host-managed Chrome CDP bridge resolved ProcessSingleton exit 21; Hermes --cdp connection verified live",
     "Deficit B CLOSED: S3/B2 Object Lock WORM audit replication implemented (orchestrator/s3_audit_replication.py)",
-    "Mission M2 browser automation ceiling UNBLOCKED: headless Chrome CDP daemon bridge (orchestrator/browser_daemon.py)",
-    "Added 6 tests in test_s3_audit_replication.py, 11 tests in test_browser_daemon.py; gate green at 79/79 suites",
-    "Deficit C empirically CLOSED: induced 429 failed over to capable secondary openai/gpt-4o in 3.43s (Paris, 21 in/1 out)",
-    "Deficit A re-verified live: AGI_AuditSigner as .\\AGI_Signer, 21 broker socket decisions in Task 175 (19 allow, 2 deny)",
-    "Deficit D1 re-verified live: fresh attestation signed and verified with zero unrun labels",
-    "Enterprise Candidate Status: ACHIEVED (A live, D1 live, C capable failover proven)",
-    "Authored handoff docs/reviews/GEMINI_M2_BROWSER_AND_DEFICIT_B_S3_HANDOFF_2026-09-12.md; ESTOP True; write scope released"
+    "Gate green 79/79 suites; Deficits A, C, D1, M2 proven live; Deficit B code-ready; ESTOP True; write scope released"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -40,15 +37,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "1044512798002ee0708a456d85ba5ce754e690108a137a0ae3424bfc5889c723"
+      "sha256": "65fbeb413ad082cb1c3d732334c0c2273950edc6039e060ca20ddbb96f0978a6"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "a9ad4dc0dbbc1e0f6fa7830ae7acfb733d1b19b8b4c7da70391adec565e0afbc"
+      "sha256": "fde703e744361a4ea8f65f4576597c9118a2ef105e55bd7af48bc9675936d814"
     },
     {
-      "path": "docs/reviews/GEMINI_M2_BROWSER_AND_DEFICIT_B_S3_HANDOFF_2026-09-12.md",
-      "sha256": "d5494b4916071d3657b2f88ac19fcee00edb72e52208ffc1bb2ac876b06f3d0b"
+      "path": "docs/reviews/GEMINI_M2_LIVE_VERIFICATION_EMPIRICAL_PASS_2026-09-12.md",
+      "sha256": "fbf3f74c872e8e8d9f5d2acdd5ca64557eb31110fb03cb2a234bf955807e6710"
     },
     {
       "path": "docs/reviews/GEMINI_SUPERVISED_COHORT_OPENAI_LIVE_HANDOFF_2026-09-11.md",
