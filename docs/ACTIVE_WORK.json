@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T19:20:00Z",
+  "last_updated": "2026-09-12T20:20:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "First Browser-Enabled Venture Task Execution under Controlled Window (M2 AIPRM Pricing)",
+      "task_id": "VENTURE-M2-DISPATCH-2026-09-12",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-12T20:00:00Z",
+      "last_update": "2026-09-12T20:20:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_VENTURE_TASK185_DISPATCH_AND_INFRA_VERIFICATION_2026-09-12.md",
+      "notes": "COMPLETED. Executed first venture browser-enabled mission under operator-authorized controlled window (Task 185, M2 AIPRM Pricing). Empirical proof established: (1) Live browser egress through proxy broker: 94 total rows in runs/task185_a1_broker.audit.jsonl, including 6 AIPRM rows (4 allow for app.aiprm.com, 2 deny for log02.aiprm.com); (2) Model infrastructure failure trigger validation: critic call failed due to offline local Ollama daemon ([WinError 10061]), cleanly caught by model_infrastructure_failure escalation trigger in policy.py, recorded to workspace/ESCALATIONS.md, and ledger/ledger.db updated to status='infra_failed' with tokens_in=43771, tokens_out=11813; (3) Zero zombies: 0 running tasks in ledger; (4) ESTOP strictly re-engaged (True). Full model-free test gate 79/79 suites green, exit 0. Write scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Fix model_infrastructure_failure Trigger Crash + Clean Task 184 Zombie (Venture-Unblock)",
