@@ -269,7 +269,10 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
         log(f"citation check failed ({e}) -- proceeding without mechanical evidence")
         evidence = []
         evidence_error = str(e)
-    summary = citecheck.summarize(evidence)
+    try:
+        summary = citecheck.summarize(evidence, text=out)
+    except TypeError:
+        summary = citecheck.summarize(evidence)
     usage["citation_fetches"] = len(evidence)
     usage["citation_unique_urls"] = len({e.get("url") for e in evidence if e.get("url")})
     try:
@@ -315,7 +318,10 @@ def run_critic(row: dict, out: str, roles: dict, baseline: bool,
         )
 
     # F134: Abuse bounds on POLICY_DENIED citation relief
-    passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary)
+    try:
+        passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary, text=out, evidence=evidence)
+    except TypeError:
+        passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary)
     if not passed_bounds:
         if "insufficient_verified_sources" in (bounds_reason or ""):
             return _finish("fail", f"MECHANICAL FAIL: {bounds_reason}")

@@ -241,7 +241,10 @@ def run_preflight(
         evidence = citecheck.verify(text, task_id=task_id, attempt=attempt, runs_dir=runs_dir)
     except TypeError:
         evidence = citecheck.verify(text)
-    summary = citecheck.summarize(evidence)
+    try:
+        summary = citecheck.summarize(evidence, text=text)
+    except TypeError:
+        summary = citecheck.summarize(evidence)
     dead_urls: list[dict[str, Any]] = []
 
     for e in evidence:
@@ -274,7 +277,7 @@ def run_preflight(
 
     # 4. F134: Abuse Bounds on POLICY_DENIED citations
     try:
-        passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary)
+        passed_bounds, bounds_reason = citecheck.check_abuse_bounds(summary, text=text, evidence=evidence)
     except Exception:
         passed_bounds, bounds_reason = True, None
 

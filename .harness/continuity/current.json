@@ -1,33 +1,32 @@
 {
   "schema_version": 2,
-  "brief_revision": 115,
-  "created_at": "2026-09-12T22:30:00.000000+00:00",
+  "brief_revision": 117,
+  "created_at": "2026-09-13T12:16:45.804709+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "784d1ea33517ce551b5392f1a8aff7c75bf79f6f"
+    "based_on_head": "af436e1e8aa52c55879f1a8989f6963687276fdc"
   },
   "task": {
-    "id": "VENTURE-COHORT-EXECUTION-2026-09-12",
+    "id": "FINISH-HARNESS-YIELD-TUNING-2026-09-13",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Ready for operator review and ongoing venture task dispatch."
+    "next_action": "Harness finishing complete. Ready for operator review and push (Rule 28)."
   },
   "completed": [
-    "Phase 1 single M2 dispatch (Task 186): PASS (facts+12), grading loop proven, 145 broker rows (9 AIPRM)",
-    "Phase 2 full venture cohort M1-M7 (Tasks 187-193): 3 PASS / 4 FAIL (42.9% yield)",
-    "M1 passed (facts+7), proving pre-submit citation metadata linter on live research",
-    "M2 passed (facts+10) with 97 broker rows (6 AIPRM), proving live browser navigation",
-    "M4 passed on attempt 1, empirically proving linter M4 fix without false positives",
-    "All 7 deliverables verified on disk; honest tokens (307,890 in / 86,828 out) reconciled to ledger",
-    "Zero zombies; 100% critic uptime with local Ollama active; gate 79/79 green; ESTOP strictly re-engaged"
+    "Target 1: Evidence-aware abuse bounds in citecheck.py (exempting honest blocked sources, anti-gaming guard, 4 hermetic tests, 86/86 citecheck pass)",
+    "Target 2: Capability-selection prompt floor in task_runner.py requiring specific tool name + real search API URL",
+    "Target 3: Cohort re-run (Tasks 201-207): 3 PASS / 4 FAIL (42.9% yield). M3 flipped FAIL -> PASS (facts+11), proving Target 1 on live traffic",
+    "M1 passed (facts+8) via preflight auto-repair; M4 passed clean on attempt 1",
+    "Fails honestly attributed to worker content quality (M2 toggle, M5 recovery, M6 hedging, M7 URL omission)",
+    "Tokens 7/7 exact match to ledger (297,758 in / 73,761 out); zero zombies; ESTOP True; gate 79/79 green"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
-    "No push without operator release decision",
+    "No push without operator release decision (Rule 28)",
     "Claim write ownership before edits; no concurrent worktree edits during full gates",
     "Critic stays unrestricted on host (preserves ground truth)",
     "No production keys or host accounts provisioned in test suites"
@@ -39,55 +38,39 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "a3dfc3020f4767fb7d45cbe593a07e2ba4e33e9da4275313894355af590b3f67"
+      "sha256": "4887c379166825917b59021b20009fc4cd40d26a7ab74665123c5e9737df49f4"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "595280706357f7f532ffcd5f2e2230af58db253c8b0846ca1814d2c25327dcfc"
+      "sha256": "72b796878219668aa27ffd256c5e8cbace2c1fca36af94843cf86a03de1fc976"
     },
     {
-      "path": "docs/reviews/GEMINI_VENTURE_FULL_COHORT_REPORT_2026-09-12.md",
-      "sha256": "ba1b029067e5ead9dcd74ed92bca3f364a47ec5f42e7e2a34bf669d671b18ae6"
+      "path": "docs/reviews/GEMINI_COHORT_CORRECTED_YIELD_AND_TUNING_2026-09-13.md",
+      "sha256": "9ddc11e78d8729e33d9459860065b72ef96e2b87f1a3232187651df729bc4502"
     },
     {
-      "path": "docs/reviews/GEMINI_VENTURE_TASK185_DISPATCH_AND_INFRA_VERIFICATION_2026-09-12.md",
-      "sha256": "1224508dc594be8ead443d522a8aa463a06e025827641bd2259ce673c1128023"
+      "path": "docs/GEMINI_TASK_FINISH_HARNESS_2026-09-13.md",
+      "sha256": "4aad40b84261571911b3204c6fe2188cef4c4ad3116e3485b12b1f2f7bd212c9"
     },
     {
-      "path": "docs/reviews/CLAUDE_VERIFICATION_TASK185_FIRST_VENTURE_DISPATCH_2026-09-12.md",
-      "sha256": "e5e6c27b178fdd69b6ca814e8310f1248a865ae5a026b0a2877c7589a48815e6"
+      "path": "docs/reviews/CLAUDE_VERIFICATION_FULL_VENTURE_COHORT_2026-09-13.md",
+      "sha256": "12128dff0d5087ee49e38db44754fa8775d2dae61b832b05c8b4feb3e4e579e6"
     },
     {
-      "path": "docs/GEMINI_TASK_FULL_VENTURE_COHORT_PLAN_2026-09-12.md",
-      "sha256": "c3501c5549d2abe08ccf5eb4dd088a21dc9d982db767e7affe900260ae4e7f89"
+      "path": "orchestrator/citecheck.py",
+      "sha256": "65bb9ed3c09aeb343ef7211269c8a8491af26b0e2e8082dc8a94c651e8d54f4a"
     },
     {
-      "path": "docs/RUNBOOK_PATH_A_THREE_IDENTITY.md",
-      "sha256": "554da336de83dc05243265f5e8fcb6542b39df8850183a94ecf2d50f7aaf4f26"
+      "path": "orchestrator/task_runner.py",
+      "sha256": "f6462a0a5b5978e5e2d1826ff7664ab2fb63d97745d945bd0e3cb22da3423935"
     },
     {
-      "path": "workspace/validation/failover_canary.result.json",
-      "sha256": "1a8aa58245a4a10ab26b5c405018aa7e74b00a3aaffb97fb5c6e161cffb278df"
-    },
-    {
-      "path": "workspace/validation/failover_live_canary.py",
-      "sha256": "613215c62a3da33c1953e1771d832786d685e64ee964b528984d64f619eed624"
-    },
-    {
-      "path": "scripts/deploy_three_identity.ps1",
-      "sha256": "eaeae331960cc97049aad3feccf8544d09635190825ff26d596d3ba979da3595"
+      "path": "tests/test_citecheck.py",
+      "sha256": "02ecbeecb69f3a8cdd6e708eee0f44bed865d411ada6b9dc9cb29b45e2c30a25"
     },
     {
       "path": "scripts/enforce_worker_firewall.ps1",
       "sha256": "f511cef258bfd1a3e056a83f8fb94b035a99d6cc0165f6c98f7f979294b3dc74"
-    },
-    {
-      "path": "tests/test_citecheck.py",
-      "sha256": "2f61243b5201d8460ff78278d87d2ff077fdc94eff65cf5c952d5335c3c56c69"
-    },
-    {
-      "path": "tests/test_three_identity_deployment.py",
-      "sha256": "edb0f772af7d20e71b33808fdcbc4cf863c63523db3dff5b52bb2913a44d530b"
     },
     {
       "path": "tests/tiers.json",

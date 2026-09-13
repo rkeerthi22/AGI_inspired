@@ -321,6 +321,25 @@ def _run_research_task(context: _TaskContext) -> str:
             "your final deliverable must be one you personally opened to a working page this "
             "run."
         )
+    spec_text = str(row.get("spec") or "").lower()
+    spec_type = str(row.get("type") or row.get("spec_type") or "").lower()
+    is_capability_selection = (
+        "capability-selection" in spec_text
+        or "capability_selection" in spec_text
+        or "capability_selection" in spec_type
+        or "most-cited" in spec_text
+        or "most cited" in spec_text
+    )
+    capability_selection_block = ""
+    if is_capability_selection:
+        capability_selection_block = (
+            "\n\nCAPABILITY SELECTION FLOOR: For this task, you MUST identify and name at "
+            "least one specific tool/product with a real, fetched search API URL "
+            "(e.g., HN Algolia hn.algolia.com/api/v1/search?query=... or the tool's canonical page), "
+            "along with retrieval date and confidence level. 'None identified' or 'could not determine' "
+            "without having queried a real search API is an explicit FAIL. Name the most-cited tool "
+            "decisively based on your search results."
+        )
     prompt = (
         f"You are a research analyst. Objective of this research area: {objective}\n\n"
         f"YOUR TASK THIS RUN (one task only):\n{row['spec']}"
@@ -352,6 +371,7 @@ def _run_research_task(context: _TaskContext) -> str:
         f"error text is a FAIL.\n\n"
         f"{fallback_block}\n\n"
         f"{tool_scope_block}"
+        + (f"{capability_selection_block}" if capability_selection_block else "")
         + (f"\n\n{citation_selfcheck_block}" if citation_selfcheck_block else "")
         + (f"\n\n{compliance_block}" if compliance_block else "")
     )

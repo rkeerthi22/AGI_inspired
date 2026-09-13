@@ -476,6 +476,131 @@ with tempfile.TemporaryDirectory() as tmpdir:
             check("Fallback snapshot_source is live_fallback", fallback_snap.get("snapshot_source"), "live_fallback")
             check("Fallback logged WARNING", mock_warn.called, True)
 
+# Test 10 (§1): Evidence-aware abuse bounds - M3 honest bounded failure PASSES
+print("\n--- Test 10 (§1): Evidence-aware abuse bounds - M3 honest bounded failure ---")
+m3_text = (
+    "# Review Sentiment Brief\n\n"
+    "## Attempted Sources & Status\n\n"
+    "| Source URL | Status | Notes |\n"
+    "|---|---|---|\n"
+    "| https://ok1.example.com/review | Successfully fetched | Full review obtained |\n"
+    "| https://ok2.example.com/item | Successfully fetched | Feature breakdown |\n"
+    "| https://denied1.example.com/blog | Direct fetch failed – ProxyError 403 (egress denied) | Could not open |\n"
+    "| https://denied2.example.com/app | Direct fetch failed – ProxyError 403 (egress denied) | Could not open |\n"
+    "| https://denied3.example.com/page | Direct fetch failed – ProxyError 403 (egress denied) | Could not open |\n\n"
+    "**Policy-denied sources (HTTP 403 or proxy block):** denied1.example.com, denied2.example.com, denied3.example.com. "
+    "These are not used as evidence; only the two successfully fetched pages are cited below.\n\n"
+    "## Findings\n"
+    "The tool is rated favorably based on https://ok1.example.com/review (retrieved 2026-09-13, confidence 3) "
+    "and https://ok2.example.com/item (retrieved 2026-09-13, confidence 3).\n"
+)
+ev_ok1 = citecheck.CitationCheckResult(url="https://ok1.example.com/review", host="ok1.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=True, broker_attempt_verified=False, classification=citecheck.CLASSIFICATION_OK)
+ev_ok2 = citecheck.CitationCheckResult(url="https://ok2.example.com/item", host="ok2.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=True, broker_attempt_verified=False, classification=citecheck.CLASSIFICATION_OK)
+ev_d1 = citecheck.CitationCheckResult(url="https://denied1.example.com/blog", host="denied1.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=False, broker_attempt_verified=True, classification=citecheck.CLASSIFICATION_POLICY_DENIED)
+ev_d2 = citecheck.CitationCheckResult(url="https://denied2.example.com/app", host="denied2.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=False, broker_attempt_verified=True, classification=citecheck.CLASSIFICATION_POLICY_DENIED)
+ev_d3 = citecheck.CitationCheckResult(url="https://denied3.example.com/page", host="denied3.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=False, broker_attempt_verified=True, classification=citecheck.CLASSIFICATION_POLICY_DENIED)
+
+m3_evidence = [ev_ok1, ev_ok2, ev_d1, ev_d2, ev_d3]
+m3_summary = citecheck.summarize(m3_evidence, text=m3_text)
+check("M3 summary exempts 3 attempted-and-blocked denials", m3_summary.get("exempt_policy_denied"), 3)
+check("M3 summary effective policy denied is 0", m3_summary.get("effective_policy_denied"), 0)
+m3_pass, m3_reason = citecheck.check_abuse_bounds(m3_summary, text=m3_text, evidence=m3_evidence)
+check("M3 honest bounded failure passes abuse bounds", m3_pass, True)
+check("M3 reason is None on pass", m3_reason, None)
+
+# Test 11 (§1): Anti-gaming guard - evidence citation of denied source cannot be laundered
+print("\n--- Test 11 (§1): Anti-gaming guard ---")
+gaming_text = (
+    "# Findings\n"
+    "PromptBase has an average rating of 4.5 out of 5 from https://denied1.example.com/blog (retrieved 2026-09-13, confidence 2).\n\n"
+    "## Attempted Sources & Status\n"
+    "| Source URL | Status | Notes |\n"
+    "|---|---|---|\n"
+    "| https://ok1.example.com/review | Successfully fetched | Full review obtained |\n"
+    "| https://ok2.example.com/item | Successfully fetched | Feature breakdown |\n"
+    "| https://denied1.example.com/blog | Direct fetch failed – ProxyError 403 (egress denied) | Not used as evidence |\n"
+    "| https://denied2.example.com/app | Direct fetch failed – ProxyError 403 (egress denied) | Not used as evidence |\n"
+    "| https://denied3.example.com/page | Direct fetch failed – ProxyError 403 (egress denied) | Not used as evidence |\n"
+)
+check("denied1 is NOT exempt when cited as evidence inline", citecheck.is_exempt_attempted_blocked(gaming_text, "https://denied1.example.com/blog"), False)
+check("denied2 is exempt when only in status table", citecheck.is_exempt_attempted_blocked(gaming_text, "https://denied2.example.com/app"), True)
+gaming_summary = citecheck.summarize(m3_evidence, text=gaming_text)
+check("Gaming summary exempts only 2 of 3 denied", gaming_summary.get("exempt_policy_denied"), 2)
+check("Gaming summary effective policy denied is 1", gaming_summary.get("effective_policy_denied"), 1)
+
+# Full gaming where all 3 denied sources are cited inline as evidence while claiming in table to be not used
+full_gaming_text = (
+    "# Findings\n"
+    "- Metric A: 4.5/5 from https://denied1.example.com/blog (conf 2)\n"
+    "- Metric B: $20/mo from https://denied2.example.com/app (conf 2)\n"
+    "- Metric C: 100 users from https://denied3.example.com/page (conf 2)\n\n"
+    "## Attempted Sources & Status\n"
+    "| https://denied1.example.com/blog | 403 blocked | Not used as evidence |\n"
+    "| https://denied2.example.com/app | 403 blocked | Not used as evidence |\n"
+    "| https://denied3.example.com/page | 403 blocked | Not used as evidence |\n"
+)
+full_gaming_summary = citecheck.summarize(m3_evidence, text=full_gaming_text)
+check("Full gaming summary exempts 0 denied sources", full_gaming_summary.get("exempt_policy_denied"), 0)
+gaming_pass, gaming_reason = citecheck.check_abuse_bounds(full_gaming_summary, text=full_gaming_text, evidence=m3_evidence)
+check("Full gaming fails abuse bounds", gaming_pass, False)
+check("Full gaming fails on high_policy_denial_count", "high_policy_denial_count" in (gaming_reason or ""), True)
+
+# Test 12 (§1): Real abuse still fails (3 denied sources cited as evidence, no status table)
+print("\n--- Test 12 (§1): Real abuse still fails ---")
+real_abuse_text = (
+    "# Findings\n"
+    "- Metric A: https://denied1.example.com/blog\n"
+    "- Metric B: https://denied2.example.com/app\n"
+    "- Metric C: https://denied3.example.com/page\n"
+)
+real_abuse_summary = citecheck.summarize(m3_evidence, text=real_abuse_text)
+real_abuse_pass, real_abuse_reason = citecheck.check_abuse_bounds(real_abuse_summary, text=real_abuse_text, evidence=m3_evidence)
+check("Real abuse fails abuse bounds", real_abuse_pass, False)
+check("Real abuse reason names high_policy_denial_count", "high_policy_denial_count" in (real_abuse_reason or ""), True)
+
+# Test 13 (§1): M5 re-evaluation (2/6 denied: pass if attempted-sources declaration, fail if evidence)
+print("\n--- Test 13 (§1): M5 re-evaluation ---")
+ev_ok3 = citecheck.CitationCheckResult(url="https://ok3.example.com/item", host="ok3.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=True, broker_attempt_verified=False, classification=citecheck.CLASSIFICATION_OK)
+ev_ok4 = citecheck.CitationCheckResult(url="https://ok4.example.com/item", host="ok4.example.com", reachable_on_host=True, http_status=200, worker_policy_permitted=True, broker_attempt_verified=False, classification=citecheck.CLASSIFICATION_OK)
+m5_evidence = [ev_ok1, ev_ok2, ev_ok3, ev_ok4, ev_d1, ev_d2]
+
+# Case 13a: 2 denied are in attempted-sources declaration -> passes
+m5_honest_text = (
+    "# Verification Report\n\n"
+    "## Evidence\n"
+    "- https://ok1.example.com/review (confidence 3)\n"
+    "- https://ok2.example.com/item (confidence 3)\n"
+    "- https://ok3.example.com/item (confidence 3)\n"
+    "- https://ok4.example.com/item (confidence 3)\n\n"
+    "## Attempted Sources\n"
+    "| URL | Status |\n"
+    "| https://denied1.example.com/blog | Egress-denied 403 (could not open) |\n"
+    "| https://denied2.example.com/app | Egress-denied 403 (could not open) |\n"
+)
+m5_honest_summary = citecheck.summarize(m5_evidence, text=m5_honest_text)
+check("M5 honest summary exempts both policy denials", m5_honest_summary.get("exempt_policy_denied"), 2)
+check("M5 honest summary effective policy denials is 0", m5_honest_summary.get("effective_policy_denied"), 0)
+m5_honest_pass, m5_honest_reason = citecheck.check_abuse_bounds(m5_honest_summary, text=m5_honest_text, evidence=m5_evidence)
+check("M5 honest declaration passes abuse bounds", m5_honest_pass, True)
+
+# Case 13b: 2 denied are cited as evidence in findings -> fails on 2/6 (33%) > 25%
+m5_evidence_text = (
+    "# Verification Report\n\n"
+    "## Evidence\n"
+    "- https://ok1.example.com/review (confidence 3)\n"
+    "- https://ok2.example.com/item (confidence 3)\n"
+    "- https://ok3.example.com/item (confidence 3)\n"
+    "- https://ok4.example.com/item (confidence 3)\n"
+    "- https://denied1.example.com/blog (retrieved 2026-09-13, confidence 1)\n"
+    "- https://denied2.example.com/app (retrieved 2026-09-13, confidence 1)\n"
+)
+m5_evidence_summary = citecheck.summarize(m5_evidence, text=m5_evidence_text)
+check("M5 evidence summary exempts 0 policy denials", m5_evidence_summary.get("exempt_policy_denied"), 0)
+check("M5 evidence summary effective policy denials is 2", m5_evidence_summary.get("effective_policy_denied"), 2)
+m5_evidence_pass, m5_evidence_reason = citecheck.check_abuse_bounds(m5_evidence_summary, text=m5_evidence_text, evidence=m5_evidence)
+check("M5 evidence citations fail abuse bounds", m5_evidence_pass, False)
+check("M5 evidence citations fail on high_policy_denial_fraction", "high_policy_denial_fraction" in (m5_evidence_reason or ""), True)
+
 print(f"\n{checks - len(failures)}/{checks} checks passed")
 if failures:
     print("FAILURES:")

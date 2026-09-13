@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-12T22:25:00Z",
+  "last_updated": "2026-09-13T10:20:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Finish Harness: §1 Evidence-Aware Abuse Bounds (M3 False-Fail) + §2 M6 Capability Floor + §3 Cohort Re-Run & Corrected Yield",
+      "task_id": "FINISH-HARNESS-YIELD-TUNING-2026-09-13",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-13T10:20:00Z",
+      "last_update": "2026-09-13T12:15:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_COHORT_CORRECTED_YIELD_AND_TUNING_2026-09-13.md",
+      "notes": "COMPLETED. Executed docs/GEMINI_TASK_FINISH_HARNESS_2026-09-13.md: (1) Landed evidence-aware abuse bounds in orchestrator/citecheck.py, exempting honest blocked-source declarations and preserving anti-gaming + grounding invariants, with 4 hermetic unit tests (86/86 in test_citecheck.py); (2) Landed capability-selection prompt floor in orchestrator/task_runner.py; (3) Dispatched full cohort under controlled window (Tasks 201-207): 3 PASS / 4 FAIL (42.9% yield). M3 flipped FAIL -> PASS (facts+11), proving Target 1 on live traffic. Fails honestly attributed to worker content quality (M2 toggle, M5 recovery, M6 hedging, M7 URL). Tokens 7/7 matched to ledger (297,758 in / 73,761 out). Gate 79/79 green. ESTOP True. Scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Execute Venture Cohort Plan: Phase 1 (Kill-Assumption Single M2 Dispatch) & Phase 2 (Full M1-M7 Cohort)",

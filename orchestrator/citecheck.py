@@ -678,88 +678,29 @@ def is_dead(e: dict | CitationCheckResult) -> bool:
     return True
 
 
-def summarize(evidence: list[dict | CitationCheckResult]) -> dict:
-    checked = len(evidence)
-    dead = sum(1 for e in evidence if is_dead(e))
-    ok = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_OK)
-    policy_denied = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_POLICY_DENIED)
-    unreachable = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_UNREACHABLE)
-    lit_checked = [e for e in evidence if e.get("literal") and e.get("reachable")]
-    lit_missing = sum(1 for e in lit_checked if e.get("literal_found") is False)
-    return {
-        "checked": checked,
-        "ok": ok,
-        "dead": dead,
-        "policy_denied": policy_denied,
-        "unreachable": unreachable,
-        "dead_frac": round(dead / checked, 2) if checked else 0.0,
-        "policy_denied_frac": round(policy_denied / checked, 2) if checked else 0.0,
-        "literal_checked": len(lit_checked),
-        "literal_missing": lit_missing,
-    }
-
-
-def is_hard_fail(summary: dict) -> bool:
-    return (summary["checked"] >= MIN_CHECKED_FOR_HARD_FAIL
-            and summary["dead_frac"] > DEAD_FRAC_HARD_FAIL)
-
-
-def evidence_block(evidence: list[dict | CitationCheckResult]) -> str:
-    """Compact text for the critic prompt — structured facts only, never raw
-    fetched page content (see module docstring / F10)."""
-    if not evidence:
-        return "(no citations found to verify)"
-    lines = []
-    for e in evidence[:MAX_CITATIONS]:
-        classification = e.get("classification")
-        if classification == CLASSIFICATION_POLICY_DENIED:
-            status = "POLICY_DENIED (verified live on host; blocked by worker egress policy)"
-        elif classification == CLASSIFICATION_UNREACHABLE:
-            status = "UNVERIFIABLE (reachable on host, but worker never attempted via broker; no policy-denial relief)"
-        elif classification == CLASSIFICATION_OK:
-            status = "OK"
-        elif classification == CLASSIFICATION_DEAD or is_dead(e):
-            status = f"DEAD ({e.get('http_status') or e.get('error')})"
-        elif e.get("reachable"):
-            status = "OK"
-        else:
-            status = f"BLOCKED ({e.get('http_status') or e.get('error')})"
-
-        lit = f", claimed value '{e.get('literal')}' found on page: {e.get('literal_found')}" \
-            if e.get("literal") and (classification == CLASSIFICATION_OK or (classification is None and e.get("reachable"))) else ""
-        lines.append(f"- {e.get('url')}: {status}{lit}")
-    return "\n".join(lines)
-
-
-def check_abuse_bounds(summary: dict) -> tuple[bool, str | None]:
-    """Check Gap 3 abuse bounds for POLICY_DENIED and UNREACHABLE citations (F134, F135).
-
-    Bounds:
-    1. Minimum 2 OK citations required when any non-OK citations (policy_denied or unreachable) are present.
-    2. Maximum 2 absolute POLICY_DENIED citations.
-    3. Maximum 25% POLICY_DENIED fraction of total citations.
-    """
-    checked = summary.get("checked", 0)
-    policy_denied = summary.get("policy_denied", 0)
-    unreachable = summary.get("unreachable", 0)
-    ok = summary.get("ok", 0)
-
-    non_ok = policy_denied + unreachable
-    if non_ok > 0 and ok < MIN_OK_CITATIONS:
-        return False, f"insufficient_verified_sources: found {ok} OK citations, minimum {MIN_OK_CITATIONS} required"
-
-    if policy_denied > 0:
-        if policy_denied > MAX_POLICY_DENIED_COUNT:
-            return False, f"high_policy_denial_count: {policy_denied} policy-denied citations exceeds maximum allowed ({MAX_POLICY_DENIED_COUNT})"
-        if checked > 0 and (policy_denied / checked > MAX_POLICY_DENIED_FRAC):
-            frac = policy_denied / checked
-            return False, f"high_policy_denial_fraction: {policy_denied}/{checked} ({frac:.0%}) exceeds {MAX_POLICY_DENIED_FRAC:.0%} ceiling"
-
-    return True, None
-
-
 _CONF_3_RE = re.compile(r'\b(?:confidence|conf)\s*[:=]?\s*3\b', re.IGNORECASE)
+_CONF_2_OR_3_RE = re.compile(r'\b(?:confidence|conf)\s*[:=]?\s*[23]\b', re.IGNORECASE)
 _QUOTE_RE = re.compile(r'["“][^"”\n]{3,}["”]')
+
+_BLOCKED_STATUS_MARKERS = re.compile(
+    r'\b(?:'
+    r'blocked|egress[ -]denied|policy[ -]denied|proxy[ -]?error|'
+    r'http\s*403|403\b|unavailable|fetch[ -]failed|failed[ -]to[ -]fetch|'
+    r'could[ -]not[ -]open|failed[ -]to[ -]open|unreachable|'
+    r'not[ -]used[ -]as[ -]evidence|not[ -]cited[ -]as[ -]evidence|'
+    r'attempted[ -]only|not[ -]directly[ -]fetched'
+    r')\b',
+    re.IGNORECASE
+)
+
+_EVIDENCE_CLAIM_MARKERS = re.compile(
+    r'\b(?:'
+    r'confidence\s*[:=]?\s*[23]|conf\s*[:=]?\s*[23]|'
+    r'rating\s*[:=]?\s*\d|score\s*[:=]?\s*\d|\$\s*\d+|\b\d+\s*out of\s*5\b|'
+    r'\b\d+(?:\.\d+)?\s*\/\s*5\b'
+    r')\b',
+    re.IGNORECASE
+)
 
 
 def _standalone_url_pat(url: str) -> re.Pattern:
@@ -826,6 +767,186 @@ def _find_url_context(text: str, url: str) -> str:
     """Backward-compatible helper returning the primary context for url."""
     contexts = _find_url_contexts(text, url)
     return contexts[0] if contexts else ""
+
+
+def is_attempted_blocked_context(ctx: str) -> bool:
+    """Check whether a single text context is an honest attempted-and-blocked declaration."""
+    if not ctx:
+        return False
+    if not _BLOCKED_STATUS_MARKERS.search(ctx):
+        return False
+    clean = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', ctx)
+    if _CONF_2_OR_3_RE.search(clean):
+        return False
+    if _QUOTE_RE.search(clean) or re.search(r'^\s*>[ \t]+["“]?[^"\n]{3,}["”]?', clean, re.MULTILINE):
+        return False
+    if _EVIDENCE_CLAIM_MARKERS.search(clean):
+        return False
+    return True
+
+
+def is_exempt_attempted_blocked(text: str, url: str) -> bool:
+    """Determine if a policy-denied URL is exempt from abuse bounds.
+
+    A policy-denied URL is exempt IF AND ONLY IF:
+    1. It appears in at least one context in `text`.
+    2. At least one context is an honest attempted-and-blocked declaration.
+    3. EVERY context where the URL appears is an honest attempted-and-blocked declaration.
+       (Anti-gaming guard: if the URL is cited as evidence for any factual claim anywhere
+       in the deliverable, it is NOT exempt, even if also declared in a status table).
+    """
+    if not text or not url:
+        return False
+    contexts = _find_url_contexts(text, url)
+    if not contexts:
+        if url.endswith("/"):
+            contexts = _find_url_contexts(text, url.rstrip("/"))
+        else:
+            contexts = _find_url_contexts(text, url + "/")
+    if not contexts:
+        return False
+
+    has_blocked_decl = False
+    for ctx in contexts:
+        if is_attempted_blocked_context(ctx):
+            has_blocked_decl = True
+        else:
+            return False
+    return has_blocked_decl
+
+
+def count_exempt_policy_denials(
+    text: str,
+    evidence: list[dict | CitationCheckResult],
+) -> int:
+    """Count policy-denied citations in evidence that are strictly attempted-and-blocked
+    declarations in text and never cited as factual evidence.
+    """
+    if not text or not evidence:
+        return 0
+
+    exempt_count = 0
+    for e in evidence:
+        cls_name = getattr(e, "classification", None) or (e.get("classification") if isinstance(e, dict) else None)
+        if cls_name != CLASSIFICATION_POLICY_DENIED:
+            continue
+        url = getattr(e, "url", None) or (e.get("url") if isinstance(e, dict) else "")
+        if not url:
+            continue
+        if is_exempt_attempted_blocked(text, url):
+            exempt_count += 1
+
+    return exempt_count
+
+
+def summarize(
+    evidence: list[dict | CitationCheckResult],
+    text: str | None = None,
+) -> dict:
+    checked = len(evidence)
+    dead = sum(1 for e in evidence if is_dead(e))
+    ok = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_OK)
+    policy_denied = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_POLICY_DENIED)
+    unreachable = sum(1 for e in evidence if e.get("classification") == CLASSIFICATION_UNREACHABLE)
+    lit_checked = [e for e in evidence if e.get("literal") and e.get("reachable")]
+    lit_missing = sum(1 for e in lit_checked if e.get("literal_found") is False)
+
+    exempt_policy_denied = 0
+    if text and policy_denied > 0:
+        exempt_policy_denied = count_exempt_policy_denials(text, evidence)
+
+    effective_policy_denied = max(0, policy_denied - exempt_policy_denied)
+
+    return {
+        "checked": checked,
+        "ok": ok,
+        "dead": dead,
+        "policy_denied": policy_denied,
+        "unreachable": unreachable,
+        "exempt_policy_denied": exempt_policy_denied,
+        "effective_policy_denied": effective_policy_denied,
+        "dead_frac": round(dead / checked, 2) if checked else 0.0,
+        "policy_denied_frac": round(policy_denied / checked, 2) if checked else 0.0,
+        "effective_policy_denied_frac": round(effective_policy_denied / checked, 2) if checked else 0.0,
+        "literal_checked": len(lit_checked),
+        "literal_missing": lit_missing,
+    }
+
+
+def is_hard_fail(summary: dict) -> bool:
+    return (summary["checked"] >= MIN_CHECKED_FOR_HARD_FAIL
+            and summary["dead_frac"] > DEAD_FRAC_HARD_FAIL)
+
+
+def evidence_block(evidence: list[dict | CitationCheckResult]) -> str:
+    """Compact text for the critic prompt — structured facts only, never raw
+    fetched page content (see module docstring / F10)."""
+    if not evidence:
+        return "(no citations found to verify)"
+    lines = []
+    for e in evidence[:MAX_CITATIONS]:
+        classification = e.get("classification")
+        if classification == CLASSIFICATION_POLICY_DENIED:
+            status = "POLICY_DENIED (verified live on host; blocked by worker egress policy)"
+        elif classification == CLASSIFICATION_UNREACHABLE:
+            status = "UNVERIFIABLE (reachable on host, but worker never attempted via broker; no policy-denial relief)"
+        elif classification == CLASSIFICATION_OK:
+            status = "OK"
+        elif classification == CLASSIFICATION_DEAD or is_dead(e):
+            status = f"DEAD ({e.get('http_status') or e.get('error')})"
+        elif e.get("reachable"):
+            status = "OK"
+        else:
+            status = f"BLOCKED ({e.get('http_status') or e.get('error')})"
+
+        lit = f", claimed value '{e.get('literal')}' found on page: {e.get('literal_found')}" \
+            if e.get("literal") and (classification == CLASSIFICATION_OK or (classification is None and e.get("reachable"))) else ""
+        lines.append(f"- {e.get('url')}: {status}{lit}")
+    return "\n".join(lines)
+
+
+def check_abuse_bounds(
+    summary: dict,
+    text: str | None = None,
+    evidence: list[dict | CitationCheckResult] | None = None,
+) -> tuple[bool, str | None]:
+    """Check Gap 3 abuse bounds for POLICY_DENIED and UNREACHABLE citations (F134, F135).
+
+    Bounds:
+    1. Minimum 2 OK citations required when any non-OK citations (policy_denied or unreachable) are present.
+    2. Maximum 2 absolute POLICY_DENIED citations.
+    3. Maximum 25% POLICY_DENIED fraction of total citations.
+
+    Evidence-aware exemption (§1, 2026-09-13):
+    A policy-denied source declared in an attempted-sources / status table and explicitly
+    marked as blocked/unavailable/not-used-as-evidence does NOT count toward the abuse bounds,
+    provided it is never cited as factual evidence anywhere in the deliverable.
+    """
+    checked = summary.get("checked", 0)
+    policy_denied = summary.get("policy_denied", 0)
+    unreachable = summary.get("unreachable", 0)
+    ok = summary.get("ok", 0)
+
+    # 1. Primary grounding invariant: min 2 OK citations whenever non-OK sources present
+    non_ok = policy_denied + unreachable
+    if non_ok > 0 and ok < MIN_OK_CITATIONS:
+        return False, f"insufficient_verified_sources: found {ok} OK citations, minimum {MIN_OK_CITATIONS} required"
+
+    # 2. Evidence-aware effective policy denials
+    exempt_denied = summary.get("exempt_policy_denied", 0)
+    if not exempt_denied and text and evidence and policy_denied > 0:
+        exempt_denied = count_exempt_policy_denials(text, evidence)
+
+    effective_policy_denied = max(0, policy_denied - exempt_denied)
+
+    if effective_policy_denied > 0:
+        if effective_policy_denied > MAX_POLICY_DENIED_COUNT:
+            return False, f"high_policy_denial_count: {effective_policy_denied} policy-denied citations exceeds maximum allowed ({MAX_POLICY_DENIED_COUNT})"
+        if checked > 0 and (effective_policy_denied / checked > MAX_POLICY_DENIED_FRAC):
+            frac = effective_policy_denied / checked
+            return False, f"high_policy_denial_fraction: {effective_policy_denied}/{checked} ({frac:.0%}) exceeds {MAX_POLICY_DENIED_FRAC:.0%} ceiling"
+
+    return True, None
 
 
 def detect_fabrication(
