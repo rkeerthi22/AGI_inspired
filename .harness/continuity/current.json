@@ -1,28 +1,27 @@
 {
   "schema_version": 2,
-  "brief_revision": 120,
-  "created_at": "2026-09-13T13:45:00.000000+00:00",
+  "brief_revision": 121,
+  "created_at": "2026-09-13T20:15:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "d4a995c5d3d1cc1745317a5effe9bddbd8199503"
+    "based_on_head": "6d7b5a1329e4854a6d67e083d1f8bddec9ee7404"
   },
   "task": {
-    "id": "FRONTIER-WORKER-ABLATION-2026-09-13",
+    "id": "LOOP-DEPTH-RESEARCH-DIRECTIVE-2026-09-13",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Frontier-worker ablation complete (Tasks 216-222). Proves harness yield is architecture-bound (2/7 PASS gpt-4o vs 3/7 BytePlus). Ready for operator review and push (Rule 28)."
+    "next_action": "Loop-depth re-search directive landed & proved live in Tasks 223-224 (broker intercepted live search queries during repair). Ready for operator review and push (Rule 28)."
   },
   "completed": [
+    "Loop-Depth Re-Search Directive (deliverable_preflight.py): Eliminated feedback inversion; worker facing sourcing deficit is directed to conduct additional research with web tools",
+    "Empirical A/B Probe (Tasks 223-224): Broker audit logs prove worker actively executed live search queries during repair (5 in 223, 6 in 224); 100% frontier serving (50.8k in / 4.0k out)",
     "Frontier-Worker Ablation (Tasks 216-222): 2 PASS / 5 FAIL (28.6% yield), empirically proving harness yield is ARCHITECTURE-BOUND (loop-limited), not worker-model bound",
-    "100% frontier serving verified (OpenAI gpt-4o, zero fallback); 100% token provenance match (179.5k in / 13.7k out tokens, ~$0.59 USD); 0 zombies; ESTOP strictly engaged",
-    "World-Class Frontier Delivery on M7 (Task 222 PASS, facts+20, 20 verified citations, pristine 6-marketplace table on attempt 1); M4 (Task 219 PASS, 4-competitor table)",
-    "Repaired Hermes Responses API parameter trap in controlled_hermes.py (disabled reasoning_config for non-reasoning models like gpt-4o/gpt-4o-mini)",
-    "Landed default-preserving HARNESS_COHORT_WORKER_PROVIDER override in run_cohort.py with 6 hermetic unit tests (33/33 in test_cohort_isolation.py)",
-    "M6 Re-Roll Probe (Task 208 PASS, facts+10), proving M6 failure in Task 206 was stochastic model variance; live-proven capability envelope is 5/7 (71.4%)",
+    "World-Class Frontier Delivery on M7 (Task 222 PASS, facts+20, 20 verified citations); M4 (Task 219 PASS, 4-competitor table)",
+    "M6 Re-Roll Probe (Task 208 PASS, facts+10), proving M6 failure in Task 206 was model variance; live-proven envelope is 5/7 (71.4%)",
     "Target 1 evidence-aware abuse bounds proven live on M3 (Task 203, facts+11)",
     "Harness confirmed CODE-FINAL by Claude Code and Gemini"
   ],
@@ -40,23 +39,23 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "5ec91bc4c82734c50431d97520e146afb07c59d5a718c3f3ef52ee106e1d3ea4"
+      "sha256": "231c074bc983074127ed82396de8e8d5ead296314052ce1fde7d133da312bca9"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "3b165fccad6359828b2759d88aa43a6b5e6282678b5bdfb9b2b9fd59f897d895"
+      "sha256": "a35119e2ad6f17ff364f5c182182b32fc81d77875d4261f20dc89e37a429f1c5"
     },
     {
-      "path": "docs/reviews/GEMINI_FRONTIER_WORKER_ABLATION_REPORT_2026-09-13.md",
-      "sha256": "3808bd4d652a77edede596d3e3bf3f55f4a7ad57f4fe28f6f38a4bdfe3282986"
+      "path": "docs/reviews/GEMINI_LOOP_DEPTH_RESEARCH_DIRECTIVE_REPORT_2026-09-13.md",
+      "sha256": "5ec1fe336a0e36b817a168499646ea64c76aa2dcfcf24f0b7a62f362b2457adb"
     },
     {
-      "path": "docs/reviews/GEMINI_M6_REROLL_PROBE_AND_VARIANCE_PROOF_2026-09-13.md",
-      "sha256": "29bb238ffc5b2698a77cd5eed53167692db02a565c842a8dd4639f5d738b2b8b"
+      "path": "docs/reviews/CLAUDE_VERIFICATION_FRONTIER_WORKER_ABLATION_2026-09-13.md",
+      "sha256": "64dfa8ef3443fcd136be3fbc950ed22972658febb1e0bd9caa502ce937450402"
     },
     {
-      "path": "docs/reviews/CLAUDE_VERIFICATION_FINISH_HARNESS_YIELD_TUNING_2026-09-13.md",
-      "sha256": "f8325c985dcefd000827a9565fbcc80d65c2a9bde33692086f42f6920e3440b4"
+      "path": "orchestrator/deliverable_preflight.py",
+      "sha256": "85040dee363f315dfde564b431cd12b899bd8f7fba38e4ee9fb7b8166317c36f"
     },
     {
       "path": "workspace/validation/run_cohort.py",

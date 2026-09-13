@@ -297,7 +297,10 @@ def run_preflight(
             )
 
     if not passed_bounds and bounds_reason:
-        schema_issues.append(f"Policy denial bounds exceeded: {bounds_reason}")
+        if bounds_reason.startswith("insufficient_verified_sources:"):
+            schema_issues.append(f"Insufficient verified sources: {bounds_reason}")
+        else:
+            schema_issues.append(f"Policy denial bounds exceeded: {bounds_reason}")
 
     passed = not (cite_failed or schema_issues or len(fabrications) > 0 or not passed_bounds)
     repair_feedback = None
@@ -330,7 +333,7 @@ def format_repair_feedback(
 
     if dead_urls:
         lines.append("\n**Dead Citation URLs (HTTP 404/410 or Unreachable):**")
-        lines.append("The following cited URLs could not be reached. Replace them with verified active URLs or remove the dead link and state the fact clearly:")
+        lines.append("These sources were unreachable or blocked (HTTP errors listed below). Do NOT retry the same URLs — search for DIFFERENT, independent sources that provide the necessary evidence:")
         for d in dead_urls:
             url = d.get("url", "")
             err = d.get("error", "unreachable")
@@ -354,6 +357,7 @@ def format_repair_feedback(
     lines.append("\n**Action Required:**")
     has_fabrication = any("Fabrication detected" in s for s in schema_issues) or bool(fabrications)
     has_policy_bounds = any("Policy denial bounds exceeded" in s for s in schema_issues)
+    has_insufficient_sources = any("insufficient_verified_sources" in s for s in schema_issues)
     has_citation_metadata = any("Citation formatting" in s for s in schema_issues)
     has_speculative = any("speculative" in s.lower() or "not publicly disclosed" in s.lower() for s in schema_issues)
 
@@ -361,6 +365,17 @@ def format_repair_feedback(
         lines.append("- For Fabrication / Un-attempted URLs: You MUST remove all quotation marks (including double quotes \"\", curly quotes “”, single quotes '', and blockquotes >) around any text citing sources that were policy-denied, un-attempted, or search snippets. Express the facts entirely in your own words without quotation marks, or remove the un-attempted URL citations.")
     if has_policy_bounds:
         lines.append("- For Policy Denial bounds: You MUST cite at most 2 policy-denied / aggregator sources. Remove extraneous aggregator links to satisfy the <=25% and <=2 policy denial ceiling.")
+    if has_insufficient_sources:
+        n, m = 0, 2
+        for s in schema_issues:
+            if "insufficient_verified_sources" in s:
+                match = re.search(r"found\s+(\d+)\s+OK(?:\s+citations)?,?\s*minimum\s+(\d+)", s)
+                if match:
+                    n = int(match.group(1))
+                    m = int(match.group(2))
+                    break
+        needed = max(1, m - n)
+        lines.append(f"- For Insufficient Verified Sources: Your deliverable has {n} verified (OK) source(s) but the minimum is {m}. You must conduct ADDITIONAL research NOW — use the web tools to search for and fetch at least {needed} NEW independent source(s) that corroborate the claim, then cite each with its URL, retrieval date, and confidence. Do NOT merely restate or reformat the sources you already have. Do NOT remove sources to lower the bar — find more. If after a genuine additional search no further independent source exists, state that explicitly with confidence 1 and which queries you tried.")
     if has_citation_metadata:
         lines.append("- For Citation Formatting: Ensure EVERY cited source, URL, and fetch attempt includes BOTH an explicit retrieval date (e.g. 'retrieved YYYY-MM-DD') and an explicit confidence level (e.g. 'confidence: 2' or 'confidence: high/medium/low').")
     if has_speculative:

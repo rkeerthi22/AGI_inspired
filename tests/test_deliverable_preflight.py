@@ -866,6 +866,60 @@ def test_schema_linter_m7_regression_fails_with_bootstrapped_no_npd():
     assert any("Bootstrapped" in iss for iss in issues)
 
 
+def test_repair_feedback_insufficient_sources_emits_research_directive():
+    """Loop-depth: preflight repair feedback emits explicit re-search directive for insufficient sources."""
+    schema_issues = ["Insufficient verified sources: insufficient_verified_sources: found 1 OK citations, minimum 2 required"]
+    feedback = format_repair_feedback(dead_urls=[], schema_issues=schema_issues)
+    assert "For Insufficient Verified Sources:" in feedback
+    assert "Your deliverable has 1 verified (OK) source(s) but the minimum is 2" in feedback
+    assert "conduct ADDITIONAL research NOW — use the web tools to search for and fetch at least 1 NEW independent source(s)" in feedback
+    assert "Do NOT remove sources to lower the bar — find more" in feedback
+    # Must NOT trigger the policy bounds / remove aggregator links branch
+    assert "For Policy Denial bounds:" not in feedback
+
+
+def test_repair_feedback_fabrication_only_does_not_emit_research_directive():
+    """Loop-depth: fabrication-only issue emits removal directive without re-search directive."""
+    fabrications = [{
+        "url": "https://unattempted.com/claim",
+        "classification": "UNREACHABLE",
+        "offending_quotes": ["leading AI tool"]
+    }]
+    schema_issues = ["Fabrication detected: worker asserted verbatim quotes for un-attempted source (https://unattempted.com/claim)."]
+    feedback = format_repair_feedback(dead_urls=[], schema_issues=schema_issues, fabrications=fabrications)
+    assert "For Fabrication / Un-attempted URLs:" in feedback
+    assert "REMOVE these URL citations" in feedback
+    assert "For Insufficient Verified Sources:" not in feedback
+    assert "ADDITIONAL research" not in feedback
+
+
+def test_repair_feedback_both_fabrication_and_insufficient_sources_emits_both():
+    """Loop-depth: deliverable with both fabrication and sourcing deficit emits both directives without collision."""
+    fabrications = [{
+        "url": "https://unattempted.com/claim",
+        "classification": "UNREACHABLE",
+        "offending_quotes": ["leading AI tool"]
+    }]
+    schema_issues = [
+        "Fabrication detected: worker asserted verbatim quotes for un-attempted source (https://unattempted.com/claim).",
+        "Insufficient verified sources: insufficient_verified_sources: found 0 OK citations, minimum 2 required"
+    ]
+    feedback = format_repair_feedback(dead_urls=[], schema_issues=schema_issues, fabrications=fabrications)
+    assert "For Fabrication / Un-attempted URLs:" in feedback
+    assert "REMOVE these URL citations" in feedback
+    assert "For Insufficient Verified Sources:" in feedback
+    assert "Your deliverable has 0 verified (OK) source(s) but the minimum is 2" in feedback
+    assert "fetch at least 2 NEW independent source(s)" in feedback
+
+
+def test_dead_url_feedback_pivots_to_different_sources():
+    """Loop-depth: dead-URL feedback instructs worker to find DIFFERENT sources rather than retrying same URLs."""
+    dead_urls = [{"url": "https://flowgpt.com/403", "error": "HTTP 403"}]
+    feedback = format_repair_feedback(dead_urls=dead_urls, schema_issues=[])
+    assert "These sources were unreachable or blocked" in feedback
+    assert "Do NOT retry the same URLs — search for DIFFERENT, independent sources" in feedback
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -902,5 +956,9 @@ if __name__ == "__main__":
     test_pinpoint_unattempted_url_repair_feedback_m5()
     test_schema_linter_m4_passes_with_not_available_placeholder()
     test_schema_linter_m7_regression_fails_with_bootstrapped_no_npd()
-    print("ALL 35 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_repair_feedback_insufficient_sources_emits_research_directive()
+    test_repair_feedback_fabrication_only_does_not_emit_research_directive()
+    test_repair_feedback_both_fabrication_and_insufficient_sources_emits_both()
+    test_dead_url_feedback_pivots_to_different_sources()
+    print("ALL 39 DELIVERABLE PREFLIGHT TESTS PASSED!")
 
