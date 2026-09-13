@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-13T10:20:00Z",
+  "last_updated": "2026-09-13T12:35:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Execute M6 Re-Roll Probe (Controlled Window) to Isolate Variance vs Ceiling",
+      "task_id": "M6-REROLL-PROBE-2026-09-13",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-13T12:35:00Z",
+      "last_update": "2026-09-13T12:45:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_M6_REROLL_PROBE_AND_VARIANCE_PROOF_2026-09-13.md",
+      "notes": "COMPLETED. Executed operator-authorized M6 re-roll probe (Task 208) under controlled window (--only M6). Result: PASS (facts+10, 149.1s). Preflight auto-repair 1/2 succeeded; tool cc-hindsight named with real HN Algolia API query; independent sources dev.to & arti-trends.com cited; tokens (37,600 in / 8,802 out) 100% matched to ledger; 0 zombies; ESTOP True. Empirically proves M6 was model variance, raising live-proven capability envelope to 5/7 (71.4%). Scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Finish Harness: §1 Evidence-Aware Abuse Bounds (M3 False-Fail) + §2 M6 Capability Floor + §3 Cohort Re-Run & Corrected Yield",

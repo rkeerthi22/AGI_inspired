@@ -1,28 +1,28 @@
 {
   "schema_version": 2,
-  "brief_revision": 117,
-  "created_at": "2026-09-13T12:16:45.804709+00:00",
+  "brief_revision": 119,
+  "created_at": "2026-09-13T12:44:01.120396+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "af436e1e8aa52c55879f1a8989f6963687276fdc"
+    "based_on_head": "15213b67dd23de9f370c65d49153f3069b94d6c3"
   },
   "task": {
-    "id": "FINISH-HARNESS-YIELD-TUNING-2026-09-13",
+    "id": "M6-REROLL-PROBE-2026-09-13",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Harness finishing complete. Ready for operator review and push (Rule 28)."
+    "next_action": "M6 variance proven live (Task 208 PASS, facts+10). Ready for operator review and push (Rule 28)."
   },
   "completed": [
-    "Target 1: Evidence-aware abuse bounds in citecheck.py (exempting honest blocked sources, anti-gaming guard, 4 hermetic tests, 86/86 citecheck pass)",
-    "Target 2: Capability-selection prompt floor in task_runner.py requiring specific tool name + real search API URL",
-    "Target 3: Cohort re-run (Tasks 201-207): 3 PASS / 4 FAIL (42.9% yield). M3 flipped FAIL -> PASS (facts+11), proving Target 1 on live traffic",
-    "M1 passed (facts+8) via preflight auto-repair; M4 passed clean on attempt 1",
-    "Fails honestly attributed to worker content quality (M2 toggle, M5 recovery, M6 hedging, M7 URL omission)",
-    "Tokens 7/7 exact match to ledger (297,758 in / 73,761 out); zero zombies; ESTOP True; gate 79/79 green"
+    "M6 Re-Roll Probe (Task 208): PASS (facts+10, 149.1s), proving M6 failure in Task 206 was stochastic model variance",
+    "Preflight auto-repair 1/2 succeeded; tool cc-hindsight named with real HN Algolia API query (confidence 3) + dev.to/arti-trends fallbacks",
+    "Tokens (37,600 in / 8,802 out) 100% matched to ledger; 0 zombies; ESTOP strictly engaged",
+    "Live-proven capability envelope across cohort missions expands to 5/7 (71.4%: M1, M2, M3, M4, M6)",
+    "Target 1 evidence-aware abuse bounds proven live on M3 (Task 203, facts+11)",
+    "Harness confirmed CODE-FINAL by Claude Code and Gemini"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -38,23 +38,23 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "4887c379166825917b59021b20009fc4cd40d26a7ab74665123c5e9737df49f4"
+      "sha256": "cbab5ab072d23041248e4b6890e952609a1fbbbe768faee4c4aa637921e3906f"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "72b796878219668aa27ffd256c5e8cbace2c1fca36af94843cf86a03de1fc976"
+      "sha256": "5cb97c3bf4c26b075a91d6d1f51b8130e382bf387a111bba2274636028d3eb9f"
+    },
+    {
+      "path": "docs/reviews/GEMINI_M6_REROLL_PROBE_AND_VARIANCE_PROOF_2026-09-13.md",
+      "sha256": "29bb238ffc5b2698a77cd5eed53167692db02a565c842a8dd4639f5d738b2b8b"
+    },
+    {
+      "path": "docs/reviews/CLAUDE_VERIFICATION_FINISH_HARNESS_YIELD_TUNING_2026-09-13.md",
+      "sha256": "f8325c985dcefd000827a9565fbcc80d65c2a9bde33692086f42f6920e3440b4"
     },
     {
       "path": "docs/reviews/GEMINI_COHORT_CORRECTED_YIELD_AND_TUNING_2026-09-13.md",
       "sha256": "9ddc11e78d8729e33d9459860065b72ef96e2b87f1a3232187651df729bc4502"
-    },
-    {
-      "path": "docs/GEMINI_TASK_FINISH_HARNESS_2026-09-13.md",
-      "sha256": "4aad40b84261571911b3204c6fe2188cef4c4ad3116e3485b12b1f2f7bd212c9"
-    },
-    {
-      "path": "docs/reviews/CLAUDE_VERIFICATION_FULL_VENTURE_COHORT_2026-09-13.md",
-      "sha256": "12128dff0d5087ee49e38db44754fa8775d2dae61b832b05c8b4feb3e4e579e6"
     },
     {
       "path": "orchestrator/citecheck.py",
