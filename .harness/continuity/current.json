@@ -1,29 +1,28 @@
 {
   "schema_version": 2,
-  "brief_revision": 122,
-  "created_at": "2026-09-13T23:05:00.000000+00:00",
+  "brief_revision": 123,
+  "created_at": "2026-09-13T23:32:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "d7dbdc2ab3d960314fdf4b15bc36758db3fa1795"
+    "based_on_head": "4798ebc4893c109714002d694e9d1a5284046d87"
   },
   "task": {
-    "id": "SPEC-COMPLIANCE-PROMPT-FLOOR-2026-09-13",
+    "id": "STRATEGIC-HANDOFF-CLAUDE-V1-PRODUCT-2026-09-14",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Spec-compliance prompt floor landed & verified live in Task 225 (Sources Attempted section & statuses delivered). Shared egress allowlist ceiling exposed for M3/M5."
+    "next_action": "Strategic handoff authored to Claude Code with Task 225 empirical landings and unified V1 product roadmap (Options A+B). Awaiting Claude Code review and suggestions."
   },
   "completed": [
+    "Strategic Handoff to Claude Code: Formulated Unified V1 Product Architecture (Options A+B) and 4-week roadmap; Task 225 landings and shared egress boundary detailed",
     "Spec-Compliance Prompt Floor (deliverable_preflight.py): Landed source-count + bounded-failure checks; worker generated Sources Attempted with 4 sources in Task 225",
-    "Empirical Proof of Egress Boundary (Task 225): Discovered review domains (allbestapps, best-ai, justprompt) are off-allowlist, proving M3 and M5 share identical allowlist ceiling",
-    "Loop-Depth Re-Search Directive (Tasks 223-224): Broker audit proved worker actively executed live search queries during repair; 100% frontier serving",
-    "Frontier-Worker Ablation (Tasks 216-222): 2 PASS / 5 FAIL (28.6% yield), empirically proving harness yield is ARCHITECTURE-BOUND, not worker-model bound",
-    "World-Class Frontier Delivery on M7 (Task 222 PASS, facts+20, 20 verified citations); M4 (Task 219 PASS, 4-competitor table)",
-    "M6 Re-Roll Probe (Task 208 PASS, facts+10), proving M6 was model variance; live-proven envelope is 5/7 (71.4%)",
-    "Target 1 evidence-aware abuse bounds proven live on M3 (Task 203, facts+11)"
+    "Empirical Proof of Egress Boundary (Task 225): Discovered review domains (allbestapps, best-ai, justprompt) are off-allowlist, proving M3 and M5 share allowlist ceiling",
+    "Loop-Depth Re-Search Directive (Tasks 223-224): Broker audit proved worker executed live search queries during repair; 100% frontier serving",
+    "Frontier-Worker Ablation (Tasks 216-222): 2 PASS / 5 FAIL (28.6%), proving harness yield is ARCHITECTURE-BOUND, not worker-model bound",
+    "Proven Live Capabilities: M7 (Task 222 facts+20); M4 (Task 219); M6 (Task 208 facts+10); M1 (Task 201); M2 (Task 188)"
   ],
   "locked_constraints": [
     "ESTOP stays engaged; no un-gated live runs",
@@ -39,19 +38,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "4ba48cc1a59e859451337fa70664b7be82ba8ce3d09249680f1882e637b66aeb"
+      "sha256": "737379a3326ff9679e818652e07fa5ccf2d0c19d8bfad11041a6cf1a062ef0a9"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "21c9ab321a1957f8586334c363692015c706c6f707b0f46c7b27a19d6d4176e9"
+      "sha256": "d346c2e1c167a919d3da50923bebd094b981222a232905ae819bde81a3762abf"
     },
     {
-      "path": "docs/reviews/GEMINI_SPEC_COMPLIANCE_PROMPT_FLOOR_REPORT_2026-09-13.md",
-      "sha256": "6b609659364d43afe1611403874d8cda0814ec90fa0b74981bf909d4955fd487"
-    },
-    {
-      "path": "docs/reviews/CLAUDE_VERIFICATION_LOOP_DEPTH_PROBE_2026-09-13.md",
-      "sha256": "9497f6070ddc8780a18c478b209c9b05472f1fc690d592abcb8bd90d49200bf1"
+      "path": "docs/reviews/GEMINI_STRATEGIC_HANDOFF_CLAUDE_V1_PRODUCT_2026-09-14.md",
+      "sha256": "10d13ac4a589c534c84d87adb1f374e52422d44f2d40ad21f8d03c68ee25b2eb"
     },
     {
       "path": "orchestrator/deliverable_preflight.py",
@@ -60,14 +55,6 @@
     {
       "path": "tests/test_deliverable_preflight.py",
       "sha256": "46b5b6d03ff89f1c5efa2474b9f978a6a509759e450a4bc85b67de40556801a5"
-    },
-    {
-      "path": "workspace/validation/run_cohort.py",
-      "sha256": "da0a231c171c13300b826f3db5447ba4531c3b2fa555ef68789f638a5daa57e6"
-    },
-    {
-      "path": "tests/test_cohort_isolation.py",
-      "sha256": "9734d2743d54de66d4f1ee09c32e9f60d9b70dcdc363ef5bd7324fcba877a2e3"
     },
     {
       "path": "orchestrator/controlled_hermes.py",
