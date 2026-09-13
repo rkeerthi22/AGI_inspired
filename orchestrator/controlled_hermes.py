@@ -173,8 +173,15 @@ def main(argv: list[str] | None = None) -> int:
         import run_agent
         _orig_agent_init = run_agent.AIAgent.__init__
         def _safe_agent_init(self, *a, **kw):
+            # Non-reasoning models (e.g. gpt-4o, gpt-4o-mini) reject reasoning.effort
+            # with HTTP 400 on OpenAI Responses API. Disable reasoning_config for them.
+            model_name = kw.get("model") or (a[6] if len(a) > 6 else "")
+            if model_name in ("gpt-4o", "gpt-4o-mini"):
+                kw["reasoning_config"] = {"enabled": False}
             _orig_agent_init(self, *a, **kw)
             self._persist_disabled = True
+            if getattr(self, "model", "") in ("gpt-4o", "gpt-4o-mini"):
+                self.reasoning_config = {"enabled": False}
         run_agent.AIAgent.__init__ = _safe_agent_init
     except Exception:
         pass

@@ -1,26 +1,28 @@
 {
   "schema_version": 2,
-  "brief_revision": 119,
-  "created_at": "2026-09-13T12:44:01.120396+00:00",
+  "brief_revision": 120,
+  "created_at": "2026-09-13T13:45:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "15213b67dd23de9f370c65d49153f3069b94d6c3"
+    "based_on_head": "d4a995c5d3d1cc1745317a5effe9bddbd8199503"
   },
   "task": {
-    "id": "M6-REROLL-PROBE-2026-09-13",
+    "id": "FRONTIER-WORKER-ABLATION-2026-09-13",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "M6 variance proven live (Task 208 PASS, facts+10). Ready for operator review and push (Rule 28)."
+    "next_action": "Frontier-worker ablation complete (Tasks 216-222). Proves harness yield is architecture-bound (2/7 PASS gpt-4o vs 3/7 BytePlus). Ready for operator review and push (Rule 28)."
   },
   "completed": [
-    "M6 Re-Roll Probe (Task 208): PASS (facts+10, 149.1s), proving M6 failure in Task 206 was stochastic model variance",
-    "Preflight auto-repair 1/2 succeeded; tool cc-hindsight named with real HN Algolia API query (confidence 3) + dev.to/arti-trends fallbacks",
-    "Tokens (37,600 in / 8,802 out) 100% matched to ledger; 0 zombies; ESTOP strictly engaged",
-    "Live-proven capability envelope across cohort missions expands to 5/7 (71.4%: M1, M2, M3, M4, M6)",
+    "Frontier-Worker Ablation (Tasks 216-222): 2 PASS / 5 FAIL (28.6% yield), empirically proving harness yield is ARCHITECTURE-BOUND (loop-limited), not worker-model bound",
+    "100% frontier serving verified (OpenAI gpt-4o, zero fallback); 100% token provenance match (179.5k in / 13.7k out tokens, ~$0.59 USD); 0 zombies; ESTOP strictly engaged",
+    "World-Class Frontier Delivery on M7 (Task 222 PASS, facts+20, 20 verified citations, pristine 6-marketplace table on attempt 1); M4 (Task 219 PASS, 4-competitor table)",
+    "Repaired Hermes Responses API parameter trap in controlled_hermes.py (disabled reasoning_config for non-reasoning models like gpt-4o/gpt-4o-mini)",
+    "Landed default-preserving HARNESS_COHORT_WORKER_PROVIDER override in run_cohort.py with 6 hermetic unit tests (33/33 in test_cohort_isolation.py)",
+    "M6 Re-Roll Probe (Task 208 PASS, facts+10), proving M6 failure in Task 206 was stochastic model variance; live-proven capability envelope is 5/7 (71.4%)",
     "Target 1 evidence-aware abuse bounds proven live on M3 (Task 203, facts+11)",
     "Harness confirmed CODE-FINAL by Claude Code and Gemini"
   ],
@@ -38,11 +40,15 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "cbab5ab072d23041248e4b6890e952609a1fbbbe768faee4c4aa637921e3906f"
+      "sha256": "5ec91bc4c82734c50431d97520e146afb07c59d5a718c3f3ef52ee106e1d3ea4"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "5cb97c3bf4c26b075a91d6d1f51b8130e382bf387a111bba2274636028d3eb9f"
+      "sha256": "3b165fccad6359828b2759d88aa43a6b5e6282678b5bdfb9b2b9fd59f897d895"
+    },
+    {
+      "path": "docs/reviews/GEMINI_FRONTIER_WORKER_ABLATION_REPORT_2026-09-13.md",
+      "sha256": "3808bd4d652a77edede596d3e3bf3f55f4a7ad57f4fe28f6f38a4bdfe3282986"
     },
     {
       "path": "docs/reviews/GEMINI_M6_REROLL_PROBE_AND_VARIANCE_PROOF_2026-09-13.md",
@@ -53,8 +59,16 @@
       "sha256": "f8325c985dcefd000827a9565fbcc80d65c2a9bde33692086f42f6920e3440b4"
     },
     {
-      "path": "docs/reviews/GEMINI_COHORT_CORRECTED_YIELD_AND_TUNING_2026-09-13.md",
-      "sha256": "9ddc11e78d8729e33d9459860065b72ef96e2b87f1a3232187651df729bc4502"
+      "path": "workspace/validation/run_cohort.py",
+      "sha256": "da0a231c171c13300b826f3db5447ba4531c3b2fa555ef68789f638a5daa57e6"
+    },
+    {
+      "path": "tests/test_cohort_isolation.py",
+      "sha256": "9734d2743d54de66d4f1ee09c32e9f60d9b70dcdc363ef5bd7324fcba877a2e3"
+    },
+    {
+      "path": "orchestrator/controlled_hermes.py",
+      "sha256": "0b51a391144e61024354e9c4892ba4fbb90a9e391bf3106863e09ea3e08944cb"
     },
     {
       "path": "orchestrator/citecheck.py",
@@ -63,14 +77,6 @@
     {
       "path": "orchestrator/task_runner.py",
       "sha256": "f6462a0a5b5978e5e2d1826ff7664ab2fb63d97745d945bd0e3cb22da3423935"
-    },
-    {
-      "path": "tests/test_citecheck.py",
-      "sha256": "02ecbeecb69f3a8cdd6e708eee0f44bed865d411ada6b9dc9cb29b45e2c30a25"
-    },
-    {
-      "path": "scripts/enforce_worker_firewall.ps1",
-      "sha256": "f511cef258bfd1a3e056a83f8fb94b035a99d6cc0165f6c98f7f979294b3dc74"
     },
     {
       "path": "tests/tiers.json",

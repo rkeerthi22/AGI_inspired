@@ -228,6 +228,30 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace") as td:
         "matching live owner blocks takeover": live_owner_blocked,
     })
 
+# Frontier worker override tests for cohort validation
+import os
+import run_cohort
+orig_worker_env = os.environ.get("HARNESS_COHORT_WORKER_PROVIDER")
+try:
+    os.environ.pop("HARNESS_COHORT_WORKER_PROVIDER", None)
+    default_roles = run_cohort.validation_roles()
+    os.environ["HARNESS_COHORT_WORKER_PROVIDER"] = "openai"
+    openai_roles = run_cohort.validation_roles()
+finally:
+    if orig_worker_env is not None:
+        os.environ["HARNESS_COHORT_WORKER_PROVIDER"] = orig_worker_env
+    else:
+        os.environ.pop("HARNESS_COHORT_WORKER_PROVIDER", None)
+
+checks.update({
+    "default cohort worker is byteplus": default_roles["worker"]["provider"] == "byteplus_coding",
+    "default cohort critic is ollama (F120 independent)": default_roles["critic"]["provider"] == "ollama",
+    "openai override sets worker provider to openai": openai_roles["worker"]["provider"] == "openai",
+    "openai override sets worker model to gpt-4o": openai_roles["worker"]["model"] == "gpt-4o",
+    "openai override preserves independent ollama critic": openai_roles["critic"]["provider"] == "ollama",
+    "openai override has no shared quota_group": openai_roles["worker"]["quota_group"] is None,
+})
+
 failed = []
 for name, ok in checks.items():
     print(f"  [{'PASS' if ok else 'FAIL'}] {name}")

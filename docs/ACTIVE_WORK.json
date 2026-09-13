@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-13T12:35:00Z",
+  "last_updated": "2026-09-13T13:45:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Execute Frontier-Worker Ablation (OpenAI gpt-4o vs BytePlus ark-code-latest) to Isolate Model vs Architecture Ceiling",
+      "task_id": "FRONTIER-WORKER-ABLATION-2026-09-13",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-13T13:05:00Z",
+      "last_update": "2026-09-13T13:45:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_FRONTIER_WORKER_ABLATION_REPORT_2026-09-13.md",
+      "notes": "COMPLETED. Executed docs/GEMINI_TASK_FRONTIER_WORKER_ABLATION_2026-09-13.md per Claude Code & Operator directive. (1) Added default-preserving HARNESS_COHORT_WORKER_PROVIDER override in workspace/validation/run_cohort.py with 6 hermetic unit tests in tests/test_cohort_isolation.py (33/33 pass); (2) Diagnosed and repaired Hermes Responses API parameter trap in orchestrator/controlled_hermes.py (reasoning_config disabled for gpt-4o/gpt-4o-mini); (3) Dispatched 7-mission cohort under controlled window (Tasks 216-222) with worker=openai-api/gpt-4o and critic=ollama/glm-5.2:cloud; (4) Strategic result: 2 PASS / 5 FAIL (28.6% yield; Task 219 M4 PASS, Task 222 M7 PASS facts+20). 100% frontier serving verified (179,486 in / 13,738 out tokens, ~$0.59 USD); 100% token provenance match to ledger. Proven: harness yield is ARCHITECTURE-BOUND (shallow loop limitation), not worker-model bound. Gate 79/79 green. ESTOP True. Scope released."
+    },
     {
       "agent": "gemini-cli",
       "role": "Execute M6 Re-Roll Probe (Controlled Window) to Isolate Variance vs Ceiling",

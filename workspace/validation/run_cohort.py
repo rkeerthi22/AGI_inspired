@@ -47,7 +47,7 @@ def ensure_cohort_mission() -> None:
 
 
 def validation_roles() -> dict:
-    """Use BytePlus only for this cohort without changing production role defaults."""
+    """Use BytePlus or an explicitly configured frontier worker for this cohort."""
     config = yaml.safe_load((ROOT / "config" / "models.yaml").read_text(encoding="utf-8"))
     roles = batch_runner.load_roles()
     provider = config["providers"]["byteplus_coding"]
@@ -59,8 +59,30 @@ def validation_roles() -> dict:
         "authentication_reference": provider["authentication_reference"],
         "quota_group": "byteplus-coding-plan",
     }
-    roles["worker"] = dict(byteplus)
-    # F120: critic must be independent from worker provider (worker=byteplus_coding, critic=ollama)
+    frontier_worker = os.environ.get("HARNESS_COHORT_WORKER_PROVIDER")
+    if frontier_worker == "openai":
+        openai_cfg = config["providers"]["openai"]
+        roles["worker"] = {
+            "provider": "openai",
+            "hermes_provider": openai_cfg["hermes_provider"],
+            "model": openai_cfg["routing_model"],
+            "endpoint": openai_cfg["endpoint"],
+            "authentication_reference": openai_cfg["authentication_reference"],
+            "quota_group": None,
+        }
+    elif frontier_worker == "anthropic":
+        anthropic_cfg = config["providers"]["anthropic"]
+        roles["worker"] = {
+            "provider": "anthropic",
+            "hermes_provider": anthropic_cfg["hermes_provider"],
+            "model": anthropic_cfg["routing_model"],
+            "endpoint": anthropic_cfg["endpoint"],
+            "authentication_reference": anthropic_cfg["authentication_reference"],
+            "quota_group": None,
+        }
+    else:
+        roles["worker"] = dict(byteplus)
+    # F120: critic must be independent from worker provider (critic=ollama)
     roles["critic"] = dict(roles["manager"])
     roles["manager"] = dict(roles["manager"])
     return roles
@@ -78,6 +100,10 @@ def _warn_byteplus_health() -> None:
     failover could have saved. The warning gives the operator the fact and the
     decision; it does not take it from them. Reads runs/health_events.jsonl via
     health_events.last_provider_canary (no live provider call)."""
+    if os.environ.get("HARNESS_COHORT_WORKER_PROVIDER"):
+        override = os.environ.get("HARNESS_COHORT_WORKER_PROVIDER")
+        print(f"info: cohort worker overridden to {override} via HARNESS_COHORT_WORKER_PROVIDER.")
+        return
     import health_events
     ev = health_events.last_provider_canary("byteplus_coding")
     if not ev:
