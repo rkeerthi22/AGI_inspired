@@ -920,6 +920,87 @@ def test_dead_url_feedback_pivots_to_different_sources():
     assert "Do NOT retry the same URLs — search for DIFFERENT, independent sources" in feedback
 
 
+def test_spec_compliance_insufficient_sources_and_missing_bounded_failure():
+    """Spec-compliance: deliverable with 1 source and missing bounded-failure section triggers preflight issues and feedback."""
+    text = (
+        "## PromptBase Customer Review Sentiment Brief\n\n"
+        "### Review Themes\n"
+        "Users like the tool [TooSio](https://toosio.com/tool/promptbase-review), retrieved 2026-09-13, confidence: 2.\n"
+    )
+    spec = "PromptBase customer review sentiment"
+    criteria = (
+        "- [ ] At least 3 independent third-party review sources attempted\n"
+        "- [ ] If rating not obtainable: explicit bounded-failure section naming every attempt\n"
+        "- [ ] Each attempted source noted as: rating-obtained / blocked / unavailable"
+    )
+    issues = check_schema(text, spec=spec, pass_criteria=criteria)
+    assert any("Insufficient source count: deliverable cites 1 sources, spec requires at least 3." in iss for iss in issues)
+    assert any("Missing bounded-failure section: spec requires a section naming every source attempt" in iss for iss in issues)
+
+    feedback = format_repair_feedback(dead_urls=[], schema_issues=issues)
+    assert "- For Insufficient Source Count: Your deliverable cites 1 source(s) but the spec requires at least 3." in feedback
+    assert "You must attempt and DECLARE at least 2 MORE independent third-party sources" in feedback
+    assert "a declared blocked source counts as an attempt; a silently-omitted source does not." in feedback
+    assert "- For Missing Bounded-Failure Section: You MUST include a 'Bounded Failure' (or 'Sources Attempted') section" in feedback
+
+
+def test_spec_compliance_sufficient_sources_and_bounded_failure_passes():
+    """Spec-compliance: deliverable with 3 sources and bounded-failure section passes both checks."""
+    text = (
+        "## PromptBase Customer Review Sentiment Brief\n\n"
+        "### Review Themes\n"
+        "- Theme 1 [TooSio](https://toosio.com/review), retrieved 2026-09-13, confidence: 2.\n"
+        "- Theme 2 [Dev](https://dev.to/promptbase), retrieved 2026-09-13, confidence: 2.\n"
+        "- Theme 3 [Arti](https://arti-trends.com/promptbase), retrieved 2026-09-13, confidence: 2.\n\n"
+        "### Bounded Failure Section\n"
+        "All sources attempted were active and ratings were obtained."
+    )
+    spec = "PromptBase customer review sentiment"
+    criteria = (
+        "- [ ] At least 3 independent third-party review sources attempted\n"
+        "- [ ] If rating not obtainable: explicit bounded-failure section naming every attempt"
+    )
+    issues = check_schema(text, spec=spec, pass_criteria=criteria)
+    assert not any("Insufficient source count" in iss for iss in issues)
+    assert not any("Missing bounded-failure section" in iss for iss in issues)
+
+
+def test_spec_compliance_no_spec_requirement_fails_open():
+    """Spec-compliance: spec declaring no source count minimum or bounded-failure section fails-open."""
+    text = (
+        "## Simple Research Brief\n\n"
+        "Found single source [Source](https://example.com/info), retrieved 2026-09-13, confidence: 2.\n"
+    )
+    spec = "Simple fact-finding mission"
+    criteria = "- [ ] Deliverable exists at the workspace path written by the harness"
+    issues = check_schema(text, spec=spec, pass_criteria=criteria)
+    assert not any("Insufficient source count" in iss for iss in issues)
+    assert not any("Missing bounded-failure section" in iss for iss in issues)
+
+
+def test_spec_compliance_declared_blocked_counts_as_attempt():
+    """Spec-compliance: declared blocked sources in bounded-failure section count toward attempted source count."""
+    text = (
+        "## PromptBase Customer Review Sentiment Brief\n\n"
+        "### Obtained Evidence\n"
+        "Found customer review analysis at [TooSio](https://toosio.com/tool/promptbase-review), retrieved 2026-09-13, confidence: 2.\n\n"
+        "### Bounded Failure\n"
+        "- G2: blocked (Cloudflare 403)\n"
+        "- Trustpilot: blocked (HTTP 403)\n"
+        "- TooSio: rating-obtained\n"
+    )
+    spec = "PromptBase customer review sentiment"
+    criteria = (
+        "- [ ] At least 3 independent third-party review sources attempted\n"
+        "- [ ] If rating not obtainable: explicit bounded-failure section naming every attempt\n"
+        "- [ ] Each attempted source noted as: rating-obtained / blocked / unavailable"
+    )
+    issues = check_schema(text, spec=spec, pass_criteria=criteria)
+    # 1 obtained URL + 2 declared blocked = 3 attempted sources >= 3 required
+    assert not any("Insufficient source count" in iss for iss in issues)
+    assert not any("Missing bounded-failure section" in iss for iss in issues)
+
+
 if __name__ == "__main__":
     test_clean_deliverable_passes()
     test_dead_url_triggers_preflight_failure()
@@ -960,5 +1041,9 @@ if __name__ == "__main__":
     test_repair_feedback_fabrication_only_does_not_emit_research_directive()
     test_repair_feedback_both_fabrication_and_insufficient_sources_emits_both()
     test_dead_url_feedback_pivots_to_different_sources()
-    print("ALL 39 DELIVERABLE PREFLIGHT TESTS PASSED!")
+    test_spec_compliance_insufficient_sources_and_missing_bounded_failure()
+    test_spec_compliance_sufficient_sources_and_bounded_failure_passes()
+    test_spec_compliance_no_spec_requirement_fails_open()
+    test_spec_compliance_declared_blocked_counts_as_attempt()
+    print("ALL 43 DELIVERABLE PREFLIGHT TESTS PASSED!")
 

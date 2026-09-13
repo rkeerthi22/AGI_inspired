@@ -45,6 +45,8 @@ _CONFIDENCE_RE = re.compile(
     re.I
 )
 _URL_RE = re.compile(r"https?://[^\s)\]>\"'`]+")
+_HOST_RE = re.compile(r"https?://([^/\s:?#]+)", re.I)
+_STATUS_KW = r"(?:blocked|unavailable|rating-obtained|unobtainable|failed|denied)"
 
 
 @dataclass
@@ -57,6 +59,72 @@ class PreflightReport:
     @property
     def has_errors(self) -> bool:
         return not self.passed
+
+
+def count_distinct_sources(text: str) -> int:
+    """Count distinct sources cited or declared in deliverable text.
+    
+    Counts distinct URLs/hosts, and also credits declared blocked or unavailable
+    sources (e.g. in bounded-failure sections or status declarations).
+    A declared blocked source counts as an attempt; a silently-omitted source does not.
+    """
+    sources: set[str] = set()
+    source_stems: set[str] = set()
+
+    # 1. Distinct URLs cited in text
+    urls = _URL_RE.findall(text)
+    for u in urls:
+        m = _HOST_RE.match(u)
+        if m:
+            host = m.group(1).lower()
+            if host.startswith("www."):
+                host = host[4:]
+            if host:
+                sources.add(host)
+                stem = host.split(".")[0]
+                if len(stem) > 2:
+                    source_stems.add(stem)
+
+    # 2. Markdown bullet / table declarations: - G2: blocked, - **Trustpilot**: blocked, | G2 | blocked |
+    bullet_re = re.compile(
+        rf"^\s*[-*|]\s*(?:\*\*)?([A-Za-z0-9\s\.\-_/]+?)(?:\*\*)?\s*[:\-–|]\s*(?:status\s*:\s*)?{_STATUS_KW}",
+        re.IGNORECASE | re.MULTILINE
+    )
+    for m in bullet_re.finditer(text):
+        name = m.group(1).strip().strip("*").strip()
+        name_clean = re.sub(r"^(?:source\s*:?|attempt\s*\d*\s*:?)", "", name, flags=re.IGNORECASE).strip()
+        if name_clean and len(name_clean) < 40 and name_clean.lower() not in ("source", "status", "attempt", "notes", "platform"):
+            nl = name_clean.lower()
+            if not any(nl == s or nl in s or s in nl for s in source_stems):
+                sources.add(name_clean)
+                source_stems.add(nl)
+
+    # 3. Parenthetical style: - G2 (blocked), Trustpilot (blocked)
+    paren_re = re.compile(
+        rf"(?:[-*]\s*)?([A-Za-z0-9\s\.\-_]+?)\s*\({_STATUS_KW}\)",
+        re.IGNORECASE
+    )
+    for m in paren_re.finditer(text):
+        name = m.group(1).strip()
+        if name and len(name) < 40 and name.lower() not in ("source", "status", "attempt", "notes", "platform"):
+            nl = name.lower()
+            if not any(nl == s or nl in s or s in nl for s in source_stems):
+                sources.add(name)
+                source_stems.add(nl)
+
+    # 4. Known common platforms if declared blocked/unavailable: G2, Trustpilot, Chrome Web Store
+    named_re = re.compile(
+        rf"\b(G2|Trustpilot|Chrome\s+Web\s+Store)\b[^\n.]{{0,30}}\b{_STATUS_KW}\b",
+        re.IGNORECASE
+    )
+    for m in named_re.finditer(text):
+        name = m.group(1).strip()
+        nl = name.lower()
+        if not any(nl == s or nl in s or s in nl for s in source_stems):
+            sources.add(name)
+            source_stems.add(nl)
+
+    return len(sources)
 
 
 def check_schema(text: str, spec: str = "", pass_criteria: str = "") -> list[str]:
@@ -132,6 +200,35 @@ def check_schema(text: str, spec: str = "", pass_criteria: str = "") -> list[str
                 issues.append(
                     f"Required subjects/platforms from specification not addressed: {', '.join(missing_candidates[:3])}"
                 )
+
+    # 4. Spec-declared minimum source count check (Claude Directive 2026-09-13)
+    min_src_match = re.search(
+        r"\b(?:at\s+least|minimum)\s+(\d+)\s+(?:(?:distinct|independent|third-party|review)\s+)*sources?(?:\s+(?:cited|attempted|consulted|total))?\b(?!\s+per\b)",
+        combined_lower
+    )
+    if min_src_match:
+        required_sources = int(min_src_match.group(1))
+        actual_sources = count_distinct_sources(text)
+        if actual_sources < required_sources:
+            issues.append(
+                f"Insufficient source count: deliverable cites {actual_sources} sources, spec requires at least {required_sources}."
+            )
+
+    # 5. Missing bounded-failure / sources-attempted section check (Claude Directive 2026-09-13)
+    requires_bf = bool(re.search(
+        r"\b(?:bounded-failure(?:\s+section)?|name\s+every\s+attempt|note\s+each\s+as\s+.*?blocked|sources?\s+attempted(?:\s+section)?)\b",
+        combined_lower
+    ))
+    if requires_bf:
+        has_bf = bool(re.search(
+            r"(?:^#{1,6}\s+|^\*\*)(?:[^\n]*\b)?(?:bounded[\s-]failure|sources?[\s-]attempted|attempted[\s-]sources?|unavailable[\s-]sources?|source[\s-]attempts?)\b",
+            text,
+            re.IGNORECASE | re.MULTILINE
+        ))
+        if not has_bf:
+            issues.append(
+                "Missing bounded-failure section: spec requires a section naming every source attempt with status (rating-obtained/blocked/unavailable); none detected."
+            )
 
     return issues
 
@@ -360,6 +457,8 @@ def format_repair_feedback(
     has_insufficient_sources = any("insufficient_verified_sources" in s for s in schema_issues)
     has_citation_metadata = any("Citation formatting" in s for s in schema_issues)
     has_speculative = any("speculative" in s.lower() or "not publicly disclosed" in s.lower() for s in schema_issues)
+    has_insufficient_source_count = any("insufficient source count:" in s.lower() for s in schema_issues)
+    has_missing_bounded_failure = any("missing bounded-failure section:" in s.lower() for s in schema_issues)
 
     if has_fabrication:
         lines.append("- For Fabrication / Un-attempted URLs: You MUST remove all quotation marks (including double quotes \"\", curly quotes “”, single quotes '', and blockquotes >) around any text citing sources that were policy-denied, un-attempted, or search snippets. Express the facts entirely in your own words without quotation marks, or remove the un-attempted URL citations.")
@@ -376,6 +475,23 @@ def format_repair_feedback(
                     break
         needed = max(1, m - n)
         lines.append(f"- For Insufficient Verified Sources: Your deliverable has {n} verified (OK) source(s) but the minimum is {m}. You must conduct ADDITIONAL research NOW — use the web tools to search for and fetch at least {needed} NEW independent source(s) that corroborate the claim, then cite each with its URL, retrieval date, and confidence. Do NOT merely restate or reformat the sources you already have. Do NOT remove sources to lower the bar — find more. If after a genuine additional search no further independent source exists, state that explicitly with confidence 1 and which queries you tried.")
+    if has_insufficient_source_count:
+        actual, required = 0, 3
+        for s in schema_issues:
+            if "insufficient source count:" in s.lower():
+                m = re.search(r"cites\s+(\d+)\s+sources?,\s+spec\s+requires\s+at\s+least\s+(\d+)", s, re.IGNORECASE)
+                if m:
+                    actual = int(m.group(1))
+                    required = int(m.group(2))
+                    break
+        needed = max(1, required - actual)
+        lines.append(
+            f"- For Insufficient Source Count: Your deliverable cites {actual} source(s) but the spec requires at least {required}. You must attempt and DECLARE at least {needed} MORE independent third-party sources — use the web tools to search for them, attempt each, and cite each with its URL, retrieval date, and confidence. If a specific source named in the spec (e.g. G2, Trustpilot, Chrome Web Store) was blocked or returned no data, you MUST still declare it by name with status 'blocked' or 'unavailable' — a declared blocked source counts as an attempt; a silently-omitted source does not."
+        )
+    if has_missing_bounded_failure:
+        lines.append(
+            "- For Missing Bounded-Failure Section: You MUST include a 'Bounded Failure' (or 'Sources Attempted') section that names EVERY source you attempted and its status: rating-obtained (with the rating), blocked (with the HTTP error), or unavailable. The spec explicitly requires this — its absence is a spec-compliance failure regardless of how many sources you cited."
+        )
     if has_citation_metadata:
         lines.append("- For Citation Formatting: Ensure EVERY cited source, URL, and fetch attempt includes BOTH an explicit retrieval date (e.g. 'retrieved YYYY-MM-DD') and an explicit confidence level (e.g. 'confidence: 2' or 'confidence: high/medium/low').")
     if has_speculative:
