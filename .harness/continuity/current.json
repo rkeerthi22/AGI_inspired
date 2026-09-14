@@ -1,27 +1,27 @@
 {
   "schema_version": 2,
-  "brief_revision": 123,
-  "created_at": "2026-09-13T23:32:00.000000+00:00",
+  "brief_revision": 124,
+  "created_at": "2026-09-14T01:50:00.000000+00:00",
   "status": "completed",
   "repository": {
     "branch": "master",
     "upstream": "origin/master",
     "tree_clean": true,
     "changed_paths": [],
-    "based_on_head": "4798ebc4893c109714002d694e9d1a5284046d87"
+    "based_on_head": "be9da8d41b6924277c1b85ef12c93574bb17c839"
   },
   "task": {
-    "id": "STRATEGIC-HANDOFF-CLAUDE-V1-PRODUCT-2026-09-14",
+    "id": "V1-PRODUCTIZATION-PHASE0-YIELD-GATE-2026-09-14",
     "phase": "venture-execution",
     "status": "completed",
-    "next_action": "Strategic handoff authored to Claude Code with Task 225 empirical landings and unified V1 product roadmap (Options A+B). Awaiting Claude Code review and suggestions."
+    "next_action": "Phase 0 Yield Gate executed & reported to Claude Code (Tasks 226-227; M3 mechanical citecheck passed with ok=2, reached critic; broker in-memory caching defect identified). Awaiting Claude Code gating sign-off before Phase 1."
   },
   "completed": [
+    "Phase 0 Yield Gate (Tasks 226-227): Added 4 operator-approved review domains; M3 mechanical citecheck passed with ok=2; critic failed on spec omissions; broker in-memory caching defect diagnosed; 0 product code touched",
     "Strategic Handoff to Claude Code: Formulated Unified V1 Product Architecture (Options A+B) and 4-week roadmap; Task 225 landings and shared egress boundary detailed",
     "Spec-Compliance Prompt Floor (deliverable_preflight.py): Landed source-count + bounded-failure checks; worker generated Sources Attempted with 4 sources in Task 225",
     "Empirical Proof of Egress Boundary (Task 225): Discovered review domains (allbestapps, best-ai, justprompt) are off-allowlist, proving M3 and M5 share allowlist ceiling",
     "Loop-Depth Re-Search Directive (Tasks 223-224): Broker audit proved worker executed live search queries during repair; 100% frontier serving",
-    "Frontier-Worker Ablation (Tasks 216-222): 2 PASS / 5 FAIL (28.6%), proving harness yield is ARCHITECTURE-BOUND, not worker-model bound",
     "Proven Live Capabilities: M7 (Task 222 facts+20); M4 (Task 219); M6 (Task 208 facts+10); M1 (Task 201); M2 (Task 188)"
   ],
   "locked_constraints": [
@@ -38,15 +38,19 @@
   "references": [
     {
       "path": "docs/CURRENT_STATE.md",
-      "sha256": "737379a3326ff9679e818652e07fa5ccf2d0c19d8bfad11041a6cf1a062ef0a9"
+      "sha256": "3b6ddf7bc23b26a6e329dc51d4c951186baefa892e04817899b7e80768862b58"
     },
     {
       "path": "docs/ACTIVE_WORK.json",
-      "sha256": "d346c2e1c167a919d3da50923bebd094b981222a232905ae819bde81a3762abf"
+      "sha256": "0c0d2ed56720050037422559268e1e6c97f08f9548863f5c4e260586a85f84dd"
     },
     {
-      "path": "docs/reviews/GEMINI_STRATEGIC_HANDOFF_CLAUDE_V1_PRODUCT_2026-09-14.md",
-      "sha256": "10d13ac4a589c534c84d87adb1f374e52422d44f2d40ad21f8d03c68ee25b2eb"
+      "path": "docs/reviews/GEMINI_PHASE0_YIELD_GATE_REPORT_2026-09-14.md",
+      "sha256": "16f00c2cd5484d9d377695a68f50a0b8da8f6e53766de77b7d35072e5630edb2"
+    },
+    {
+      "path": "config/egress_policy.yaml",
+      "sha256": "91e34ba7c530998a8e5a404541865beb205c45696989b524252896d4fe3ac356"
     },
     {
       "path": "orchestrator/deliverable_preflight.py",

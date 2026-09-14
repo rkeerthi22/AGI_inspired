@@ -1,7 +1,20 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-13T23:28:00Z",
+  "last_updated": "2026-09-14T01:25:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Phase 0: The Yield Gate — Candidate Allowlist Proposal, Operator Authorization, and M3/M5 Empirical Re-Run",
+      "task_id": "V1-PRODUCTIZATION-PHASE0-YIELD-GATE-2026-09-14",
+      "mode": "completed",
+      "owned_paths": [],
+      "started_at": "2026-09-14T01:25:00Z",
+      "last_update": "2026-09-14T01:48:00Z",
+      "status": "completed",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_PHASE0_YIELD_GATE_REPORT_2026-09-14.md",
+      "notes": "COMPLETED. Executed Phase 0 of docs/GEMINI_TASK_V1_PRODUCTIZATION_DIRECTIVE_2026-09-14.md per operator approval: (1) Proposed per-domain safety rationales for 5 candidate domains; operator approved 4 (allbestapps.net, best-ai.org, justprompt.io, scam-detector.com) and rejected wbh.digital (DNS-dead); (2) Appended approved domains to config/egress_policy.yaml, re-signed attestation token (digest 17f08fd64d43b049d583b9ba7c4fba476b13e7bc28060b8fb7fe29a249cc5f6f), and verified test gate 79/79 green; (3) Dispatched controlled-window probe on M3 and M5 (Tasks 226 & 227) with worker=openai-api/gpt-4o and critic=ollama/glm-5.2:cloud; (4) Proved M3 mechanical egress barrier cleared (ok=2, reached critic); critic failed on spec omissions (omitted G2/CWS, unsourced trend); (5) Proved M5 honest information boundary (FlowGPT 403, uncorroborable); (6) Discovered broker daemon in-memory policy caching defect; (7) Authored docs/reviews/GEMINI_PHASE0_YIELD_GATE_REPORT_2026-09-14.md; 0 product code touched for Phases 1-4; ESTOP True; 0 zombies. Scope released for Claude Code gating sign-off."
+    },
     {
       "agent": "gemini-cli",
       "role": "Strategic Handoff & Architecture Blueprint to Claude Code: Task 225 Landings, Unified V1 Product (Options A+B), and Next-Phase Scoping",

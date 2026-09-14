@@ -149,6 +149,14 @@ broker:
     - www.contentbot.ai
     - dageno.ai
     - www.dageno.ai
+    - allbestapps.net
+    - www.allbestapps.net
+    - best-ai.org
+    - www.best-ai.org
+    - justprompt.io
+    - www.justprompt.io
+    - scam-detector.com
+    - www.scam-detector.com
 attestation:
   environment_variable: HARNESS_EGRESS_ATTESTATION
   purpose: egress-boundary-v1
