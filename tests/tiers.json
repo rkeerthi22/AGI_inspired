@@ -22,7 +22,8 @@
     "test_web_ui",
     "test_web_ui_security",
     "test_research_notebook",
-    "test_attestation_chain"
+    "test_attestation_chain",
+    "test_installer"
   ],
   "containment": [
     "test_worker_sandbox",
