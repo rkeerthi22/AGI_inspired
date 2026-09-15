@@ -3,6 +3,7 @@
 This module owns run_task; batch_runner only composes and re-exports it.
 """
 import re
+import hashlib
 import sqlite3
 import subprocess
 import sys
@@ -21,6 +22,7 @@ import scheduler
 import trajectory
 import workflow
 import citecheck
+import attestation_chain as chain
 from research_notebook import Notebook, MetadataMutation, protect_metadata
 try:
     import deliverable_preflight
@@ -412,6 +414,8 @@ def _run_research_task(context: _TaskContext) -> str:
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     attempt = get_task_attempt(tid, row, rc.RUNS)
     notebook_path = rc.RUNS / f"task{tid}_research_notebook.json"
+    chained = chain.existing(rc.RUNS, tid, row)
+    control_paths = (notebook_path, chain.chain_path(rc.RUNS, tid))
     notebook = Notebook.load(notebook_path) or Notebook()
     if notebook.attempts_seen:
         prompt += "\n\n" + notebook.direction_block()
@@ -446,13 +450,18 @@ def _run_research_task(context: _TaskContext) -> str:
     # unconditional finally cannot mask the infra_failed returns above.
     try:
         try:
-            with protect_metadata(notebook_path), integrity.DatabaseMutationGuard(f"task {tid} worker call"):
+            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker call"):
                 worker_options = {}
                 if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
                     worker_options["retrieval_profile"] = context.retrieval_profile
                 out, usage, model_used_cfg, exhausted = execution.worker_with_failover(
                     prompt, worker_cfg, usage_path, log_prefix=f"task {tid}",
                     **worker_options)
+            if chained:
+                chain.append_step(rc.RUNS, chain.Step.WORKER, tid, attempt,
+                    {"model": {k: model_used_cfg.get(k) for k in ("provider", "model")}, "input_tokens": usage.get("input_tokens", 0),
+                     "output_tokens": usage.get("output_tokens", 0), "exhausted": exhausted,
+                     "repair_number": 0, "output_sha256": chain.text_digest(out)})
             usage["policy_digest"] = policy_snapshot.get("policy_digest")
             usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
             if usage_path.is_file():
@@ -597,6 +606,13 @@ def _run_research_task(context: _TaskContext) -> str:
         notebook.merge_preflight(preflight_report.verified_sources, preflight_report.dead_urls,
                                  preflight_report.schema_issues, tid, attempt)
         notebook.save(notebook_path)
+        if chained:
+            chain.append_step(rc.RUNS, chain.Step.PREFLIGHT, tid, attempt,
+                {"passed": preflight_report.passed, "dead_url_count": len(preflight_report.dead_urls),
+                 "schema_issue_count": len(preflight_report.schema_issues),
+                 "insufficient_verified_sources": any("insufficient" in s.lower() for s in preflight_report.schema_issues),
+                 "notebook_sha256": hashlib.sha256(notebook_path.read_bytes()).hexdigest(),
+                 "repair_number": repair_attempt, "output_sha256": chain.text_digest(out)})
         if preflight_report.passed or not preflight_report.repair_feedback:
             break
         if repair_attempt >= deliverable_preflight.MAX_REPAIR_ATTEMPTS:
@@ -616,10 +632,15 @@ def _run_research_task(context: _TaskContext) -> str:
             except Exception:
                 pass
         try:
-            with protect_metadata(notebook_path), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
+            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
                 r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
                     repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
                     **worker_options)
+            if chained:
+                chain.append_step(rc.RUNS, chain.Step.WORKER, tid, attempt,
+                    {"model": {k: r_model_cfg.get(k) for k in ("provider", "model")}, "input_tokens": r_usage.get("input_tokens", 0),
+                     "output_tokens": r_usage.get("output_tokens", 0), "exhausted": r_exhausted,
+                     "repair_number": repair_attempt, "output_sha256": chain.text_digest(r_out)})
             if repair_usage_path.is_file():
                 for _retry in range(5):
                     try:
@@ -640,7 +661,7 @@ def _run_research_task(context: _TaskContext) -> str:
                     except Exception:
                         import time
                         time.sleep(0.05)
-        except MetadataMutation as exc:
+        except (MetadataMutation, chain.ChainError) as exc:
             ledger.finish_task(tid, artifacts=[], status="infra_failed", critic_notes=str(exc),
                                attempt_count=attempt)
             return "infra_failed"
@@ -662,6 +683,10 @@ def _run_research_task(context: _TaskContext) -> str:
                 usage["api_calls"] = int(usage.get("api_calls") or 0) + int(r_usage.get("api_calls") or 0)
         if r_exhausted or execution.worker_failed(r_out, r_usage) or deliverable_preflight.is_infra_error(r_out):
             rc.log(f"task {tid}: repair attempt {repair_attempt} failed, exhausted, or infra error; retaining previous output")
+            if chained:
+                chain.append_step(rc.RUNS, chain.Step.PREFLIGHT, tid, attempt,
+                    {"passed": False, "not_assessed": "repair_worker_failed", "retained_previous_output": True,
+                     "output_sha256": chain.text_digest(out), "repair_number": repair_attempt})
             break
         r_clean = execution._strip_tool_chatter(r_out)
         if len(r_clean) >= 200 and not policy.deny_list_scan(r_clean):
@@ -693,6 +718,11 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
         verdict, verdict_text = evaluation.run_critic(
             row, out, roles, baseline, scope_note=scope_note, usage_out=critic_usage,
             worker_config=worker_cfg)
+    chained = chain.existing(rc.RUNS, tid, row)
+    if chained:
+        chain.append_step(rc.RUNS, chain.Step.CRITIC, tid, attempt,
+            {"verdict": verdict, "verdict_text_sha256": chain.text_digest(verdict_text),
+             "output_sha256": chain.text_digest(out)})
     try:
         mission_usage = evaluation.build_mission_usage(
             tid, usage, critic_usage,
@@ -732,6 +762,12 @@ def _record_outcome(context: _TaskContext, out: str, usage: dict,
                        critic_verdict=("needs_review" if verdict == "infra_failed" else verdict),
                        critic_notes=verdict_text[:500], status=status,
                        attempt_count=attempt)
+
+    if chained:
+        chain.append_step(rc.RUNS, chain.Step.DELIVERABLE, tid, attempt,
+            {"status": status, "dest": str(dest.relative_to(rc.ROOT)),
+             "artifact_sha256": hashlib.sha256(dest.read_bytes()).hexdigest(),
+             "tokens_in": tok_in, "tokens_out": tok_out})
 
     # Lesson capture (baseline weeks: harvest only, promotion stays OFF per Â§7):
     # critic objections become lesson_candidates so week-3 skill promotion has evidence.
@@ -794,8 +830,18 @@ def run_task(tid: int, mission: dict, roles: dict,
         else:
             context = _prepare_task_input(
                 tid, mission, roles, row, normalized_profile)
-        return _run_research_task(context)
+        result = _run_research_task(context)
+        if result in ("failed", "infra_failed", "quota_exhausted"):
+            chain.finalize_failure(rc.RUNS, tid, result)
+        return result
     except Exception as exc:
+        if isinstance(exc, (chain.ChainError, MetadataMutation)):
+            ledger.finish_task(tid, artifacts=[], status="infra_failed",
+                               critic_notes="lifecycle control metadata validation failed")
+        try:
+            chain.finalize_failure(rc.RUNS, tid, "infra_failed")
+        except Exception:
+            pass  # Damaged evidence stays invalid, never rewritten as a good chain.
         tw.task_failed(f"unhandled task runner exception: {exc}", failure_stage="task_runner")
         raise
     finally:

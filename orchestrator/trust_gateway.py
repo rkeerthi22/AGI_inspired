@@ -28,6 +28,7 @@ sys.path.insert(0, str(ROOT / "orchestrator"))
 import egress_policy
 import ledger
 import operator_auth
+import attestation_chain
 from execution_pause import pause_engaged
 from policy_manager import PolicyManager
 
@@ -98,10 +99,16 @@ class Gateway:
             cur = c.execute(
                 "INSERT INTO tasks (mission_id, spec, pass_criteria, status, run_id) "
                 "VALUES (?, ?, ?, 'queued', ?)",
-                (mission_id, spec, criteria, getattr(ledger, "RUN_ID", "gateway")),
+                (mission_id, spec, criteria, attestation_chain.GATEWAY_RUN_ID),
             )
-            c.commit()
             task_id = cur.lastrowid
+            # Before commit: a signing failure must leave no dispatchable row.
+            attestation_chain.append_step(self.runs_dir, attestation_chain.Step.DISPATCH,
+                task_id, 1, {"spec_sha256": attestation_chain.text_digest(spec),
+                             "criteria_sha256": attestation_chain.text_digest(criteria),
+                             "mission_id": mission_id, "max_budget_usd": max_budget_usd,
+                             "max_tokens": max_tokens, "budget_enforcement": "admission_parameters_only"})
+            c.commit()
 
         return {
             "task_id": task_id,
@@ -252,6 +259,7 @@ class Gateway:
 
         # 2. Task-specific attestation snapshot if requested
         if task_id is not None:
+            result.update(attestation_chain.status(self.runs_dir, task_id))
             usage_path = self.runs_dir / f"task{task_id}_a1_worker.usage.json"
             if not usage_path.is_file():
                 usage_path = self.runs_dir / f"task{task_id}_worker.usage.json"
@@ -564,6 +572,9 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  Policy Digest: {res['active_policy_digest']}")
         print(f"  Worker Identity: {res['worker_identity']}")
         print(f"  Expires At: {res['expires_at']}")
+        if args.task_id is not None:
+            print(f"  Lifecycle Chain Verified: {res['attestation_chain_valid']} ({res['attestation_chain_steps']} steps)")
+            print(f"  Lifecycle Result: {res['attestation_chain_error'] or 'verified'}")
         if res.get("task_snapshot"):
             snap = res["task_snapshot"]
             print(f"  Task Snapshot Matches Active: {snap.get('matches_active_attestation')}")

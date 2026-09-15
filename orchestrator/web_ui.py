@@ -530,6 +530,10 @@ HTML_TEMPLATE = """<!DOCTYPE html>
       if (!data) return;
 
       document.getElementById('modal-task-id').innerText = taskId;
+      document.getElementById('modal-footer-info').innerText =
+        `Lifecycle chain: ${data.attestation_chain_valid ? 'VERIFIED' : 'NOT VERIFIED'} (${Number(data.attestation_chain_steps || 0)} steps)` +
+        (data.attestation_chain_error ? ` - ${data.attestation_chain_error}` : '') +
+        '. Signatures attest recorded execution; source claims still require review.';
       document.getElementById('modal-subtitle').innerText = `Mission: ${data.mission_id || 'custom'} · Model: ${data.model_used || '--'} · Tokens: ${data.tokens_in || 0} in / ${data.tokens_out || 0} out`;
       document.getElementById('modal-deliverable-text').innerText = data.deliverable || '(No deliverable recorded for this attempt)';
 
@@ -750,7 +754,6 @@ class WebConsoleHandler(BaseHTTPRequestHandler):
         gw: Gateway = getattr(self.server, "gateway")
 
         if path == "/api/status":
-            att_info = gw.get_attestation()
             # Calculate ledger statistics
             total_tasks = 0
             total_tokens = 0
@@ -759,12 +762,18 @@ class WebConsoleHandler(BaseHTTPRequestHandler):
                 if row:
                     total_tasks = row[0] or 0
                     total_tokens = row[1] or 0
+                latest = c.execute("SELECT MAX(task_id) FROM tasks").fetchone()[0]
+            att_info = gw.get_attestation(latest)
 
             self._send_json({
                 "estop_engaged": execution_pause.pause_engaged(),
                 "attestation_digest": att_info.get("active_policy_digest"),
                 "attestation_valid": att_info.get("attestation_token_valid"),
                 "attestation_error": att_info.get("attestation_error"),
+                "attestation_chain_task_id": latest,
+                "attestation_chain_valid": att_info.get("attestation_chain_valid", False),
+                "attestation_chain_steps": att_info.get("attestation_chain_steps", 0),
+                "attestation_chain_error": att_info.get("attestation_chain_error", "no_task"),
                 "worker_identity": att_info.get("worker_identity"),
                 "allowed_hosts_count": len(gw.policy_mgr.get_allowed_hosts()),
                 "total_tasks": total_tasks,
@@ -802,6 +811,8 @@ class WebConsoleHandler(BaseHTTPRequestHandler):
             try:
                 tid = int(tid_str)
                 deliv_info = gw.get_deliverable(tid)
+                attestation = gw.get_attestation(tid)
+                deliv_info.update({k: v for k, v in attestation.items() if k.startswith("attestation_chain_")})
                 # Parse broker audit rows if present
                 broker_rows = []
                 audit_file = gw.runs_dir / f"task{tid}_a1_broker.audit.jsonl"
