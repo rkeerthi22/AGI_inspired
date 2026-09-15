@@ -90,14 +90,40 @@ class EgressBroker(socketserver.ThreadingTCPServer):
         resolver: Callable[..., Any] | None = None,
         upstream_connector: Callable[..., socket.socket] | None = None,
         runs_dir: Path | None = None,
+        policy_path: Path | None = None,
     ):
         self.policy = policy
         self.audit_path = audit_path
         self.resolver = resolver
         self.upstream_connector = upstream_connector or socket.create_connection
         self.runs_dir = runs_dir or (Path("runs") if Path("runs").is_dir() else None)
+        self.policy_path = policy_path or egress_policy.POLICY_PATH
+        self._policy_mtime: float | None = None
+        if self.policy_path and self.policy_path.is_file():
+            try:
+                self._policy_mtime = self.policy_path.stat().st_mtime
+            except OSError:
+                self._policy_mtime = None
         self._active_correlation: dict[str, Any] | None = None
         super().__init__((policy.host, policy.port), BrokerHandler)
+
+    def reload_policy_if_changed(self) -> bool:
+        """Check if policy file mtime has changed, and hot-reload policy in-memory."""
+        if not self.policy_path:
+            return False
+        try:
+            if not self.policy_path.is_file():
+                return False
+            current_mtime = self.policy_path.stat().st_mtime
+            if self._policy_mtime is None or current_mtime > self._policy_mtime:
+                new_policy = egress_policy.load_policy(self.policy_path)
+                self.policy = new_policy
+                self._policy_mtime = current_mtime
+                return True
+        except Exception:
+            # Retain existing policy on read/parse errors to maintain fail-closed stability
+            pass
+        return False
 
     def set_active_correlation(
         self, task_id: int | None, attempt: int = 1, audit_path: Path | None = None
@@ -217,6 +243,8 @@ class BrokerHandler(BaseHTTPRequestHandler):
         raw_path = self.path or ""
         extracted_host = raw_path.split(":")[0] if ":" in raw_path else raw_path
         corr = self._extract_correlation()
+        if hasattr(self.server, "reload_policy_if_changed"):
+            self.server.reload_policy_if_changed()  # type: ignore[attr-defined]
         try:
             host, raw_port = self.path.rsplit(":", 1)
             port = int(raw_port)
@@ -307,7 +335,7 @@ def main() -> int:
     parser.add_argument("--audit", type=Path)
     args = parser.parse_args()
     policy = egress_policy.load_policy(args.policy)
-    broker = EgressBroker(policy, args.audit)
+    broker = EgressBroker(policy, args.audit, policy_path=args.policy)
     try:
         broker.serve_forever()
     finally:

@@ -396,6 +396,67 @@ with tempfile.TemporaryDirectory(dir=ROOT / "workspace", ignore_cleanup_errors=T
                 for r in records
             )
             check("kill-assumption record contains decision=deny, host=example.com, task_id=9112, attempt=3", match)
+
+        # 12. Hot-reload test (mtime-based policy reload without broker restart)
+        print("\n[12] Testing broker mtime-based hot-reload...")
+        dynamic_policy_file = root / "dynamic_policy.yaml"
+        dyn_data = {
+            "schema_version": 1,
+            "mode": "broker_required",
+            "broker": {
+                "host": "127.0.0.1",
+                "port": 8787,
+                "connect_port": 443,
+                "idle_timeout_seconds": 5,
+                "max_connection_bytes": 1048576,
+                "allowed_hosts": ["initial-allowed.test"],
+            },
+            "attestation": {
+                "environment_variable": "TEST_EGRESS_ATTESTATION",
+                "purpose": "egress-boundary-v1",
+                "max_age_hours": 24,
+                "required_evidence": ["restricted_worker_identity"],
+                "required_claims": ["worker_identity"],
+            },
+            "audit_log_environment_variable": "TEST_EGRESS_AUDIT",
+        }
+        dynamic_policy_file.write_text(json.dumps(dyn_data), encoding="utf-8")
+        dyn_policy = egress_policy.load_policy(dynamic_policy_file)
+        object.__setattr__(dyn_policy, "port", 0)
+
+        dyn_broker = egress_broker.EgressBroker(
+            dyn_policy,
+            audit_path=audit_file,
+            resolver=global_resolver,
+            upstream_connector=upstream_connector,
+            policy_path=dynamic_policy_file,
+            runs_dir=root,
+        )
+        dyn_port = dyn_broker.server_address[1]
+        dyn_thread = threading.Thread(target=dyn_broker.serve_forever, daemon=True)
+        dyn_thread.start()
+
+        try:
+            # First attempt: new-domain.test is not in allowed_hosts -> 403 Denied
+            with local_connect(dyn_port) as s:
+                s.sendall(b"CONNECT new-domain.test:443 HTTP/1.1\r\nHost: new-domain.test:443\r\n\r\n")
+                code, _, _ = read_http_response(s)
+                check("mtime reload: unlisted domain denied initially with 403", code == 403)
+
+            # Update dynamic_policy_file to include new-domain.test
+            time.sleep(0.05)  # ensure mtime differs
+            dyn_data["broker"]["allowed_hosts"].append("new-domain.test")
+            dynamic_policy_file.write_text(json.dumps(dyn_data), encoding="utf-8")
+
+            # Second attempt: broker should hot-reload dynamic_policy.yaml on CONNECT -> 200 Established
+            with local_connect(dyn_port) as s:
+                s.sendall(b"CONNECT new-domain.test:443 HTTP/1.1\r\nHost: new-domain.test:443\r\n\r\n")
+                code, _, _ = read_http_response(s)
+                check("mtime reload: newly added domain succeeds with 200 without restart", code == 200)
+                check("mtime reload: broker in-memory policy reflects updated domain", "new-domain.test" in dyn_broker.policy.allowed_hosts)
+        finally:
+            dyn_broker.shutdown()
+            dyn_broker.server_close()
     finally:
         broker.shutdown()
         broker.server_close()

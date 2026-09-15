@@ -16,7 +16,11 @@
     "test_retry_artifacts",
     "test_three_identity_deployment",
     "test_browser_daemon",
-    "test_s3_audit_replication"
+    "test_s3_audit_replication",
+    "test_policy_manager",
+    "test_gateway",
+    "test_web_ui",
+    "test_web_ui_security"
   ],
   "containment": [
     "test_worker_sandbox",

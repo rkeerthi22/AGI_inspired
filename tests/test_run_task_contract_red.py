@@ -74,6 +74,7 @@ try:
          patch.object(run_task, "parse_mission", return_value={"id": "safe"}), \
          patch.object(run_task, "pass_criteria_for", return_value="criteria"), \
          patch.object(run_task.execution_pause, "pause_engaged", return_value=False), \
+         patch.object(run_task.execution_pause, "verify_pause_integrity", return_value="test_isolated"), \
          patch.object(run_task.runlock, "acquire", side_effect=_fake_lock), \
          patch.object(run_task.integrity, "preflight", return_value=True), \
          patch.object(run_task.ledger, "queue_task", return_value=77) as queue, \
