@@ -21,6 +21,7 @@ import scheduler
 import trajectory
 import workflow
 import citecheck
+from research_notebook import Notebook, MetadataMutation, protect_metadata
 try:
     import deliverable_preflight
 except ImportError:
@@ -410,6 +411,10 @@ def _run_research_task(context: _TaskContext) -> str:
         return "budget_skip"
     ledger.start_task(tid, f"{worker_cfg['provider']}/{worker_cfg['model']}")
     attempt = get_task_attempt(tid, row, rc.RUNS)
+    notebook_path = rc.RUNS / f"task{tid}_research_notebook.json"
+    notebook = Notebook.load(notebook_path) or Notebook()
+    if notebook.attempts_seen:
+        prompt += "\n\n" + notebook.direction_block()
     usage_path = rc.RUNS / f"task{tid}_a{attempt}_worker.usage.json"
     fs_snapshot = integrity.fs_integrity_snapshot()
     usage: dict = {}
@@ -441,7 +446,7 @@ def _run_research_task(context: _TaskContext) -> str:
     # unconditional finally cannot mask the infra_failed returns above.
     try:
         try:
-            with integrity.DatabaseMutationGuard(f"task {tid} worker call"):
+            with protect_metadata(notebook_path), integrity.DatabaseMutationGuard(f"task {tid} worker call"):
                 worker_options = {}
                 if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
                     worker_options["retrieval_profile"] = context.retrieval_profile
@@ -580,22 +585,29 @@ def _run_research_task(context: _TaskContext) -> str:
                                out_dir, wk, baseline, attempt=attempt)
 
     repair_attempt = 0
-    while repair_attempt < deliverable_preflight.MAX_REPAIR_ATTEMPTS:
+    while True:
         preflight_report = deliverable_preflight.run_preflight(
             out,
             spec=context.row.get("spec", ""),
             task_id=tid,
             attempt=attempt,
+            runs_dir=rc.RUNS,
             pass_criteria=context.row.get("pass_criteria", ""),
         )
+        notebook.merge_preflight(preflight_report.verified_sources, preflight_report.dead_urls,
+                                 preflight_report.schema_issues, tid, attempt)
+        notebook.save(notebook_path)
         if preflight_report.passed or not preflight_report.repair_feedback:
             break
+        if repair_attempt >= deliverable_preflight.MAX_REPAIR_ATTEMPTS:
+            break  # assess the last repair too, without adding a worker call
         if policy.token_budget_breached():
             rc.log(f"task {tid}: preflight repair skipped (daily token budget breached)")
             break
         repair_attempt += 1
         rc.log(f"task {tid}: preflight repair attempt {repair_attempt}/{deliverable_preflight.MAX_REPAIR_ATTEMPTS} triggered")
-        repair_prompt = deliverable_preflight.build_repair_prompt(prompt, out, preflight_report.repair_feedback)
+        repair_prompt = deliverable_preflight.build_repair_prompt(
+            prompt, out, preflight_report.repair_feedback + "\n\n" + notebook.direction_block())
         repair_usage_path = rc.RUNS / f"task{tid}_a{attempt}_worker_repair_{repair_attempt}.usage.json"
         if not repair_usage_path.is_file():
             repair_usage_path.parent.mkdir(parents=True, exist_ok=True)
@@ -604,7 +616,7 @@ def _run_research_task(context: _TaskContext) -> str:
             except Exception:
                 pass
         try:
-            with integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
+            with protect_metadata(notebook_path), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
                 r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
                     repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
                     **worker_options)
@@ -628,6 +640,10 @@ def _run_research_task(context: _TaskContext) -> str:
                     except Exception:
                         import time
                         time.sleep(0.05)
+        except MetadataMutation as exc:
+            ledger.finish_task(tid, artifacts=[], status="infra_failed", critic_notes=str(exc),
+                               attempt_count=attempt)
+            return "infra_failed"
         except Exception as exc:
             rc.log(f"task {tid}: repair attempt {repair_attempt} failed with exception: {exc}")
             break

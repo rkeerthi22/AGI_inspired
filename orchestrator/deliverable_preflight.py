@@ -20,6 +20,7 @@ import os
 from pathlib import Path
 import re
 from typing import Any
+from research_notebook import verified_metadata
 
 try:
     import citecheck
@@ -55,6 +56,7 @@ class PreflightReport:
     dead_urls: list[dict[str, Any]] = field(default_factory=list)
     schema_issues: list[str] = field(default_factory=list)
     repair_feedback: str | None = None
+    verified_sources: list[dict[str, Any]] = field(default_factory=list)
 
     @property
     def has_errors(self) -> bool:
@@ -409,7 +411,8 @@ def run_preflight(
         passed=passed,
         dead_urls=dead_urls,
         schema_issues=schema_issues,
-        repair_feedback=repair_feedback
+        repair_feedback=repair_feedback,
+        verified_sources=verified_metadata(evidence),
     )
 
 

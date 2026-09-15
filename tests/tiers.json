@@ -20,7 +20,8 @@
     "test_policy_manager",
     "test_gateway",
     "test_web_ui",
-    "test_web_ui_security"
+    "test_web_ui_security",
+    "test_research_notebook"
   ],
   "containment": [
     "test_worker_sandbox",
