@@ -24,7 +24,8 @@
     "test_research_notebook",
     "test_attestation_chain",
     "test_installer",
-    "test_v1_end_product"
+    "test_v1_end_product",
+    "test_v1_adv01_hermetic"
   ],
   "containment": [
     "test_worker_sandbox",
