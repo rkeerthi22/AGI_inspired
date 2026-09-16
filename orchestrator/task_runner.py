@@ -2,6 +2,7 @@
 
 This module owns run_task; batch_runner only composes and re-exports it.
 """
+import contextlib
 import re
 import hashlib
 import sqlite3
@@ -33,6 +34,23 @@ from retrieval_progress import (DEFAULT_RETRIEVAL_PROFILE,
                                 retrieval_policy_for_profile)
 from health_events import emit as emit_health_event
 from worker_diagnostics import write_worker_raw, get_task_attempt
+
+
+@contextlib.contextmanager
+def _workspace_confinement_guard(tid: int, label: str):
+    guard_cls = getattr(integrity, "WorkspaceConfinementGuard", None)
+    if guard_cls is not None:
+        with guard_cls(tid, label):
+            yield
+    else:
+        yield
+
+
+def _workspace_confinement_violation_types():
+    v = getattr(integrity, "WorkspaceConfinementViolation", None)
+    if isinstance(v, type) and issubclass(v, BaseException):
+        return (v,)
+    return ()
 
 
 @dataclass(frozen=True)
@@ -450,7 +468,7 @@ def _run_research_task(context: _TaskContext) -> str:
     # unconditional finally cannot mask the infra_failed returns above.
     try:
         try:
-            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker call"):
+            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker call"), _workspace_confinement_guard(tid, f"task {tid} worker call"):
                 worker_options = {}
                 if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
                     worker_options["retrieval_profile"] = context.retrieval_profile
@@ -499,16 +517,18 @@ def _run_research_task(context: _TaskContext) -> str:
             if tw:
                 tw.task_failed("worker timeout", failure_stage="execution")
             return "infra_failed"
-        except integrity.DatabaseMutationViolation as exc:
+        except (integrity.DatabaseMutationViolation, *_workspace_confinement_violation_types()) as exc:
             usage["policy_digest"] = policy_snapshot.get("policy_digest")
             usage["allowlisted_hosts"] = policy_snapshot.get("allowlisted_hosts", [])
             write_worker_raw(rc.RUNS, tid, "", {"failure": str(exc), **policy_snapshot}, "worker", attempt=attempt)
+            is_ws_viol = bool(_workspace_confinement_violation_types() and isinstance(exc, _workspace_confinement_violation_types()))
+            fail_type = "workspace containment" if is_ws_viol else "database containment"
             ledger.finish_task(tid, artifacts=[], status="infra_failed",
-                               critic_notes=f"database containment violation: {exc}",
+                               critic_notes=f"{fail_type} violation: {exc}",
                                append_note=True, attempt_count=attempt)
-            rc.log(f"task {tid}: infra_failed (database containment violation)")
+            rc.log(f"task {tid}: infra_failed ({fail_type} violation)")
             if tw:
-                tw.task_failed("database containment violation", failure_stage="execution")
+                tw.task_failed(f"{fail_type} violation", failure_stage="execution")
             return "infra_failed"
         except Exception as exc:
             usage["policy_digest"] = policy_snapshot.get("policy_digest")
@@ -632,7 +652,7 @@ def _run_research_task(context: _TaskContext) -> str:
             except Exception:
                 pass
         try:
-            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"):
+            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"), _workspace_confinement_guard(tid, f"task {tid} worker repair {repair_attempt}"):
                 r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
                     repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
                     **worker_options)
@@ -661,7 +681,7 @@ def _run_research_task(context: _TaskContext) -> str:
                     except Exception:
                         import time
                         time.sleep(0.05)
-        except (MetadataMutation, chain.ChainError) as exc:
+        except (MetadataMutation, chain.ChainError, *_workspace_confinement_violation_types()) as exc:
             ledger.finish_task(tid, artifacts=[], status="infra_failed", critic_notes=str(exc),
                                attempt_count=attempt)
             return "infra_failed"

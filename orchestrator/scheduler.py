@@ -47,8 +47,9 @@ from datetime import datetime
 
 import yaml
 
-from runtime_context import MISSIONS, log
+from runtime_context import MISSIONS, RUNS, log
 
+import attestation_chain  # noqa: E402
 import ledger  # noqa: E402  -- orchestrator sibling; lazy-importable
 import runlock  # noqa: E402  -- process identity inspection for immediate orphan recovery
 from prompts import pass_criteria_for  # noqa: E402  -- only pass_criteria_for is needed
@@ -101,8 +102,9 @@ def queue_mission_tasks(mission: dict, dry: bool) -> list[int]:
             if dry:
                 log(f"DRY: would queue: {spec[:100]}")
                 continue
-            tid = ledger.queue_task(mission["id"], spec,
-                                    pass_criteria_for(mission))
+            tid = attestation_chain.dispatch_admitted_task(
+                c, RUNS, mission["id"], spec, pass_criteria_for(mission)
+            )
             rows.append((tid, None))                  # brand new row, never started
     rows.sort(key=lambda r: (r[1] is not None, r[0]))
     return [tid for tid, _ in rows]

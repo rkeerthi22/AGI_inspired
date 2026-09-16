@@ -94,10 +94,25 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
            "-m", model_cfg["model"], "--usage-file", str(usage_path),
            "-t", "web" if retrieval_profile != "dynamic_browser_required" else "web,browser"]
     base_env = dict(os.environ)
+    import re
+    m = re.match(r"^task(\d+)(?:_a(\d+))?_", usage_path.name)
+    tid = int(m.group(1)) if m else None
+    if tid is None and base_env.get("HARNESS_TASK_ID"):
+        try:
+            tid = int(base_env["HARNESS_TASK_ID"])
+        except ValueError:
+            pass
+    attempt = int(m.group(2)) if m and m.group(2) else 1
+
     if not base_env.get("HARNESS_WORKER_HOME"):
-        default_worker_home = ROOT / "workspace" / "worker_home"
+        if tid is not None:
+            default_worker_home = ROOT / "workspace" / "tasks" / str(tid)
+        else:
+            default_worker_home = ROOT / "workspace" / "worker_home"
         default_worker_home.mkdir(parents=True, exist_ok=True)
         base_env["HARNESS_WORKER_HOME"] = str(default_worker_home)
+        base_env["HOME"] = str(default_worker_home)
+        base_env["USERPROFILE"] = str(default_worker_home)
     if not base_env.get("HARNESS_EGRESS_ATTESTATION"):
         default_attestation = ROOT / ".harness" / "egress_attestation.signed"
         if default_attestation.is_file():
@@ -132,11 +147,7 @@ def hermes_worker(prompt: str, model_cfg: dict, usage_path: Path,
     env["HARNESS_RETRIEVAL_AUDIT"] = str(audit_path)
 
     # F132: Attempt-scoped broker audit log and active correlation context
-    import re
     from egress_broker import ActiveBrokerCorrelation
-    m = re.match(r"^task(\d+)(?:_a(\d+))?_", usage_path.name)
-    tid = int(m.group(1)) if m else None
-    attempt = int(m.group(2)) if m and m.group(2) else 1
     broker_audit_path = usage_path.parent / (
         f"task{tid}_a{attempt}_broker.audit.jsonl" if tid else f"{usage_path.stem}_broker.audit.jsonl"
     )

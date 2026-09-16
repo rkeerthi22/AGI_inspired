@@ -32,6 +32,7 @@ from contextlib import AbstractContextManager, closing
 from datetime import datetime
 from pathlib import Path
 
+import runtime_context
 from runtime_context import ROOT, RUNS, ESCALATIONS, log
 
 # Policy + ledger are sibling modules in the orchestrator/ directory (the existing
@@ -778,3 +779,111 @@ def preflight() -> bool:
             log(f"PREFLIGHT FAIL: ollama unreachable ({e})")
             escalate("batch run aborted: ollama server unreachable")
             return False
+
+
+# ── per-task workspace confinement (Gap B) ───────────────────────────────────
+class WorkspaceConfinementViolation(RuntimeError):
+    """Raised when a worker writes outside its assigned per-task workspace."""
+
+
+def _workspace_dir() -> Path:
+    import runtime_context
+    return (Path(runtime_context.ROOT) / "workspace").resolve()
+
+
+def workspace_confinement_snapshot(task_id: int | str | None = None) -> dict[str, dict]:
+    """Snapshot files under workspace/ outside the current task's workspace directory."""
+    ws_dir = _workspace_dir()
+    if not ws_dir.is_dir():
+        return {}
+    allowed_prefix = None
+    if task_id is not None:
+        allowed_prefix = (ws_dir / "tasks" / str(task_id)).resolve()
+
+    snapshot: dict[str, dict] = {}
+    for p in ws_dir.rglob("*"):
+        try:
+            p_res = p.resolve()
+        except Exception:
+            continue
+        if allowed_prefix is not None and (p_res == allowed_prefix or allowed_prefix in p_res.parents):
+            continue
+        if p.is_file():
+            try:
+                rel = str(p.relative_to(ws_dir))
+                st = p.stat()
+                h = hashlib.sha256(p.read_bytes()).hexdigest()
+                snapshot[rel] = {"size": st.st_size, "sha256": h}
+            except Exception:
+                pass
+    return snapshot
+
+
+def workspace_confinement_check(before: dict[str, dict], task_id: int | str | None, context: str) -> None:
+    """Detect and revert unauthorized writes outside workspace/tasks/{task_id}/."""
+    ws_dir = _workspace_dir()
+    if not ws_dir.is_dir():
+        return
+    allowed_prefix = None
+    if task_id is not None:
+        allowed_prefix = (ws_dir / "tasks" / str(task_id)).resolve()
+
+    violations = []
+    current_files = set()
+
+    for p in ws_dir.rglob("*"):
+        try:
+            p_res = p.resolve()
+        except Exception:
+            continue
+        if allowed_prefix is not None and (p_res == allowed_prefix or allowed_prefix in p_res.parents):
+            continue
+        if p.is_file():
+            rel = str(p.relative_to(ws_dir))
+            current_files.add(rel)
+            if rel not in before:
+                violations.append(f"unauthorized created file: workspace/{rel}")
+                try:
+                    p.unlink(missing_ok=True)
+                except Exception:
+                    pass
+            else:
+                try:
+                    h = hashlib.sha256(p.read_bytes()).hexdigest()
+                    if h != before[rel]["sha256"]:
+                        violations.append(f"unauthorized modified file: workspace/{rel}")
+                except Exception as exc:
+                    violations.append(f"unreadable file: workspace/{rel} ({exc})")
+
+    for rel in before:
+        if rel not in current_files:
+            violations.append(f"unauthorized deleted file: workspace/{rel}")
+
+    if violations:
+        msg = f"Workspace confinement violation during {context}: {'; '.join(violations)}"
+        log(f"INTEGRITY VIOLATION: {msg}")
+        numeric_tid = None
+        if isinstance(task_id, int):
+            numeric_tid = task_id
+        elif isinstance(task_id, str) and task_id.isdigit():
+            numeric_tid = int(task_id)
+        escalate(msg, task_id=numeric_tid)
+        raise WorkspaceConfinementViolation(msg)
+
+
+class WorkspaceConfinementGuard(AbstractContextManager):
+    """Enforces per-task workspace confinement during worker execution."""
+
+    def __init__(self, task_id: int | str | None, context: str):
+        self.task_id = task_id
+        self.context = context
+        self.snapshot: dict[str, dict] | None = None
+
+    def __enter__(self):
+        self.snapshot = workspace_confinement_snapshot(self.task_id)
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        if self.snapshot is not None:
+            workspace_confinement_check(self.snapshot, self.task_id, self.context)
+        return False

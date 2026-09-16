@@ -12,6 +12,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
+import sqlite3
+import attestation_chain  # noqa: E402
 import execution_pause  # noqa: E402
 import integrity  # noqa: E402
 import ledger  # noqa: E402
@@ -110,7 +112,10 @@ def main(argv: list[str] | None = None) -> int:
                 print("[paused] Hermes ESTOP engaged before queue admission",
                       file=sys.stderr)
                 return 6
-            tid = ledger.queue_task(args.mission, spec, criteria)
+            with sqlite3.connect(ledger.LEDGER_DB, timeout=30) as conn:
+                tid = attestation_chain.dispatch_admitted_task(
+                    conn, RUNS, args.mission, spec, criteria,
+                )
             print(f"[ledger] queued task {tid}")
             outcome = _outcome_for(task_runner.run_task(tid, mission, load_roles()))
     except runlock.AlreadyRunning as exc:

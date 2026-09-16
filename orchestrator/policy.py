@@ -52,8 +52,16 @@ def writable_roots(pol: dict | None = None) -> list[Path]:
     return [Path(p) for p in pol["workspace_confinement"]["writes_allowed_under"]]
 
 
-def is_path_writable(path, pol: dict | None = None) -> bool:
+def is_path_writable(path, pol: dict | None = None, task_id: int | str | None = None) -> bool:
     path = Path(path).resolve()
+    ws_root = (ROOT / "workspace").resolve()
+    # If a task_id is in scope and the path is within workspace/,
+    # enforce per-task confinement: writes are restricted to workspace/tasks/{task_id}/
+    if task_id is not None:
+        if path == ws_root or ws_root in path.parents:
+            allowed_task_dir = (ws_root / "tasks" / str(task_id)).resolve()
+            return path == allowed_task_dir or allowed_task_dir in path.parents
+
     for root in writable_roots(pol):
         root = root.resolve()
         if path == root or root in path.parents:

@@ -143,10 +143,12 @@ def _make_fake_task_runner_env():
 
     fake_integrity = types.ModuleType("integrity")
     @contextlib.contextmanager
-    def _null_guard(label):
+    def _null_guard(*args, **kwargs):
         yield
     fake_integrity.DatabaseMutationGuard = _null_guard
     fake_integrity.DatabaseMutationViolation = type("DatabaseMutationViolation", (RuntimeError,), {})
+    fake_integrity.WorkspaceConfinementGuard = _null_guard
+    fake_integrity.WorkspaceConfinementViolation = type("WorkspaceConfinementViolation", (RuntimeError,), {})
     fake_integrity.fs_integrity_snapshot = lambda: None
     fake_integrity.fs_integrity_check = lambda snap, context=None: None
 

@@ -96,19 +96,12 @@ class Gateway:
 
         criteria = pass_criteria.strip() or "Standard research analyst deliverable criteria."
         with self._conn() as c:
-            cur = c.execute(
-                "INSERT INTO tasks (mission_id, spec, pass_criteria, status, run_id) "
-                "VALUES (?, ?, ?, 'queued', ?)",
-                (mission_id, spec, criteria, attestation_chain.GATEWAY_RUN_ID),
+            task_id = attestation_chain.dispatch_admitted_task(
+                c, self.runs_dir, mission_id, spec, criteria,
+                max_budget_usd=max_budget_usd, max_tokens=max_tokens,
+                budget_enforcement="admission_parameters_only",
             )
-            task_id = cur.lastrowid
-            # Before commit: a signing failure must leave no dispatchable row.
-            attestation_chain.append_step(self.runs_dir, attestation_chain.Step.DISPATCH,
-                task_id, 1, {"spec_sha256": attestation_chain.text_digest(spec),
-                             "criteria_sha256": attestation_chain.text_digest(criteria),
-                             "mission_id": mission_id, "max_budget_usd": max_budget_usd,
-                             "max_tokens": max_tokens, "budget_enforcement": "admission_parameters_only"})
-            c.commit()
+
 
         return {
             "task_id": task_id,

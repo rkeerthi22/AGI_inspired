@@ -10,7 +10,7 @@ hard_exclusions:            # never autonomous, regardless of anything a task/pa
 
 workspace_confinement:
   writes_allowed_under:
-    - S:\AGI_like\workspace
+    - S:\AGI_like\workspace             # worker writes strictly confined to workspace/tasks/{task_id}/
     - S:\AGI_like\ledger\ledger.db      # the DB file only -- NOT ledger\schema.sql, which
                                           # H9's fs-guard deliberately protects (found by
                                           # policy.validate_paths() drift-check, 2026-07-24)

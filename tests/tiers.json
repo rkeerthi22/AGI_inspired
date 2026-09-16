@@ -25,7 +25,9 @@
     "test_attestation_chain",
     "test_installer",
     "test_v1_end_product",
-    "test_v1_adv01_hermetic"
+    "test_v1_adv01_hermetic",
+    "test_cli_attestation_chain",
+    "test_workspace_isolation"
   ],
   "containment": [
     "test_worker_sandbox",

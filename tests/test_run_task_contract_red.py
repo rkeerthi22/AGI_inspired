@@ -32,7 +32,9 @@ checks["legacy duplicate failure classifiers are removed"] = all(
                                          "def is_quota_error("))
 
 dry = source.find("if args.dry_run:")
-queue = source.find("ledger.queue_task(")
+queue = source.find("attestation_chain.dispatch_admitted_task(")
+if queue < 0:
+    queue = source.find("ledger.queue_task(")
 checks["dry-run returns before any task is queued"] = dry >= 0 and queue >= 0 and dry < queue
 
 pause = source.find("pause_engaged(")
@@ -47,7 +49,7 @@ try:
     with patch.object(run_task, "resolve_mission_path", return_value=Path("mission.md")), \
          patch.object(run_task, "parse_mission", return_value={"id": "safe"}), \
          patch.object(run_task, "pass_criteria_for", return_value="criteria"), \
-         patch.object(run_task.ledger, "queue_task") as queue:
+         patch.object(run_task.attestation_chain, "dispatch_admitted_task") as queue:
         rc = run_task.main(["--mission", "safe", "--dry-run"])
     checks["dry-run behavior performs no ledger mutation"] = rc == 0 and not queue.called
 except Exception:
@@ -58,7 +60,7 @@ try:
          patch.object(run_task, "parse_mission", return_value={"id": "safe"}), \
          patch.object(run_task, "pass_criteria_for", return_value="criteria"), \
          patch.object(run_task.execution_pause, "pause_engaged", return_value=True), \
-         patch.object(run_task.ledger, "queue_task") as queue:
+         patch.object(run_task.attestation_chain, "dispatch_admitted_task") as queue:
         rc = run_task.main(["--mission", "safe"])
     checks["paused behavior performs no ledger mutation"] = rc == 6 and not queue.called
 except Exception:
@@ -77,7 +79,7 @@ try:
          patch.object(run_task.execution_pause, "verify_pause_integrity", return_value="test_isolated"), \
          patch.object(run_task.runlock, "acquire", side_effect=_fake_lock), \
          patch.object(run_task.integrity, "preflight", return_value=True), \
-         patch.object(run_task.ledger, "queue_task", return_value=77) as queue, \
+         patch.object(run_task.attestation_chain, "dispatch_admitted_task", return_value=77) as queue, \
          patch.object(run_task.task_runner, "run_task", return_value="done") as canonical, \
          patch.object(run_task, "load_roles", return_value={"worker": {}}):
         rc = run_task.main(["--mission", "safe", "--niche", "test"])

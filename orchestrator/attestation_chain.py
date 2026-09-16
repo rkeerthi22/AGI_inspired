@@ -246,3 +246,50 @@ def status(runs: Path, task_id: int) -> dict:
         ok, error = False, "chain_unreadable:" + type(exc).__name__
     return {"attestation_chain_valid": ok, "attestation_chain_steps": steps,
             "attestation_chain_error": error}
+
+
+def dispatch_admitted_task(
+    db_or_conn,
+    runs_dir: Path,
+    mission_id: str,
+    spec: str,
+    pass_criteria: str,
+    *,
+    max_budget_usd: float | None = None,
+    max_tokens: int | None = None,
+    budget_enforcement: str = "admission_parameters_only",
+) -> int:
+    """Admit and queue a task with genuine DSSE DISPATCH provenance before commit.
+
+    Guarantees that run_id is GATEWAY_RUN_ID and DISPATCH step is appended and
+    verified before the database transaction commits. Accepts either a sqlite3.Connection
+    or a Path / str to the ledger database.
+    """
+    import sqlite3
+    if isinstance(db_or_conn, (str, Path)):
+        with sqlite3.connect(str(db_or_conn), timeout=30) as conn:
+            return dispatch_admitted_task(
+                conn, runs_dir, mission_id, spec, pass_criteria,
+                max_budget_usd=max_budget_usd, max_tokens=max_tokens,
+                budget_enforcement=budget_enforcement,
+            )
+
+    conn = db_or_conn
+    cur = conn.execute(
+        "INSERT INTO tasks (mission_id, spec, pass_criteria, status, run_id) "
+        "VALUES (?, ?, ?, 'queued', ?)",
+        (mission_id, spec, pass_criteria, GATEWAY_RUN_ID),
+    )
+    task_id = cur.lastrowid
+    claims = {
+        "spec_sha256": text_digest(spec),
+        "criteria_sha256": text_digest(pass_criteria),
+        "mission_id": mission_id,
+        "max_budget_usd": max_budget_usd,
+        "max_tokens": max_tokens,
+        "budget_enforcement": budget_enforcement,
+    }
+    append_step(Path(runs_dir), Step.DISPATCH, task_id, 1, claims)
+    conn.commit()
+    return task_id
+
