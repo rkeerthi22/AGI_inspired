@@ -255,6 +255,7 @@ def dispatch_admitted_task(
     spec: str,
     pass_criteria: str,
     *,
+    client_id: str | None = None,
     max_budget_usd: float | None = None,
     max_tokens: int | None = None,
     budget_enforcement: str = "admission_parameters_only",
@@ -270,6 +271,7 @@ def dispatch_admitted_task(
         with sqlite3.connect(str(db_or_conn), timeout=30) as conn:
             return dispatch_admitted_task(
                 conn, runs_dir, mission_id, spec, pass_criteria,
+                client_id=client_id,
                 max_budget_usd=max_budget_usd, max_tokens=max_tokens,
                 budget_enforcement=budget_enforcement,
             )
@@ -285,6 +287,7 @@ def dispatch_admitted_task(
         "spec_sha256": text_digest(spec),
         "criteria_sha256": text_digest(pass_criteria),
         "mission_id": mission_id,
+        "client_id": client_id,
         "max_budget_usd": max_budget_usd,
         "max_tokens": max_tokens,
         "budget_enforcement": budget_enforcement,
@@ -292,4 +295,12 @@ def dispatch_admitted_task(
     append_step(Path(runs_dir), Step.DISPATCH, task_id, 1, claims)
     conn.commit()
     return task_id
+
+
+def read_chain(runs: Path, task_id: int) -> list[dict]:
+    return load(chain_path(runs, task_id))
+
+
+def read_payloads(runs: Path, task_id: int) -> list[dict]:
+    return [_json(_decode(s["payload"])) for s in read_chain(runs, task_id)]
 

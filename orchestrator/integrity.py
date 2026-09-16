@@ -791,14 +791,16 @@ def _workspace_dir() -> Path:
     return (Path(runtime_context.ROOT) / "workspace").resolve()
 
 
-def workspace_confinement_snapshot(task_id: int | str | None = None) -> dict[str, dict]:
-    """Snapshot files under workspace/ outside the current task's workspace directory."""
+def workspace_confinement_snapshot(task_id: int | str | None = None, client_id: str | None = None) -> dict[str, dict]:
+    """Snapshot files under workspace/ outside the current task's and client's directories."""
     ws_dir = _workspace_dir()
     if not ws_dir.is_dir():
         return {}
-    allowed_prefix = None
+    allowed_prefixes = []
     if task_id is not None:
-        allowed_prefix = (ws_dir / "tasks" / str(task_id)).resolve()
+        allowed_prefixes.append((ws_dir / "tasks" / str(task_id)).resolve())
+    if client_id is not None:
+        allowed_prefixes.append((ws_dir / "clients" / str(client_id)).resolve())
 
     snapshot: dict[str, dict] = {}
     for p in ws_dir.rglob("*"):
@@ -806,7 +808,7 @@ def workspace_confinement_snapshot(task_id: int | str | None = None) -> dict[str
             p_res = p.resolve()
         except Exception:
             continue
-        if allowed_prefix is not None and (p_res == allowed_prefix or allowed_prefix in p_res.parents):
+        if any(prefix == p_res or prefix in p_res.parents for prefix in allowed_prefixes):
             continue
         if p.is_file():
             try:
@@ -819,14 +821,42 @@ def workspace_confinement_snapshot(task_id: int | str | None = None) -> dict[str
     return snapshot
 
 
-def workspace_confinement_check(before: dict[str, dict], task_id: int | str | None, context: str) -> None:
-    """Detect and revert unauthorized writes outside workspace/tasks/{task_id}/."""
+def workspace_confinement_check(
+    before: dict[str, dict],
+    task_id: int | str | None,
+    arg1: str | None = None,
+    arg2: str | None = None,
+    *,
+    context: str | None = None,
+    client_id: str | None = None,
+) -> None:
+    """Detect and revert unauthorized writes outside workspace/tasks/{task_id}/ and workspace/clients/{client_id}/."""
     ws_dir = _workspace_dir()
     if not ws_dir.is_dir():
         return
-    allowed_prefix = None
+
+    # Handle positional args: (before, task_id, context), (before, task_id, context, client_id), (before, task_id, client_id, context)
+    if context is None and client_id is None:
+        if arg1 is not None and arg2 is None:
+            context = str(arg1)
+        elif arg1 is not None and arg2 is not None:
+            if " " in str(arg2) or "task" in str(arg2).lower():
+                client_id = str(arg1)
+                context = str(arg2)
+            else:
+                context = str(arg1)
+                client_id = str(arg2)
+    elif context is None and arg1 is not None:
+        context = str(arg1)
+    elif client_id is None and arg1 is not None:
+        client_id = str(arg1)
+    context = context or ""
+
+    allowed_prefixes = []
     if task_id is not None:
-        allowed_prefix = (ws_dir / "tasks" / str(task_id)).resolve()
+        allowed_prefixes.append((ws_dir / "tasks" / str(task_id)).resolve())
+    if client_id is not None:
+        allowed_prefixes.append((ws_dir / "clients" / str(client_id)).resolve())
 
     violations = []
     current_files = set()
@@ -836,7 +866,7 @@ def workspace_confinement_check(before: dict[str, dict], task_id: int | str | No
             p_res = p.resolve()
         except Exception:
             continue
-        if allowed_prefix is not None and (p_res == allowed_prefix or allowed_prefix in p_res.parents):
+        if any(prefix == p_res or prefix in p_res.parents for prefix in allowed_prefixes):
             continue
         if p.is_file():
             rel = str(p.relative_to(ws_dir))
@@ -872,18 +902,19 @@ def workspace_confinement_check(before: dict[str, dict], task_id: int | str | No
 
 
 class WorkspaceConfinementGuard(AbstractContextManager):
-    """Enforces per-task workspace confinement during worker execution."""
+    """Enforces per-task and per-client workspace confinement during worker execution."""
 
-    def __init__(self, task_id: int | str | None, context: str):
+    def __init__(self, task_id: int | str | None, context: str, client_id: str | None = None):
         self.task_id = task_id
         self.context = context
+        self.client_id = client_id
         self.snapshot: dict[str, dict] | None = None
 
     def __enter__(self):
-        self.snapshot = workspace_confinement_snapshot(self.task_id)
+        self.snapshot = workspace_confinement_snapshot(self.task_id, self.client_id)
         return self
 
     def __exit__(self, exc_type, exc, tb):
         if self.snapshot is not None:
-            workspace_confinement_check(self.snapshot, self.task_id, self.context)
+            workspace_confinement_check(self.snapshot, self.task_id, context=self.context, client_id=self.client_id)
         return False

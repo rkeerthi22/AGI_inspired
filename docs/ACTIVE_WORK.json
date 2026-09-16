@@ -1,7 +1,34 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-15T23:15:00Z",
+  "last_updated": "2026-09-16T20:20:00Z",
   "active_agents": [
+    {
+      "agent": "gemini-cli",
+      "role": "Distribution Engine: Phase 1 (Research Core, Zero-Spend) - Step 1a Kill-Assumption Probe",
+      "task_id": "DISTRIBUTION-ENGINE-PHASE1-2026-09-16",
+      "mode": "implementation",
+      "owned_paths": [
+        "orchestrator/client_profile.py",
+        "orchestrator/research_templates/__init__.py",
+        "orchestrator/research_templates/keyword_research.py",
+        "orchestrator/attestation_chain.py",
+        "orchestrator/policy.py",
+        "orchestrator/integrity.py",
+        "orchestrator/task_runner.py",
+        "tests/test_distribution_keyword_research.py",
+        "tests/tiers.json",
+        "docs/ACTIVE_WORK.json",
+        "docs/CURRENT_STATE.md",
+        ".harness/continuity/current.json",
+        "docs/reviews/GEMINI_DISTRIBUTION_ENGINE_PHASE1_1A_REPORT_2026-09-16.md"
+      ],
+      "started_at": "2026-09-16T20:20:00Z",
+      "last_update": "2026-09-16T21:15:00Z",
+      "status": "in_progress",
+      "blocked_by": null,
+      "handoff_path": "docs/reviews/GEMINI_DISTRIBUTION_ENGINE_PHASE1_1A_REPORT_2026-09-16.md",
+      "notes": "Step 1a Kill-Assumption Probe COMPLETED and verified: keyword_research template, client_profile loader, client_id isolation, zero-spend containment (3 probes zero-hits), 5-step DSSE chain verified. Gate 91/91 suites green (unit 76, containment 8, integration 7). Ready for Claude independent audit."
+    },
     {
       "agent": "gemini-cli",
       "role": "V1 Hardening: CLI/Hermes-Dispatch Attestation Chaining + Per-Task Workspace Isolation",

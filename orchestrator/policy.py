@@ -52,15 +52,23 @@ def writable_roots(pol: dict | None = None) -> list[Path]:
     return [Path(p) for p in pol["workspace_confinement"]["writes_allowed_under"]]
 
 
-def is_path_writable(path, pol: dict | None = None, task_id: int | str | None = None) -> bool:
+def is_path_writable(path, pol: dict | None = None, task_id: int | str | None = None, client_id: str | None = None) -> bool:
     path = Path(path).resolve()
     ws_root = (ROOT / "workspace").resolve()
-    # If a task_id is in scope and the path is within workspace/,
-    # enforce per-task confinement: writes are restricted to workspace/tasks/{task_id}/
-    if task_id is not None:
+    # If a task_id or client_id is in scope and the path is within workspace/,
+    # enforce per-task and per-client confinement:
+    # writes are restricted to workspace/tasks/{task_id}/ and/or workspace/clients/{client_id}/ (union)
+    if task_id is not None or client_id is not None:
         if path == ws_root or ws_root in path.parents:
-            allowed_task_dir = (ws_root / "tasks" / str(task_id)).resolve()
-            return path == allowed_task_dir or allowed_task_dir in path.parents
+            if task_id is not None:
+                allowed_task_dir = (ws_root / "tasks" / str(task_id)).resolve()
+                if path == allowed_task_dir or allowed_task_dir in path.parents:
+                    return True
+            if client_id is not None:
+                allowed_client_dir = (ws_root / "clients" / str(client_id)).resolve()
+                if path == allowed_client_dir or allowed_client_dir in path.parents:
+                    return True
+            return False
 
     for root in writable_roots(pol):
         root = root.resolve()

@@ -27,7 +27,8 @@
     "test_v1_end_product",
     "test_v1_adv01_hermetic",
     "test_cli_attestation_chain",
-    "test_workspace_isolation"
+    "test_workspace_isolation",
+    "test_distribution_keyword_research"
   ],
   "containment": [
     "test_worker_sandbox",

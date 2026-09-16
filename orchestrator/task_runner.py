@@ -37,10 +37,14 @@ from worker_diagnostics import write_worker_raw, get_task_attempt
 
 
 @contextlib.contextmanager
-def _workspace_confinement_guard(tid: int, label: str):
+def _workspace_confinement_guard(tid: int, label: str, client_id: str | None = None):
     guard_cls = getattr(integrity, "WorkspaceConfinementGuard", None)
     if guard_cls is not None:
-        with guard_cls(tid, label):
+        try:
+            guard_instance = guard_cls(tid, label, client_id=client_id)
+        except TypeError:
+            guard_instance = guard_cls(tid, label)
+        with guard_instance:
             yield
     else:
         yield
@@ -434,6 +438,21 @@ def _run_research_task(context: _TaskContext) -> str:
     notebook_path = rc.RUNS / f"task{tid}_research_notebook.json"
     chained = chain.existing(rc.RUNS, tid, row)
     control_paths = (notebook_path, chain.chain_path(rc.RUNS, tid))
+    client_id = row.get("client_id")
+    if client_id is None and chained:
+        try:
+            for payload in chain.read_payloads(rc.RUNS, tid):
+                if payload.get("step") == chain.Step.DISPATCH.value:
+                    client_id = payload.get("claims", {}).get("client_id")
+                    if client_id:
+                        break
+        except Exception:
+            pass
+    if client_id is None and isinstance(row.get("spec"), str):
+        m_cid = re.search(r'client_id[:=]\s*["\']?([a-zA-Z0-9_\-]+)["\']?', row["spec"])
+        if m_cid:
+            client_id = m_cid.group(1)
+
     notebook = Notebook.load(notebook_path) or Notebook()
     if notebook.attempts_seen:
         prompt += "\n\n" + notebook.direction_block()
@@ -468,7 +487,7 @@ def _run_research_task(context: _TaskContext) -> str:
     # unconditional finally cannot mask the infra_failed returns above.
     try:
         try:
-            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker call"), _workspace_confinement_guard(tid, f"task {tid} worker call"):
+            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker call"), _workspace_confinement_guard(tid, f"task {tid} worker call", client_id=client_id):
                 worker_options = {}
                 if context.retrieval_profile != DEFAULT_RETRIEVAL_PROFILE:
                     worker_options["retrieval_profile"] = context.retrieval_profile
@@ -652,7 +671,7 @@ def _run_research_task(context: _TaskContext) -> str:
             except Exception:
                 pass
         try:
-            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"), _workspace_confinement_guard(tid, f"task {tid} worker repair {repair_attempt}"):
+            with protect_metadata(*control_paths), integrity.DatabaseMutationGuard(f"task {tid} worker repair {repair_attempt}"), _workspace_confinement_guard(tid, f"task {tid} worker repair {repair_attempt}", client_id=client_id):
                 r_out, r_usage, r_model_cfg, r_exhausted = execution.worker_with_failover(
                     repair_prompt, worker_cfg, repair_usage_path, log_prefix=f"task {tid} repair {repair_attempt}",
                     **worker_options)
