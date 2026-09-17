@@ -1,33 +1,38 @@
 {
   "schema_version": 1,
-  "last_updated": "2026-09-16T20:20:00Z",
+  "last_updated": "2026-09-17T04:40:00Z",
   "active_agents": [
     {
       "agent": "gemini-cli",
-      "role": "Distribution Engine: Phase 1 (Research Core, Zero-Spend) - Step 1a Kill-Assumption Probe",
-      "task_id": "DISTRIBUTION-ENGINE-PHASE1-2026-09-16",
+      "role": "Distribution Engine: Phase 1 (Research Core, Zero-Spend) - Step 1b (4 Templates + Cleanups)",
+      "task_id": "DISTRIBUTION-ENGINE-PHASE1-1B-2026-09-17",
       "mode": "implementation",
       "owned_paths": [
         "orchestrator/client_profile.py",
         "orchestrator/research_templates/__init__.py",
         "orchestrator/research_templates/keyword_research.py",
+        "orchestrator/research_templates/competitive_serp.py",
+        "orchestrator/research_templates/ad_copy_variants.py",
+        "orchestrator/research_templates/seo_content_brief.py",
+        "orchestrator/research_templates/landing_page_recco.py",
         "orchestrator/attestation_chain.py",
         "orchestrator/policy.py",
         "orchestrator/integrity.py",
         "orchestrator/task_runner.py",
         "tests/test_distribution_keyword_research.py",
+        "tests/test_distribution_templates.py",
         "tests/tiers.json",
         "docs/ACTIVE_WORK.json",
         "docs/CURRENT_STATE.md",
         ".harness/continuity/current.json",
-        "docs/reviews/GEMINI_DISTRIBUTION_ENGINE_PHASE1_1A_REPORT_2026-09-16.md"
+        "docs/reviews/GEMINI_DISTRIBUTION_ENGINE_PHASE1_1B_REPORT_2026-09-17.md"
       ],
-      "started_at": "2026-09-16T20:20:00Z",
-      "last_update": "2026-09-16T21:15:00Z",
+      "started_at": "2026-09-17T04:25:00Z",
+      "last_update": "2026-09-17T04:40:00Z",
       "status": "in_progress",
       "blocked_by": null,
-      "handoff_path": "docs/reviews/GEMINI_DISTRIBUTION_ENGINE_PHASE1_1A_REPORT_2026-09-16.md",
-      "notes": "Step 1a Kill-Assumption Probe COMPLETED and verified: keyword_research template, client_profile loader, client_id isolation, zero-spend containment (3 probes zero-hits), 5-step DSSE chain verified. Gate 91/91 suites green (unit 76, containment 8, integration 7). Ready for Claude independent audit."
+      "handoff_path": "docs/reviews/GEMINI_DISTRIBUTION_ENGINE_PHASE1_1B_REPORT_2026-09-17.md",
+      "notes": "Step 1b COMPLETED and verified: Part A cleanups A1+A2 landed; Part B 4 templates (competitive_serp, ad_copy_variants, seo_content_brief, landing_page_recco) built and arming preflight; zero-spend 3-probe containment verified; ad_copy_variants end-to-end 5-step DSSE chain verified; gate 92/92 suites green (unit 77, containment 8, integration 7). Ready for Claude independent audit."
     },
     {
       "agent": "gemini-cli",

@@ -824,33 +824,14 @@ def workspace_confinement_snapshot(task_id: int | str | None = None, client_id: 
 def workspace_confinement_check(
     before: dict[str, dict],
     task_id: int | str | None,
-    arg1: str | None = None,
-    arg2: str | None = None,
     *,
-    context: str | None = None,
+    context: str,
     client_id: str | None = None,
 ) -> None:
     """Detect and revert unauthorized writes outside workspace/tasks/{task_id}/ and workspace/clients/{client_id}/."""
     ws_dir = _workspace_dir()
     if not ws_dir.is_dir():
         return
-
-    # Handle positional args: (before, task_id, context), (before, task_id, context, client_id), (before, task_id, client_id, context)
-    if context is None and client_id is None:
-        if arg1 is not None and arg2 is None:
-            context = str(arg1)
-        elif arg1 is not None and arg2 is not None:
-            if " " in str(arg2) or "task" in str(arg2).lower():
-                client_id = str(arg1)
-                context = str(arg2)
-            else:
-                context = str(arg1)
-                client_id = str(arg2)
-    elif context is None and arg1 is not None:
-        context = str(arg1)
-    elif client_id is None and arg1 is not None:
-        client_id = str(arg1)
-    context = context or ""
 
     allowed_prefixes = []
     if task_id is not None:

@@ -448,10 +448,6 @@ def _run_research_task(context: _TaskContext) -> str:
                         break
         except Exception:
             pass
-    if client_id is None and isinstance(row.get("spec"), str):
-        m_cid = re.search(r'client_id[:=]\s*["\']?([a-zA-Z0-9_\-]+)["\']?', row["spec"])
-        if m_cid:
-            client_id = m_cid.group(1)
 
     notebook = Notebook.load(notebook_path) or Notebook()
     if notebook.attempts_seen:
